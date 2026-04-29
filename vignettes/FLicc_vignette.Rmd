@@ -92,8 +92,8 @@ fit <- fiticc(
 # Compare observed and fitted compositions
 
 ```{r}
-plot_plen(fit)
-plot_plen(fit, by_gear = TRUE)
+plot_len(fit)
+plot_len(fit, by_gear = TRUE)
 ```
 
 ---
@@ -101,7 +101,7 @@ plot_plen(fit, by_gear = TRUE)
 # Inspect selectivity
 
 ```{r}
-matplot(fit$tmb_data$Lmid, fit$report$Sel, type = "l", lwd = 2,ylab = c("Selectivity"),xlab=c("Length (cm)"))
+matplot(fit$tmb_data$Lmid, fit$report$sel[drop=TRUE], type = "l", lwd = 2,ylab = c("Selectivity"),xlab=c("Length (cm)"))
 ```
 
 ---

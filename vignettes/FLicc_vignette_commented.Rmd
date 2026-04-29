@@ -129,8 +129,8 @@ This step:
 ## Compare observed and fitted distributions
 
 ```{r}
-plot_plen(fit)
-plot_plen(fit, by_gear = TRUE)
+plot_len(fit)
+plot_len(fit, by_gear = TRUE)
 ```
 
 These plots assess model fit overall and by gear.
@@ -138,7 +138,7 @@ These plots assess model fit overall and by gear.
 ## Inspect selectivity
 
 ```{r}
-matplot(fit$tmb_data$Lmid, fit$report$Sel, type = "l", lwd = 2)
+matplot(fit$tmb_data$Lmid, fit$report$sel[drop=TRUE], type = "l", lwd = 2)
 ```
 
 This shows estimated selectivity curves.

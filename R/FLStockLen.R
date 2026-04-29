@@ -477,7 +477,7 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
 #' fbar(stkr)
 #' refpts(stkr)
 #'
-#' stkr_rel <- flicc2FLStockR(fit rel = TRUE)
+#' stkr_rel <- flicc2FLStockR(fit, rel = TRUE)
 #' ssb(stkr_rel)
 #' fbar(stkr_rel)
 #' refpts(stkr_rel)
