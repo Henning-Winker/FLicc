@@ -1,12 +1,20 @@
 # FLicc
 
-**FLicc: FLR tools for length-interval catch-curve models**
+**FLicc: Length-interval catch-curve per-recruit analysis in FLR**
 
-`FLicc` is an FLR-friendly TMB implementation and extension of the multi-gear length-interval catch-curve framework developed in `fishblicc`. It retains the biological core of the original equilibrium model, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), and yield-per-recruit from length compositions grouped by gear. 
+`FLicc` is an user-friendly TMB implementation in the `FLR` and an extension of both the multi-gear length-interval catch-curve framework developed in `fishblicc` and length-based spawning potential ratio estimation in `LBSRP`.
+
+It retains the biological core of either of the original equilibrium models, but adds:
+  - fast penalized-likelihood estimation in TMB
+  - multi-year, multi-gear fitting 
+  - FLR integration
+  - equilibrium and indicator tools
 
 ---
 
 ## Motivation
+
+The original motivation is simple: many real fisheries are **multi-gear**, but many length-based methods, such as `LBSRP` assume a single gear with logistic selectivity.
 
 Many length-based methods are built around a single gear and logistic selectivity. That can work well in simple fisheries, but it is often a poor description of real fleets, especially when gears differ strongly in size selectivity or when one or more gears are dome-shaped. Medley’s multi-gear framework was developed specifically to address this problem by jointly fitting gear-specific length compositions and relative catches from multiple fleets. 
 
@@ -477,6 +485,7 @@ For a full reproducible example, see the test script:
 
 library(FLicc)
 
+
 data("alfonsino")
 
 # Example input date structure
@@ -492,7 +501,7 @@ lfd <- FLQuantLen(LFD.df,unit="cm",midL=FALSE)
 plot_lfd(lfd,type="relmax")
 
 # Normalized to maximum
-plot_lfd(lfd,type="relmax")
+plot_lfd(lfd)
 
 
 # Specify Life History
@@ -533,7 +542,12 @@ ll <- LLflicc(fit)
 ll[[1]]
 AIC(ll)
 BIC(ll)
+# convergence check
+flicc_convergence(fit)
+# internal optimization to reduce gradient
+fit$restart_log
 
+plot_spr(fit)
 # FLReport structure
 summary(fit$report)
 fcur_flicc(fit)
@@ -602,6 +616,7 @@ fit.y <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.
 stky <- flicc_stklen(fit.y)
 # Plot fishery selectivity estimated for each year
 plot_sel(stky)
+
 # compare
 plot_spr(list(all.yr=fit,each.y=fit.y))
 
@@ -633,6 +648,46 @@ system.time({
 plot_spr(list(gamma.nb=fit.gamma.nb,
               gtg.mn=fit.gtg.mn))
 
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+# fishblicc test example
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+data("fishblicc_example")
+
+# Build stock with inverse M model
+stklen <- stocklen(lfd_fishblicc,lhpar_fishblicc,m_model="inverse")
+
+plot_m(stklen)
+
+# Fit model with penalties (priors) on Linf, MK and CVL approximating fishblicc
+# pop_model = "gamma"
+# obs_model="nb"
+# linf.sd=2/40   (fishblicc sdev = 2, here as log.se ~ sdev/linf)
+# Mk.sd=0.1   (also lognormal in fishblicc)
+# CVL.sd=0.1   (parameterized as Galpha in fishblicc)
+
+
+fit <- fiticc(lfd_fishblicc, stklen,sel_fun=c("dsnormal","dsnormal","dsnormal"),catch_by_gear =c(0.1802070, 0.2101353, 0.6096577),
+              settings=list(pop_model = "gamma", obs_model="nb",CVL=0.14,CVL.sd=0.1,linf.sd=2/40,Mk.sd=0.1))
+
+# Convergence
+flicc_convergence(fit)
+sprcur_flicc(fit)
+# flicc spr - 0.3408
+# fishblicc spr = 0.340
+
+plot_sel(fit)
+
+# Plotting observed vs predicted
+plot_len(fit,by_gear = T)
+plot_len(fit)
+
+
+# Equilibrium dynamics
+eqstk <- eqstklen(fit,s=0.7)
+eqstk@refpts
+plot_eqcurves(eqstk)
 
 
 

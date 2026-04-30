@@ -17,6 +17,10 @@ fiticc_core(
   silent = TRUE,
   dll = "FLicc",
   sel_fixed = NULL,
+  start = NULL,
+  n_restart = 3,
+  grad_tol = 0.001,
+  control = list(),
   FLRreport = FALSE
 )
 }
@@ -51,6 +55,11 @@ before being passed to TMB.}
 \item{dll}{Character string giving the compiled TMB DLL name.}
 
 \item{sel_fixed}{Optional object used to fix selectivity parameters.}
+
+\item{start}{Optional numeric vector of starting values for the estimated
+TMB parameters. This is mainly used to restart a fit from
+\code{fit$opt$par}. If supplied as a vector, its length must match the
+free parameter vector after applying any TMB parameter mapping.}
 
 \item{FLRreport}{Logical; if \code{TRUE}, convert reported outputs using
 \code{as_FLQuants()}.}

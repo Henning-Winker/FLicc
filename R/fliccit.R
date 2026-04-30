@@ -442,7 +442,9 @@ calc_Z_l <- function(fit, Sel = NULL, F = NULL, FM = NULL, M = NULL, nyears=1) {
   lens = an(an(dimnames(fit$report$Mk)$len))
   nyears <- min(length(years),nyears)
   years <- tail(years,nyears)
-  M <-  yearMeans(fit$report$Mk[,ac(years)]*an(fit$report$lhpar['k']))
+  if (is.null(M)) {
+    M <- yearMeans(fit$report$M[, ac(years)])
+  }
   units(M) <- "m"
   if(is.null(Sel)) Sel <- yearMeans(fit$report$sel[,ac(years)])
 
@@ -571,13 +573,7 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
                      return_surv = FALSE,
                      R0 = 1000) {
 
-
   ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
-
-  if (!is.null(F) && is.null(FM)) {
-    FM <- F / ref$M
-    F <- NULL
-  }
 
   fin <- resolve_f_input_flicc(F = F, FM = FM, default_FM = 1)
 
@@ -593,7 +589,7 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
     return_surv = FALSE
   )
 
-  scale0 <- an(res0[1,1])
+  scale0 <- an(res0[1, 1])
 
   res <- nf_from_flicc(
     fit,
@@ -604,7 +600,7 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
   )
 
   if (!return_surv) {
-    return(res / an(scale0) * R0/1000)
+    return(res / an(scale0) * R0 / 1000)
   }
 
   res$NI <- res$NI / an(scale0) * R0
@@ -737,10 +733,6 @@ pr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
 
   ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
 
-  if (!is.null(F) && is.null(FM)) {
-    FM <- F / ref$M
-    F <- NULL
-  }
 
   fin <- resolve_f_input_flicc(F = F, FM = FM, default_FM = 1)
 
@@ -812,10 +804,7 @@ spr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
 
   ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
 
-  if (!is.null(F) && is.null(FM)) {
-    FM <- F / ref$M
-    F <- NULL
-  }
+
 
   fin <- resolve_f_input_flicc(F = F, FM = FM)
 

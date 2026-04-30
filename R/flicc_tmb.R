@@ -357,6 +357,10 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param silent Logical; passed to \code{TMB::MakeADFun()}.
 #' @param dll Character string giving the compiled TMB DLL name.
 #' @param sel_fixed Optional object used to fix selectivity parameters.
+#' @param start Optional numeric vector of starting values for the estimated
+#'   TMB parameters. This is mainly used to restart a fit from
+#'   \code{fit$opt$par}. If supplied as a vector, its length must match the
+#'   free parameter vector after applying any TMB parameter mapping.
 #' @param FLRreport Logical; if \code{TRUE}, convert reported outputs using
 #'   \code{as_FLQuants()}.
 #'
@@ -401,7 +405,12 @@ fiticc_core <- function(lfd, stklen,
                      compile = FALSE,
                      silent = TRUE,
                      dll = "FLicc",
-                     sel_fixed = NULL,FLRreport=FALSE ) {
+                     sel_fixed = NULL,
+                     start = NULL,
+                     n_restart = 3,
+                     grad_tol = 1e-3,
+                     control = list(),
+                     FLRreport=FALSE ) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -502,6 +511,14 @@ fiticc_core <- function(lfd, stklen,
     map$log_Galpha <- factor(NA)
   }
   # NEW: phi only relevant for NB
+  if (settings$obs_model != "nb") {
+    map$log_phi <- factor(NA)
+  }
+
+  if (length(unique(years)) <= 1) {
+    map$log_sigmaF <- factor(NA)
+  }
+
   if (settings$pop_model == "gtg") {
     map$log_Galpha <- factor(NA)
   } else if (is.null(settings$CVL.sd)) {
@@ -529,12 +546,92 @@ fiticc_core <- function(lfd, stklen,
     silent = silent
   )
 
+  # Optional restart from user-supplied starting values.
+  # This is useful for reducing gradients by restarting from a previous optimum,
+  # e.g. start = fit$opt$par. The supplied vector must match obj$par after
+  # mapping, because mapped/fixed parameters are not optimized by nlminb().
+  opt_start <- obj$par
+  if (!is.null(start)) {
+    if (is.list(start)) start <- unlist(start)
+    start <- as.numeric(start)
+
+    if (length(start) != length(opt_start)) {
+      stop(
+        "Length of 'start' (", length(start), ") does not match the number ",
+        "of estimated TMB parameters (", length(opt_start), ")."
+      )
+    }
+
+    names(start) <- names(opt_start)
+    opt_start <- start
+  }
+
+  ctrl <- modifyList(
+    list(
+      iter.max = 1000,
+      eval.max = 2000,
+      rel.tol =  1e-9,
+      x.tol =  1e-7
+    ),
+    control
+  )
+
   opt <- nlminb(
-    start = obj$par,
+    start = opt_start,
     objective = obj$fn,
     gradient = obj$gr,
-    control = list(iter.max = 1000, eval.max = 1000)
+    control = ctrl
   )
+
+  restart_log <- data.frame(
+    restart = 0L,
+    objective = opt$objective,
+    max_gradient = max(abs(obj$gr(opt$par)), na.rm = TRUE),
+    accepted = TRUE
+  )
+
+  n_restart_used <- 0L
+
+  for (i in seq_len(n_restart)) {
+
+    old_grad <- max(abs(obj$gr(opt$par)), na.rm = TRUE)
+
+    if (old_grad < grad_tol) break
+
+    opt_new <- nlminb(
+      start = opt$par,
+      objective = obj$fn,
+      gradient = obj$gr,
+      control = ctrl
+    )
+
+    new_grad <- max(abs(obj$gr(opt_new$par)), na.rm = TRUE)
+
+    accept <- is.finite(opt_new$objective) &&
+      is.finite(new_grad) &&
+      new_grad < old_grad &&
+      opt_new$objective <= opt$objective + 1e-6
+
+    restart_log <- rbind(
+      restart_log,
+      data.frame(
+        restart = i,
+        objective = opt_new$objective,
+        max_gradient = new_grad,
+        accepted = accept
+      )
+    )
+
+    if (accept) {
+      opt <- opt_new
+    } else {
+      break
+    }
+  }
+
+  opt$max_gradient <- max(abs(obj$gr(opt$par)), na.rm = TRUE)
+  opt$n_restarts <- n_restart_used
+  opt$restart_log <- restart_log
 
   obj$env$last.par.best <- opt$par
 
@@ -566,6 +663,10 @@ fiticc_core <- function(lfd, stklen,
   fit$settings <- settings
   fit$pop_model <- settings$pop_model
   fit$obs_model <- settings$obs_model
+  fit$start_used <- !is.null(start)
+  fit$max_gradient <- opt$max_gradient
+  fit$n_restarts <- opt$n_restarts
+  fit$restart_log <- opt$restart_log
 
   fit$logLik <- LLflicc(fit)
 
@@ -628,6 +729,19 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
 #'       parameters.}
 #'   }
+#' @param start Optional numeric vector of starting values for the estimated
+#'   TMB parameters. A common use is \code{start = fit$opt$par} to restart
+#'   from a previous fit and reduce residual gradients. Currently this is used
+#'   for ordinary multi-year fits; it is ignored for \code{by_year = TRUE}.
+#' @param n_restart Integer. Number of automatic optimizer restarts from the
+#'   current optimum. Restarts can reduce residual gradients when \code{nlminb()}
+#'   stops by relative convergence before reaching a stationary point. Default
+#'   is 3. Use 0 to disable automatic restarts.
+#' @param grad_tol Numeric. Maximum absolute gradient tolerance used to stop
+#'   automatic restarts and by the optional safe-fit check. Default is
+#'   \code{1e-3}.
+#' @param control Optional list of control arguments passed to \code{nlminb()}.
+#'   Values supplied here override the FLicc defaults.
 #' @param by_year Logical. If \code{TRUE}, the model is fitted independently
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
@@ -705,14 +819,21 @@ fiticc <- function(lfd, stklen,
                    compile = FALSE,
                    silent = TRUE,
                    dll = "FLicc",
+                   start = NULL,
                    by_year = FALSE,
                    sel_fixed = NULL,
                    FLRreport = TRUE,
                    safe_fit = TRUE,
-                   refit_GL = 100) {
+                   refit_GL = 100,
+                   n_restart = 3,
+                   grad_tol = 1e-3,
+                   control = list()) {
 
 
      if(by_year){
+      if (!is.null(start)) {
+        warning("Argument 'start' is currently ignored when by_year = TRUE.")
+      }
       yrs <- dimnames(stklen)$year
       if(!is.null(years)){
        yrs <-  yrs[an(yrs)%in%years]
@@ -740,6 +861,9 @@ fiticc <- function(lfd, stklen,
          silent = silent,
          dll = dll,
          sel_fixed = sel_fixed,
+         n_restart = n_restart,
+         grad_tol = grad_tol,
+         control = control,
          FLRreport = TRUE
          )}
       )
@@ -778,6 +902,10 @@ fiticc <- function(lfd, stklen,
     silent = silent,
     dll = dll,
     sel_fixed = sel_fixed,
+    start = start,
+    n_restart = n_restart,
+    grad_tol = grad_tol,
+    control = control,
     FLRreport = FLRreport
   )
 
@@ -804,6 +932,10 @@ fiticc <- function(lfd, stklen,
         silent = silent,
         dll = dll,
         sel_fixed = sel_fixed,
+        start = fit1$opt$par,
+        n_restart = n_restart,
+        grad_tol = grad_tol,
+        control = control,
         FLRreport = FLRreport
       ),
       error = function(e) NULL
@@ -1091,4 +1223,123 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
 }
 
 
+#' Summarise convergence diagnostics for a FLicc fit
+#'
+#' Provides a compact, lay-readable convergence summary for a fitted FLicc/TMB
+#' model. The function checks whether the optimiser terminated normally, whether
+#' the maximum absolute gradient is small, whether the Hessian is positive
+#' definite, whether standard errors are available, and whether the numerical
+#' Hessian has positive eigenvalues.
+#'
+#' @param fit A fitted FLicc model object, typically returned by `fiticc()`.
+#'   The object is expected to contain `fit$opt`, `fit$obj`, `fit$par`, and
+#'   either `fit$rep$pdHess` or `fit$sdrep$pdHess`.
+#' @param grad_tol Numeric. Tolerance used to judge whether the maximum absolute
+#'   gradient is sufficiently small. Default is `1e-3`.
+#' @param eig_tol Numeric. Tolerance used to judge whether Hessian eigenvalues
+#'   are positive. Default is `1e-8`.
+#'
+#' @return A `data.frame` with columns:
+#' \describe{
+#'   \item{check}{Name of the convergence diagnostic.}
+#'   \item{value}{Observed diagnostic value.}
+#'   \item{passed}{Logical flag indicating whether the check passed.}
+#'   \item{interpretation}{Plain-language explanation of the check.}
+#' }
+#'
+#' @details
+#' Optimiser convergence alone does not guarantee a reliable fit. A model may
+#' stop with optimiser code `0` but still have a large gradient, indicating that
+#' the solution is not close to a stationary point. Conversely, standard errors
+#' and a positive-definite Hessian indicate that local curvature is estimable,
+#' but should still be interpreted together with the gradient check.
+#'
+#' The Hessian positive-definiteness check first looks for `fit$rep$pdHess`,
+#' then for `fit$sdrep$pdHess`. The eigenvalue check recomputes a numerical
+#' Hessian using `stats::optimHess()`.
+#'
+#' @examples
+#' \dontrun{
+#' fit <- fiticc(lfds, stock, lhpar)
+#' flicc_convergence(fit)
+#' }
+#'
+#' @export
+flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.code=FALSE) {
+
+  opt_code <- fit$opt$convergence
+  opt_msg  <- fit$opt$message
+
+  max_grad <- if (!is.null(fit$opt$gradient)) {
+    max(abs(fit$opt$gradient), na.rm = TRUE)
+  } else if (!is.null(fit$obj$gr)) {
+    max(abs(fit$obj$gr(fit$opt$par)), na.rm = TRUE)
+  } else {
+    NA_real_
+  }
+
+  pdHess <- if (!is.null(fit$rep$pdHess)) {
+    fit$rep$pdHess
+  } else if (!is.null(fit$sdrep$pdHess)) {
+    fit$sdrep$pdHess
+  } else {
+    NA
+  }
+
+  n_par <- if (!is.null(fit$par)) nrow(fit$par) else length(fit$opt$par)
+
+  n_nan_se <- if (!is.null(fit$par) && "se" %in% names(fit$par)) {
+    sum(is.nan(fit$par$se))
+  } else {
+    NA_integer_
+  }
+
+  nan_pars <- if (!is.null(fit$par) && "se" %in% names(fit$par)) {
+    unique(fit$par$par[is.nan(fit$par$se)])
+  } else {
+    character(0)
+  }
+
+  eig <- try({
+    H <- stats::optimHess(fit$opt$par, fit$obj$fn, fit$obj$gr)
+    eigen(H, symmetric = TRUE, only.values = TRUE)$values
+  }, silent = TRUE)
+
+  min_eig <- if (!inherits(eig, "try-error")) min(eig, na.rm = TRUE) else NA_real_
+
+  out <- data.frame(
+    check = c(
+      "Optimizer finished normally",
+      "Gradient is acceptable",
+      "Hessian is positive definite",
+      "Standard errors available",
+      "Hessian eigenvalues are positive"
+    ),
+    value = c(
+      paste0(opt_code, " - ", opt_msg),
+      signif(max_grad, 4),
+      as.character(pdHess),
+      paste0(n_par - n_nan_se, " / ", n_par, " parameters"),
+      signif(min_eig, 4)
+    ),
+    passed = c(
+      identical(opt_code, 0L),
+      isTRUE(max_grad < grad_tol),
+      isTRUE(pdHess),
+      isTRUE(n_nan_se == 0),
+      isTRUE(min_eig > eig_tol)
+    ),
+    interpretation = c(
+      "The optimizer found a numerical optimum.",
+      "The fit is close to a stationary point.",
+      "The model curvature is well behaved.",
+      "Uncertainty could be estimated for all parameters.",
+      "No flat or negative curvature directions were detected."
+    ),
+    stringsAsFactors = FALSE
+  )
+
+  if(!optimizer.code) out <- out[-1,]
+  out
+}
 

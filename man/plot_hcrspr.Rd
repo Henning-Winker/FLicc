@@ -16,7 +16,7 @@ plot_hcrspr(
   dup = 0.15,
   metric = c("TAC", "Effort"),
   spr_target = 0.4,
-  show_spr_target_label = TRUE,
+  show_target = TRUE,
   spr_target_label = "SPR target",
   obs = NULL,
   years = NULL,
@@ -24,8 +24,9 @@ plot_hcrspr(
   ymin = -0.3,
   ymax = 0.3,
   alpha = 0.18,
-  labels = TRUE,
-  text = TRUE,
+  triggers = TRUE,
+  refpts = TRUE,
+  status.text = FALSE,
   line_colour = "blue",
   line_size = 1.2
 )
@@ -53,10 +54,6 @@ plot_hcrspr(
 
 \item{spr_target}{Optional target SPR shown as a vertical dashed line.}
 
-\item{show_spr_target_label}{Logical, if TRUE annotate the SPR target.}
-
-\item{spr_target_label}{Character label for SPR target.}
-
 \item{obs}{Optional numeric vector of observed SPR values.}
 
 \item{years}{Optional year labels for obs.}
@@ -69,13 +66,17 @@ plot_hcrspr(
 
 \item{alpha}{Transparency for background shading.}
 
-\item{labels}{Logical, if TRUE annotate trigger points and levels.}
+\item{triggers}{Logical, if TRUE annotate trigger points and levels.}
 
-\item{text}{Logical, if TRUE add stock-zone labels.}
+\item{refpts}{Logical, if TRUE annotate trigger points and levels.}
+
+\item{status.text}{Logical, if TRUE add stock-zone labels.}
 
 \item{line_colour}{Colour of HCR curve.}
 
 \item{line_size}{Line width of HCR curve.}
+
+\item{show_spr}{Logical, if TRUE annotate the SPR target.}
 }
 \value{
 A ggplot object.
@@ -107,7 +108,7 @@ The HCR is defined by four trigger points:
 
 plot_hcrflicc(
   spr_target = 0.4,
-  show_spr_target_label = TRUE,
+  show_target = TRUE,
   spr_target_label = "SPR target"
 )
 # example code

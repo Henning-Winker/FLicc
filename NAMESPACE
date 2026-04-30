@@ -23,6 +23,7 @@ export(fiticc_core)
 export(need_refit_flicc)
 export(apply_sel_fixed_flicc)
 export(LLflicc)
+export(flicc_convergence)
 
 # --- FLR conversion & utilities ---
 export(as_FLQuants)

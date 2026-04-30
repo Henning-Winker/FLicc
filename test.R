@@ -1,6 +1,7 @@
 
 library(FLicc)
 
+
 data("alfonsino")
 
 # Example input date structure
@@ -51,13 +52,16 @@ plot_m(m_stks)
 
 # Fit model
 fit <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.7,0.3),
-              settings=list(prior_sigmaF = c(log(0.5), 0.3,1)),by_year = T)
+              settings=list(prior_sigmaF = c(log(0.5), 0.3,1)))
 # log-likelihood
 ll <- LLflicc(fit)
 ll[[1]]
 AIC(ll)
 BIC(ll)
-
+# convergence check
+flicc_convergence(fit)
+# internal optimization to reduce gradient
+fit$restart_log
 
 plot_spr(fit)
 # FLReport structure
@@ -80,7 +84,6 @@ stkl <- flicc_stklen(fit)
 # Plot, e.g., fishery selectivity weighted by the ratio of catches
 plot_sel(stkl)
 
-plot(apply(z(stkl),2,mean))
 
 # Equilibrium dynamics
 eqstk <- eqstklen(fit,s=0.75)
@@ -129,6 +132,7 @@ fit.y <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.
 stky <- flicc_stklen(fit.y)
 # Plot fishery selectivity estimated for each year
 plot_sel(stky)
+
 # compare
 plot_spr(list(all.yr=fit,each.y=fit.y))
 
@@ -160,4 +164,44 @@ system.time({
 plot_spr(list(gamma.nb=fit.gamma.nb,
               gtg.mn=fit.gtg.mn))
 
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+# fishblicc test example
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+data("fishblicc_example")
+
+# Build stock with inverse M model
+stklen <- stocklen(lfd_fishblicc,lhpar_fishblicc,m_model="inverse")
+
+plot_m(stklen)
+
+# Fit model with penalties (priors) on Linf, MK and CVL approximating fishblicc
+# pop_model = "gamma"
+# obs_model="nb"
+# linf.sd=2/40   (fishblicc sdev = 2, here as log.se ~ sdev/linf)
+# Mk.sd=0.1   (also lognormal in fishblicc)
+# CVL.sd=0.1   (parameterized as Galpha in fishblicc)
+
+
+fit <- fiticc(lfd_fishblicc, stklen,sel_fun=c("dsnormal","dsnormal","dsnormal"),catch_by_gear =c(0.1802070, 0.2101353, 0.6096577),
+              settings=list(pop_model = "gamma", obs_model="nb",CVL=0.14,CVL.sd=0.1,linf.sd=2/40,Mk.sd=0.1))
+
+# Convergence
+flicc_convergence(fit)
+sprcur_flicc(fit)
+# flicc spr - 0.3408
+# fishblicc spr = 0.340
+
+plot_sel(fit)
+
+# Plotting observed vs predicted
+plot_len(fit,by_gear = T)
+plot_len(fit)
+
+
+# Equilibrium dynamics
+eqstk <- eqstklen(fit,s=0.7)
+eqstk@refpts
+plot_eqcurves(eqstk)
 

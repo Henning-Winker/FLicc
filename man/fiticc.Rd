@@ -17,11 +17,15 @@ fiticc(
   compile = FALSE,
   silent = TRUE,
   dll = "FLicc",
+  start = NULL,
   by_year = FALSE,
   sel_fixed = NULL,
   FLRreport = TRUE,
   safe_fit = TRUE,
-  refit_GL = 100
+  refit_GL = 100,
+  n_restart = 3,
+  grad_tol = 0.001,
+  control = list()
 )
 }
 \arguments{
@@ -74,10 +78,27 @@ growth formulation.}
 
 }}
 
+\item{start}{Optional numeric vector of starting values for the estimated
+TMB parameters. A common use is \code{start = fit$opt$par} to restart
+from a previous fit and reduce residual gradients. Currently this is used
+for ordinary multi-year fits; it is ignored for \code{by_year = TRUE}.}
+
 \item{by_year}{Logical. If \code{TRUE}, the model is fitted independently
 for each year (LBSPR-style). Only the final fit object is retained, while
 annual report quantities are updated and combined across years.
 Default is \code{FALSE}.}
+
+\item{n_restart}{Integer. Number of automatic optimizer restarts from the
+current optimum. Restarts can reduce residual gradients when \code{nlminb()}
+stops by relative convergence before reaching a stationary point. Default
+is 3. Use 0 to disable automatic restarts.}
+
+\item{grad_tol}{Numeric. Maximum absolute gradient tolerance used to stop
+automatic restarts and by the optional safe-fit check. Default is
+\code{1e-3}.}
+
+\item{control}{Optional list of control arguments passed to \code{nlminb()}.
+Values supplied here override the FLicc defaults.}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} containing:
