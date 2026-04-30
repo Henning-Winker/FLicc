@@ -2,17 +2,9 @@
 
 **FLicc: Length-interval catch-curve per-recruit analysis in FLR**
 
-<<<<<<< HEAD
-`FLicc` is an user-friendly TMB implementation in the `FLR` and an extension of both the multi-gear length-interval catch-curve framework developed in `fishblicc` and length-based spawning potential ratio estimation in `LBSRP`.
+`FLicc` is an user-friendly TMB implementation in the `FLR` and an extension of both the multi-gear length-interval catch-curve framework developed in `fishblicc` and the length-based spawning potential ratio estimation in `LBSRP`.
 
-It retains the biological core of either of the original equilibrium models, but adds:
-  - fast penalized-likelihood estimation in TMB
-  - multi-year, multi-gear fitting 
-  - FLR integration
-  - equilibrium and indicator tools
-=======
-`FLicc` is an FLR-friendly TMB implementation and extension of the multi-gear length-interval catch-curve framework developed in `fishblicc`. It retains the biological core of the original equilibrium model, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), and yield-per-recruit from length compositions grouped by gear. A brief introduction with illustrations of the FLicc utilities is provided [here](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf).
->>>>>>> 216c1cfbbc17135175a2c0f4a1c8079467a04cac
+`FLicc` retains the biological core of either of the original equilibrium models, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), and yield-per-recruit from length compositions grouped by gear. An introduction with illustrations of the FLicc utilities is provided [here](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf).
 
 ---
 
