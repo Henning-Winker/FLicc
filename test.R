@@ -51,8 +51,10 @@ plot_m(m_stks)
 
 
 # Fit model
+system.time({
 fit <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.7,0.3),
               settings=list(prior_sigmaF = c(log(0.5), 0.3,1)))
+})
 # log-likelihood
 ll <- LLflicc(fit)
 ll[[1]]
@@ -119,7 +121,7 @@ stk@refpts
 plot_LBAdvice(stk)
 # relative to MSY proxy
 stkr <- flicc2FLStockR(fit,rel=T)
-plot_LBAdvice(stkr,panel=1)+ylim(0.,1.5)
+plot_LBAdvice(stkr,panel=2)+ylim(0.,1.5)
 
 
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
@@ -171,10 +173,10 @@ plot_spr(list(gamma.nb=fit.gamma.nb,
 
 data("fishblicc_example")
 
+lhpar_fishblicc <- rbind(lhpar_fishblicc,
+          FLPar(M=lhpar_fishblicc["k"]*lhpar_fishblicc["Mk"]))
 # Build stock with inverse M model
-stklen <- stocklen(lfd_fishblicc,lhpar_fishblicc,m_model="inverse")
-
-plot_m(stklen)
+stklen <- stocklen(lfd_fishblicc,lhpar_fishblicc,m_model="inverse",reflen = 21.9)
 
 # Fit model with penalties (priors) on Linf, MK and CVL approximating fishblicc
 # pop_model = "gamma"
@@ -185,8 +187,13 @@ plot_m(stklen)
 
 
 fit <- fiticc(lfd_fishblicc, stklen,sel_fun=c("dsnormal","dsnormal","dsnormal"),catch_by_gear =c(0.1802070, 0.2101353, 0.6096577),
-              settings=list(pop_model = "gamma", obs_model="nb",CVL=0.14,CVL.sd=0.1,linf.sd=2/40,Mk.sd=0.1))
+              settings=list(pop_model = "gamma", obs_model="nb",
+                            CVL=0.14,
+                            CVL.sd=0.1,
+                            linf.sd=2/40,
+                            Mk.sd=0.1))
 
+stkl <- flicc_stklen(fit)
 # Convergence
 flicc_convergence(fit)
 sprcur_flicc(fit)
