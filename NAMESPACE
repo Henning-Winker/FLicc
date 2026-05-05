@@ -106,4 +106,18 @@ export(r_rule)
 export(hcr_sprlbi)
 export(plot_hcrspr)
 
+#---Monte-Carlo Ensemble---
+export(mc_flicc)
+export(fishlife_corr)
+export(get_lhpar_mc)
+export(draw_lh_mc)
+export(plot_mcpars)
+export(plot_mccor)
+export(mc_dAIC)
+export(plot_mcprofile)
+export(plot_mcsprdist)
 
+export(mc_aic_weights)
+export(mc_spr_summary)
+export(mc_prior_table)
+export(wquantile)

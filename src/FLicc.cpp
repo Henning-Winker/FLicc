@@ -247,6 +247,10 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(prior_sigmaF_mean);
   DATA_SCALAR(prior_sigmaF_sd);
   DATA_INTEGER(prior_sigmaF_use);
+  // FM penalty
+  DATA_SCALAR(FM_min);
+  DATA_SCALAR(FM_max);
+  DATA_SCALAR(FMpen_sd);
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -336,6 +340,10 @@ Type objective_function<Type>::operator() ()
       Fk(y,g) = exp(log_Fk(y,g));
     }
 
+
+
+
+    // Z at length
     for(int l = 0; l < nlen; l++) {
 
       Z(l) = M(l);
@@ -411,17 +419,38 @@ Type objective_function<Type>::operator() ()
       }
     }
 
+
     Type fmax = Type(0);
+    Type M_at_fmax = M(0);
 
     for(int l = 0; l < nlen; l++) {
+
       Type fsum = Type(0);
+
       for(int g = 0; g < ngear; g++) {
         fsum += F_len(l,g);
       }
+
       Fk_l(l,y) = fsum;
-      if(fsum > fmax) fmax = fsum;
+
+      if(fsum > fmax) {
+        fmax = fsum;
+        M_at_fmax = M(l);
+      }
     }
 
+    if (FMpen_sd > Type(0)) {
+
+      Type FM_y = fmax / (M_at_fmax + Type(1e-12)) + Type(1e-12);
+
+      if (FM_y < FM_min) {
+        nll += Type(1e6) * pow(log(FM_y) - log(FM_min), 2);
+      }
+
+      if (FM_y > FM_max) {
+        nll += Type(1e6) * pow(log(FM_y) - log(FM_max), 2);
+      }
+    }
 
 
     for(int l = 0; l < nlen; l++) {

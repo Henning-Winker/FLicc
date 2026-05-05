@@ -53,7 +53,7 @@ plot_m(m_stks)
 # Fit model
 system.time({
 fit <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.7,0.3),
-              settings=list(prior_sigmaF = c(log(0.5), 0.3,1)))
+              settings=list(prior_sigmaF = c(log(0.5), 0.3,1),CVL=0.1),n_restart = 10)
 })
 # log-likelihood
 ll <- LLflicc(fit)
@@ -121,7 +121,7 @@ stk@refpts
 plot_LBAdvice(stk)
 # relative to MSY proxy
 stkr <- flicc2FLStockR(fit,rel=T)
-plot_LBAdvice(stkr,panel=2)+ylim(0.,1.5)
+plot_LBAdvice(stkr,panel=1)+ylim(0.,1.5)
 
 
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>

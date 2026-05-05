@@ -190,7 +190,7 @@ as_FLQuants <- function(fit,stklen) {
   names(out$obslen) <- gears
 
   out$Mk <- FLCore::FLQuant(
-    report$M/k,
+    an(report$Mk*tmb_data$Mscaler),
     dimnames = list(
       len = lens,
       year = yrs,

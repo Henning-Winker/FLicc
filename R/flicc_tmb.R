@@ -320,12 +320,30 @@ init_tmb_flicc <- function(tmb_data) {
     }
   }
 
+  gear_wt <- as.numeric(tmb_data$catch_wt)
+
+  if (length(gear_wt) != ngear ||
+      any(!is.finite(gear_wt)) ||
+      sum(gear_wt) <= 0) {
+    gear_wt <- rep(1 / ngear, ngear)
+  } else {
+    gear_wt <- gear_wt / sum(gear_wt)
+  }
+
+  Fk_init <- matrix(
+    rep(tmb_data$Mk_init * gear_wt, each = nyear),
+    nrow = nyear,
+    ncol = ngear,
+    dimnames = list(tmb_data$year_names, tmb_data$gear_names)
+  )
+
+  log_Fk <- log(pmax(Fk_init, 1e-8))
+
   list(
     log_Linf   = log(tmb_data$Linf_init),
     log_Galpha = log(tmb_data$Galpha_init),
     log_Mk     = log(tmb_data$Mk_init),
-    log_Fk     = matrix(log(0.5), nrow = nyear, ncol = ngear,
-                        dimnames = list(tmb_data$year_names, tmb_data$gear_names)),
+    log_Fk     = log_Fk,
     Sm         = Sm,
     log_phi    = log(10),
     log_sigmaF = tmb_data$prior_sigmaF_mean
@@ -429,7 +447,10 @@ fiticc_core <- function(lfd, stklen,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
     Mk.sd = NULL,
-    CVL.sd = NULL
+    CVL.sd = NULL,
+    FM_min = 0.05,
+    FM_max = 4,
+    FMpen_sd = 0.2
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -489,6 +510,10 @@ fiticc_core <- function(lfd, stklen,
   tmb_data$prior_sigmaF_sd   <- as.numeric(settings$prior_sigmaF[2])
   tmb_data$prior_sigmaF_use  <- as.integer(settings$prior_sigmaF[3])
 
+  # Soft penalty FM
+  tmb_data$FM_min    <- as.numeric(settings$FM_min)
+  tmb_data$FM_max    <- as.numeric(settings$FM_max)
+  tmb_data$FMpen_sd  <- as.numeric(settings$FMpen_sd)
 
   parameters <- init_tmb_flicc(tmb_data)
 
@@ -587,7 +612,7 @@ fiticc_core <- function(lfd, stklen,
     restart = 0L,
     objective = opt$objective,
     max_gradient = max(abs(obj$gr(opt$par)), na.rm = TRUE),
-    accepted = TRUE
+    improved = TRUE
   )
 
   n_restart_used <- 0L
@@ -618,7 +643,7 @@ fiticc_core <- function(lfd, stklen,
         restart = i,
         objective = opt_new$objective,
         max_gradient = new_grad,
-        accepted = accept
+        improved  = accept
       )
     )
 

@@ -191,6 +191,7 @@ stocklen <- function(lfds, lhpar, m_model = c("constant", "inverse", "Lorenzen",
   lhpar.out <- FLPar(linf=linf,k=k,M=M,Mk=Mk,L50=L50,L95=L95,a=a,b=b,s=0.7)
   units(out) <- standardUnits(out)
   attr(out,"lhpar") <- lhpar.out
+  attr(out,"m_model") <- m_model
   return(out)
 }
 
@@ -397,6 +398,7 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
   # units
   # -----------------------------
   units(stky) <- standardUnits(stky)
+
 
   return(stky)
 }
