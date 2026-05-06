@@ -3,10 +3,11 @@ title: "FLicc: Introductory User Guide to Multi-Gear Length-Interval Catch-Curve
 author: "Henning Winker (FAO-NFI)"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
-  rmarkdown::html_vignette:
+  html_document:
+    self_contained: true
     toc: true
     number_sections: true
-    fig_width: 7
+    fig_width: 6.5
     fig_height: 5
 vignette: >
   %\VignetteIndexEntry{FLicc basic workflow}
