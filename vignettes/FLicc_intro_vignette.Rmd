@@ -1,0 +1,832 @@
+---
+title: "FLicc: Introductory User Guide to Multi-Gear Length-Interval Catch-Curve Analysis in FLR"
+author: "Henning Winker (FAO-NFI)"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 5
+vignette: >
+  %\VignetteIndexEntry{FLicc basic workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.align = "center",
+  fig.width = 7,
+  fig.height = 5,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Installation
+
+`FLicc` depends on `FLCore`, `ggplotFL` and `TMB`. The `FLR` packages are available from the FLR r-universe repository, while `TMB` is installed from CRAN. On Windows, compiling the TMB model requires Rtools.
+
+## Install required packages
+
+```{r install-deps, eval = FALSE}
+install.packages("devtools")
+install.packages("TMB", type = "source")
+install.packages("ggplot2")
+```
+
+`TMB` is the estimation engine used by `FLicc`. Installing from source can help ensure compatibility when compiling and linking the local TMB model.
+
+## Windows: install Rtools if needed
+
+On Windows, `TMB` requires Rtools. If it is not already installed, open the Rtools download page from R:
+
+```{r install-rtools, eval = FALSE}
+browseURL("https://cran.r-project.org/bin/windows/Rtools/")
+```
+
+After installing Rtools, restart R before installing or compiling `FLicc`.
+
+## Install FLR dependencies
+
+```{r install-flr, eval = FALSE}
+install.packages(
+  c("FLCore", "ggplotFL"),
+  repos = c("https://flr.r-universe.dev", "https://cloud.r-project.org")
+)
+```
+
+## Install FLicc
+
+```{r install-flicc, eval = FALSE}
+devtools::install_github("henning-winker/FLicc")
+```
+
+## Load the package
+
+```{r load-flicc-install, eval = FALSE}
+library(FLicc)
+```
+
+# Basic functionality
+
+## Getting started
+
+`FLicc` implements a length-based catch-curve assessment model for data-limited fisheries. The package is designed to work with the `FLR` data classes and provides tools to move from length-frequency observations to fitted selectivity, fishing mortality, spawning-potential ratio (SPR), length-based indicators and simple advice plots.
+
+The core workflow is:
+
+1. prepare length-frequency data as `FLQuants`;
+2. specify life-history parameters;
+3. build an `FLStockLen` object with `stocklen()`;
+4. fit the model using `fiticc()`;
+5. inspect convergence, fit diagnostics, selectivity and SPR;
+6. derive equilibrium reference points and length-based advice indicators.
+
+This vignette uses the built-in splendid alfonsino example and mirrors the main steps in `test.R`. It focuses on the single-fit workflow. Monte-Carlo ensemble fitting is not covered here.
+
+```{r load-package}
+library(FLicc)
+```
+
+# Loading and inspecting length-frequency data
+
+## Built-in alfonsino data
+
+The package contains an example length-frequency dataset for splendid alfonsino. The object `lfd_alfonsino` is stored as length-frequency data in `FLR` format.
+
+```{r load-data}
+data("alfonsino")
+
+lfd_alfonsino
+```
+
+A useful first step is to inspect the data as a long `data.frame`. This is especially important when moving between plain tabular input and `FLQuants`, because the model expects length, year and gear structure to be explicit.
+
+```{r lfd-long-structure}
+lfd_long <- as.data.frame(lfd_alfonsino)
+head(lfd_long)
+```
+
+The long structure should contain the length bin, year, gear or unit, and observed frequency or count. The exact column names depend on the `FLR` object, but the key point is that each row represents one length-bin observation for a given year and gear.
+
+```{r inspect-lfd-dimensions}
+unique(lfd_long$unit)
+range(lfd_long$len)
+range(lfd_long$year)
+```
+
+## From long input to wide input and back to `FLQuants`
+
+A common input workflow starts from a long length-frequency table. `lfd_long_to_wide()` converts the long table into the wide format expected by `FLQuantLen()`.
+
+```{r long-to-wide}
+LFD.df <- lfd_long_to_wide(as.data.frame(lfd_alfonsino))
+
+head(LFD.df)
+unique(LFD.df$gear)
+unique(LFD.df$len)
+```
+
+The wide object is then converted to an `FLQuants` length object. Here `midL = FALSE` indicates that the length values represent lower length-bin boundaries rather than mid-points.
+
+```{r wide-to-flquants}
+lfd <- FLQuantLen(LFD.df, unit = "cm", midL = FALSE)
+
+```
+
+The resulting object can again be displayed as a long table. This is a useful check that the `FLQuants` object contains the intended length, year and gear structure.
+
+```{r lfd-after-conversion}
+head(as.data.frame(lfd))
+```
+
+## Plotting observed length frequencies
+
+Before fitting, always inspect the observed length distributions. `plot_lfd()` can show either relative frequencies or frequencies normalised to the maximum value.
+
+```{r plot-lfd-relmax}
+plot_lfd(lfd, type = "relmax")
+```
+
+```{r plot-lfd-default}
+plot_lfd(lfd)
+```
+
+Large differences among gears are expected in multi-gear fisheries and are often informative. For example, one gear may mainly sample smaller fish, while another gear samples larger fish or the descending limb of a dome-shaped selectivity pattern.
+
+# Life-history input
+
+## Defining life-history parameters
+
+`FLicc` requires life-history parameters for growth, natural mortality, maturity and weight-at-length. These are supplied as an `FLPar` object.
+
+```{r life-history}
+lhpar <- FLPar(
+  linf = 55.7,
+  k    = 0.08,
+  M    = 0.162,
+  L50  = 31.1859,
+  a    = 0.004721956 / 1000,
+  b    = 3.146168
+)
+
+lhpar
+```
+
+The main quantities are:
+
+- `linf`: asymptotic length $L_{\infty}$;
+- `k`: von Bertalanffy growth coefficient;
+- `M`: natural mortality;
+- `L50`: length at 50% maturity;
+- `a` and `b`: weight-length parameters in $W(L) = aL^b$.
+
+## Biological equations
+
+The weight-at-length relationship is
+
+$$
+W(L) = aL^b.
+$$
+
+Maturity-at-length is represented by a logistic ogive,
+
+$$
+P_{mat}(L) = \frac{1}{1 + \exp[-\eta(L - L_{50})]},
+$$
+
+where $L_{50}$ is the length at 50% maturity and $\eta$ controls the slope of the maturity curve. In many applications the maturity curve is treated as fixed input rather than estimated from the length data.
+
+Growth enters the length-based population model through the transition or growth formulation selected in `settings`. FLicc currently supports a `gamma` population model and a `gtg` growth-transition model. The practical role of these options is described below.
+
+# Building the `FLStockLen` object
+
+## Constant natural mortality
+
+The `stocklen()` function combines length-frequency data and life-history parameters into an equilibrium length-structured stock object.
+
+```{r stocklen-constant}
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+stklen
+```
+
+The stock object stores biological schedules, length bins and derived quantities needed by the TMB model.
+
+```{r plot-life-history}
+plot_lw(stklen)
+plot_mat(stklen)
+plot_m(stklen)
+```
+
+## Natural mortality options
+
+The shape of natural mortality-at-length can be changed using `m_model`. The examples below compare the available options.
+
+```{r compare-m-models}
+m_models <- c("constant", "inverse", "Lorenzen", "Gislason")
+
+m_stks <- FLStocks(lapply(m_models, function(x) {
+  stocklen(lfd, lhpar, m_model = x)
+}))
+names(m_stks) <- m_models
+
+plot_m(m_stks)
+```
+
+The natural mortality schedule is an important structural assumption. A constant $M$ assumes the same mortality rate for all lengths,
+
+$$
+M(L) = M.
+$$
+
+Length-dependent options allow smaller fish to experience higher natural mortality. These options can be useful when the biology of the species or the assessment context suggests that mortality should decrease with size.
+
+# Model formulation
+
+## Gear-specific fishing mortality and selectivity
+
+FLicc represents gear-specific fishing mortality as the product of an apical fishing mortality and a selectivity curve:
+
+$$
+F_g(L) = F_g S_g(L),
+$$
+
+where $g$ indexes gear, $F_g$ is the gear-specific apical fishing mortality, and $S_g(L)$ is selectivity-at-length scaled to a maximum of one.
+
+Total fishing mortality-at-length is
+
+$$
+F(L) = \sum_g F_g S_g(L),
+$$
+
+and total mortality-at-length is
+
+$$
+Z(L) = M(L) + F(L).
+$$
+
+## Selectivity functions
+
+The selectivity function is specified separately for each gear with the `sel_fun` argument in `fiticc()`.
+
+### Logistic selectivity
+
+Logistic selectivity is appropriate for gears that approach full selection above a certain length:
+
+$$
+S(L) = \frac{1}{1 + \exp[-(L - L_{50}^{sel}) / \delta]}.
+$$
+
+Here $L_{50}^{sel}$ is the length at 50% selectivity and $\delta$ controls the steepness of the curve.
+
+### Double-sided normal selectivity
+
+Double-sided normal selectivity is useful for dome-shaped gears:
+
+$$
+S(L) =
+\begin{cases}
+\exp\left[-\frac{(L - \mu)^2}{2\sigma_L^2}\right], & L < \mu, \\
+\exp\left[-\frac{(L - \mu)^2}{2\sigma_R^2}\right], & L \ge \mu,
+\end{cases}
+$$
+
+where $\mu$ is the modal selected length and $\sigma_L$ and $\sigma_R$ control the ascending and descending limbs.
+
+## Spawning-potential ratio
+
+SPR is the central depletion and status quantity in this vignette. It is calculated as spawning output per recruit under fishing relative to the unfished spawning output per recruit:
+
+$$
+SPR = \frac{\sum_L N_F(L) W(L) P_{mat}(L)}{\sum_L N_0(L) W(L) P_{mat}(L)}.
+$$
+
+Here $N_F(L)$ is equilibrium numbers-at-length under fishing, and $N_0(L)$ is numbers-at-length in the unfished population. Lower values of SPR indicate stronger fishing impact on reproductive potential.
+
+# Fitting the model
+
+## Basic multi-gear fit
+
+The main fitting function is `fiticc()`. In this example there are two gears. The first is represented by double-sided normal selectivity and the second by logistic selectivity.
+
+```{r fit-basic}
+set.seed(123)
+
+system.time({
+  fit <- fiticc(
+    lfd,
+    stklen,
+    sel_fun = c("dsnormal", "logistic"),
+    catch_by_gear = c(0.7, 0.3),
+    settings = list(
+      prior_sigmaF = c(log(0.5), 0.3, 1),
+      CVL = 0.1
+    ),
+    n_restart = 10
+  )
+})
+```
+
+The main arguments are:
+
+- `lfd`: observed length-frequency data as `FLQuants`;
+- `stklen`: biological and length-structured stock object from `stocklen()`;
+- `sel_fun`: one selectivity function per gear;
+- `catch_by_gear`: relative catch or catch contribution by gear;
+- `settings`: model and prior settings passed to the TMB model;
+- `n_restart`: number of optimisation restarts used to improve convergence.
+
+The gear catch weights should sum to one or be interpretable as relative gear contributions. They determine how gear-specific selectivity and fishing mortality are combined into the fishery-level population effect.
+
+## Parameter and setting options
+
+The `settings` list controls several important assumptions. Common settings include:
+
+| Setting | Role | Typical use |
+|---|---|---|
+| `pop_model` | Population-at-length formulation | `"gamma"` or `"gtg"` |
+| `obs_model` | Observation likelihood for length data | `"mn"`, `"nb"`, or `"dm"` |
+| `CVL` | Coefficient of variation in length-at-age or growth-transition spread | Fixed input or starting value |
+| `CVL.sd` | Prior standard deviation for `CVL` on transformed scale | Penalise weakly or strongly |
+| `linf.sd` | Prior standard deviation for $L_\infty$ on transformed scale | Stabilise growth input |
+| `Mk.sd` | Prior standard deviation for $M/k$ on transformed scale | Stabilise mortality-growth ratio |
+| `prior_sigmaF` | Prior on interannual variation in fishing mortality | Used in multi-year fits |
+
+For a basic single-fit example, `CVL` and the selectivity structure are often the most influential settings. For fishblicc-like applications, the `gamma` population model and negative-binomial observation model are commonly used. For LBSPR-like applications, the `gtg` population model and multinomial observation model provide a faster approximation.
+
+# Fit diagnostics and output
+
+## Log-likelihood and information criteria
+
+The fitted likelihood can be extracted and used to compute information criteria.
+
+```{r likelihood}
+ll <- LLflicc(fit)
+ll[[1]]
+AIC(ll)
+BIC(ll)
+```
+
+These values are most useful for comparing alternative models fitted to the same data, for example different selectivity assumptions or observation likelihoods.
+
+## Convergence diagnostics
+
+Always inspect convergence before interpreting biological results.
+
+```{r convergence}
+flicc_convergence(fit)
+fit$restart_log
+```
+
+The convergence summary checks optimiser status, maximum gradient, Hessian behaviour and standard-error availability. Large gradients or non-positive-definite Hessians indicate that the model may not be locally well identified or that the selected model structure is not well supported by the data.
+
+## Report object and derived quantities
+
+The TMB report contains estimated and derived model quantities.
+
+```{r report-summary}
+summary(fit$report)
+fcur_flicc(fit)
+sprcur_flicc(fit)
+```
+
+`fcur_flicc()` extracts current fishing mortality, while `sprcur_flicc()` extracts current SPR.
+
+# Visual diagnostics
+
+## SPR trajectory or fitted SPR summary
+
+```{r plot-spr}
+plot_spr(fit)
+```
+
+## Observed and predicted length compositions
+
+```{r plot-length-overall}
+plot_len(fit)
+```
+
+```{r plot-length-by-gear}
+plot_len(fit, by_gear = TRUE, year = 2020:2024)
+```
+
+The overall plot is useful for checking whether the model reproduces the aggregate size structure. The by-gear plot is more diagnostic because it shows whether individual gear selectivity assumptions are plausible.
+
+## Selectivity
+
+```{r plot-selectivity}
+plot_sel(fit)
+selpars_flicc(fit)
+do.call(c, lapply(selpars_flicc(fit), function(x) x))
+```
+
+The estimated selectivity curves should be checked against gear knowledge. Dome-shaped selectivity can be statistically attractive but biologically implausible if used without supporting evidence. Conversely, multiple gears that sample different length ranges can make dome-shaped and logistic patterns more identifiable than a single aggregated length composition.
+
+# Creating fitted `FLStockLen` output
+
+The fitted model can be converted back to an `FLStockLen` object.
+
+```{r fitted-stocklen}
+stkl <- flicc_stklen(fit)
+plot_sel(stkl)
+```
+
+This is useful for downstream `FLR` workflows and for visualising fishery-weighted selectivity under the fitted model.
+
+# Equilibrium dynamics and reference points
+
+## Per-recruit equilibrium curves
+
+Equilibrium curves are produced with `eqstklen()`. The steepness argument `s` is used when translating per-recruit quantities into MSY-proxy reference points.
+
+```{r equilibrium}
+eqstk <- eqstklen(fit, s = 0.75)
+eqstk@refpts
+plot_eqcurves(eqstk)
+```
+
+The equilibrium curves show how SPR, relative spawning biomass and relative yield change with fishing mortality. They help interpret the fitted fishing mortality in relation to common SPR proxies.
+
+## Per-recruit biological reference points
+
+```{r per-recruit-brp}
+prbrp <- prbrp_flicc(fit)
+
+fmsy_flicc(prbrp, s = 0.75)
+fspr_flicc(fit, spr = 40)
+fspr_flicc(fit, spr = 35)
+round(spr_flicc(fit, F = fspr_flicc(fit, spr = 40)), 3)
+```
+
+`fspr_flicc()` finds the fishing mortality associated with a target SPR level. For example, `spr = 40` corresponds to $F_{SPR40\%}$. These quantities are often more defensible in data-limited settings than fully estimated MSY reference points.
+
+# Length-based indicators and advice plots
+
+## Length-based indicator concept
+
+Length-based indicators in `FLicc` compare the observed proportion of large fish with the proportion expected under an equilibrium reference condition. The main idea is to translate a fitted SPR reference point into a length-structure benchmark and then evaluate whether the observed length composition contains more or fewer large fish than expected under that benchmark.
+
+This follows the same logic as many age- or size-structure indicators: a threshold is first defined, then the observed proportion above that threshold is compared with a reference proportion. In `FLicc`, the threshold is commonly expressed as a fraction of a reference length, for example `thresh = 0.75`. Conceptually, this defines a large-fish threshold
+
+$$
+L^* = q L_{ref},
+$$
+
+where $q$ is the user-specified threshold fraction and $L_{ref}$ is the relevant reference length scale used internally by the fitted length model. For a given year $y$ and gear $g$, the observed proportion of fish above the threshold is
+
+$$
+P^{obs}_{g,y}(L \geq L^*) =
+\frac{\sum_{i: L_i \geq L^*} y_{g,y,i}}{\sum_i y_{g,y,i}},
+$$
+
+where $y_{g,y,i}$ is the observed count or effective count in length bin $i$. The corresponding expected proportion under the fitted model is
+
+$$
+P^{fit}_{g,y}(L \geq L^*) =
+\sum_{i: L_i \geq L^*} \hat{\pi}_{g,y,i},
+$$
+
+where $\hat{\pi}_{g,y,i}$ is the fitted expected length-composition probability. A simple proportional indicator can then be written as
+
+$$
+LBI_{g,y} =
+\frac{P^{obs}_{g,y}(L \geq L^*)}{P^{ref}_{g,y}(L \geq L^*)},
+$$
+
+where $P^{ref}$ may be defined from the fitted or SPR-reference length composition, depending on the diagnostic being used. Values below 1 indicate that the observed sample contains fewer large fish than expected under the reference structure, while values above 1 indicate relatively more large fish.
+
+This indicator is useful because it converts the full fitted length model into an interpretable diagnostic of size structure. It is not a replacement for the fitted SPR estimate, but it provides a complementary view of whether the observed length composition is consistent with the expected proportion of larger individuals.
+
+```{r lbispr}
+LBIidx <- LBIspr(fit, thresh = 0.75)
+LBIidx
+```
+
+`plot_LBIspr()` summarises the indicator through time. This is useful when the fitted model spans multiple years and the objective is to track whether the large-fish component is increasing, stable or declining.
+
+```{r plot-lbispr}
+plot_LBIspr(fit, thresh = 0.75)
+```
+
+`plot_LBIp()` provides a more direct visualisation of the proportions used by the indicator. For example, the following plot illustrates the observed and reference proportions for the most recent year in the example dataset.
+
+```{r plot-lbip-2024}
+plot_LBIp(fit, year = 2024)
+```
+
+In practice, `plot_LBIp()` is often the easiest diagnostic to explain to non-technical users because it shows the proportion of fish above the length threshold directly. The time-series indicator from `plot_LBIspr()` is more useful for comparing years or fleets.
+
+## Status and advice plots
+
+```{r status-plots}
+plot_spr(fit)
+plot_lbfao(fit)
+```
+
+A simplified `FLStockR` object can be created for length-based advice plots.
+
+```{r flstockr-advice}
+stk <- flicc2FLStockR(fit)
+stk@refpts
+plot_LBAdvice(stk)
+```
+
+The same object can be expressed relative to an MSY proxy.
+
+```{r flstockr-relative}
+stkr <- flicc2FLStockR(fit, rel = TRUE)
+plot_LBAdvice(stkr, panel = 1) + ylim(0, 1.5)
+```
+
+# Fitting each year separately
+
+FLicc can also fit each year independently using `by_year = TRUE`. This is closer to an LBSPR-style workflow, where each annual length composition produces its own estimate.
+
+```{r fit-by-year}
+fit.y <- fiticc(
+  lfd,
+  stklen,
+  sel_fun = c("dsnormal", "logistic"),
+  catch_by_gear = c(0.7, 0.3),
+  settings = list(
+    prior_sigmaF = c(log(0.5), 0.3, 1)
+  ),
+  by_year = TRUE
+)
+```
+
+```{r compare-by-year}
+stky <- flicc_stklen(fit.y)
+plot_sel(stky)
+plot_spr(list(all.yr = fit, each.y = fit.y))
+```
+
+The joint multi-year fit shares information across years and can stabilise selectivity and fishing mortality estimates. The by-year fit is more flexible but can be noisier, especially when sample sizes are low or gear composition changes among years.
+
+# Population and observation model options
+
+FLicc separates two modelling choices that are sometimes bundled together in length-based assessment software:
+
+1. the **population model**, which determines the expected numbers- or proportions-at-length under growth, natural mortality, fishing mortality and selectivity; and
+2. the **observation model**, which links the observed length-frequency data to the expected length composition.
+
+This separation is useful because the same biological and selectivity assumptions can be fitted with different likelihoods, and the same observation model can be used with different approximations to the equilibrium population-at-length calculation.
+
+## Population model: expected length composition
+
+For a given length bin $i$ and gear $g$, the fitted length composition is driven by the expected catch-at-length. In simplified notation,
+
+$$
+C_{ig} = \frac{F_{ig}}{Z_i}\left(N_i - N_{i+1}\right),
+$$
+
+where $N_i$ is the expected number of fish entering length interval $i$, $F_{ig}$ is fishing mortality for gear $g$ in that interval, and
+
+$$
+Z_i = M_i + \sum_g F_{ig}
+$$
+
+is total mortality-at-length. Expected proportions for the length-composition likelihood are then obtained by normalising expected catch-at-length:
+
+$$
+\pi_{ig} = \frac{C_{ig}}{\sum_i C_{ig}}.
+$$
+
+FLicc currently supports two population model options through `settings$pop_model`.
+
+### GTG population model (`pop_model = "gtg"`)
+
+The growth-type-group, or GTG, formulation is the default fast option. It approximates growth variability by representing the population as a mixture of growth trajectories or length-transition groups. Within each group, survival through length intervals can be written recursively as
+
+$$
+N_{i+1,h} = N_{i,h}\exp(-Z_{i,h}\Delta t_{i,h}),
+$$
+
+where $h$ indexes the growth group and $\Delta t_{i,h}$ is the expected time spent in length interval $i$. The modelled population-at-length is then obtained by summing over growth groups,
+
+$$
+N_i = \sum_h \omega_h N_{i,h},
+$$
+
+with growth-group weights $\omega_h$.
+
+The GTG formulation is close in spirit to LBSPR-style length-based per-recruit models. It is generally fast, stable and recommended as the default option for routine FLicc analyses, especially with a multinomial observation model.
+
+```{r gtg-setting-example, eval = FALSE}
+settings = list(pop_model = "gtg", obs_model = "mn")
+```
+
+### Gamma population model (`pop_model = "gamma"`)
+
+The `gamma` formulation follows the original fishblicc-style calculation more closely by integrating over variability in asymptotic length. In simplified form,
+
+$$
+N_i = \int f(L_\infty) S_i(L_\infty)\,dL_\infty,
+$$
+
+where $f(L_\infty)$ describes variation in asymptotic length and $S_i(L_\infty)$ is survival to length interval $i$ conditional on a given growth trajectory. In practice this integral is approximated numerically.
+
+This approach is more directly aligned with the fishblicc formulation and may be useful when reproducing fishblicc examples or when sensitivity to the population-at-length approximation is being explored. It is typically slower than the GTG option.
+
+```{r gamma-setting-example, eval = FALSE}
+settings = list(pop_model = "gamma", obs_model = "nb")
+```
+
+## Observation model: likelihood for length data
+
+Let $y_{ig}$ be the observed count in length bin $i$ for gear $g$, $n_g = \sum_i y_{ig}$ the total effective sample size for that gear, and $\pi_{ig}$ the expected model proportion.
+
+### Multinomial observation model (`obs_model = "mn"`)
+
+The multinomial likelihood is the default and is consistent with many length-composition applications:
+
+$$
+\mathbf{y}_g \sim \text{Multinomial}(n_g, \boldsymbol{\pi}_g).
+$$
+
+The negative log-likelihood contribution is proportional to
+
+$$
+-\log L_g = -\sum_i y_{ig}\log(\pi_{ig}),
+$$
+
+ignoring constants. This option is fast and usually a good first choice when effective sample sizes have been chosen carefully.
+
+### Negative-binomial observation model (`obs_model = "nb"`)
+
+The negative-binomial likelihood treats length-bin counts as overdispersed counts around expected values,
+
+$$
+y_{ig} \sim \text{NB}(\mu_{ig}, \phi),
+\qquad
+\mu_{ig} = n_g\pi_{ig},
+$$
+
+where $\phi$ is an overdispersion parameter. One common variance parameterisation is
+
+$$
+\text{Var}(y_{ig}) = \mu_{ig} + \frac{\mu_{ig}^2}{\phi}.
+$$
+
+This option is useful for fishblicc-style comparisons and for data where nominal sample sizes may overstate the true information content. It can be slower and, in some applications, less numerically stable than the multinomial option.
+
+### Dirichlet-multinomial observation model (`obs_model = "dm"`)
+
+The Dirichlet-multinomial likelihood allows overdispersion in the composition vector rather than modelling bins independently:
+
+$$
+\mathbf{y}_g \sim \text{DirichletMultinomial}(n_g, \boldsymbol{\pi}_g, \theta),
+$$
+
+where $\theta$ controls extra-multinomial variation. Conceptually, the expected proportions are treated as uncertain composition probabilities before counts are drawn. This can be useful when length-composition data are clustered, correlated or otherwise more variable than expected under a multinomial likelihood.
+
+## Effective sample size
+
+Length-composition likelihoods are sensitive to the assumed effective sample size. FLicc allows sample sizes to be adjusted by gear using `lfdess()`.
+
+```{r effective-sample-size}
+lfd.ess <- lfdess(lfd, ess.g = c(Trawl = 250, Gillnet = 350))
+plot_lfd(lfd.ess)
+```
+
+This does not change the observed proportions, but changes the weight assigned to each gear's length composition in the likelihood. This is often more appropriate than using raw sample sizes when fish are measured in clustered samples, trips, hauls or markets.
+
+## Practical combinations
+
+The two most useful starting configurations are:
+
+| Purpose | `pop_model` | `obs_model` | Comment |
+|---|---:|---:|---|
+| Default FLicc / LBSPR-style workflow | `"gtg"` | `"mn"` | Fast, stable, good first model |
+| fishblicc-style replication | `"gamma"` | `"nb"` | Slower, closer to original fishblicc setup |
+| Overdispersed compositions | `"gtg"` or `"gamma"` | `"dm"` | Useful sensitivity run |
+
+## Comparing fishblicc-like and LBSPR-like settings
+
+The following code compares a fishblicc-like `gamma + nb` model with a faster `gtg + mn` model after setting gear-specific effective sample sizes.
+
+```{r compare-pop-obs-models}
+system.time({
+  fit.gamma.nb <- fiticc(
+    lfd.ess,
+    stklen,
+    sel_fun = c("dsnormal", "logistic"),
+    catch_by_gear = c(0.7, 0.3),
+    settings = list(pop_model = "gamma", obs_model = "nb")
+  )
+})
+
+system.time({
+  fit.gtg.mn <- fiticc(
+    lfd.ess,
+    stklen,
+    sel_fun = c("dsnormal", "logistic"),
+    catch_by_gear = c(0.7, 0.3),
+    settings = list(pop_model = "gtg", obs_model = "mn")
+  )
+})
+
+plot_spr(list(
+  gamma.nb = fit.gamma.nb,
+  gtg.mn   = fit.gtg.mn
+))
+```
+
+Differences between the two fits indicate sensitivity to the population-at-length approximation and observation-error model. In a routine analysis, such comparisons are useful diagnostics rather than automatic model-selection rules.
+
+# Reproducing the fishblicc Bombay duck example
+
+FLicc includes a fishblicc-style Bombay duck example with three gears. This example is useful for checking consistency with fishblicc assumptions.
+
+```{r fishblicc-example}
+data("fishblicc_example")
+
+lhpar_fishblicc <- rbind(
+  lhpar_fishblicc,
+  FLPar(M = lhpar_fishblicc["k"] * lhpar_fishblicc["Mk"])
+)
+
+stklen_fishblicc <- stocklen(
+  lfd_fishblicc,
+  lhpar_fishblicc,
+  m_model = "inverse",
+  reflen = 21.9
+)
+```
+
+The fit below uses penalties on $L_\infty$, $M/k$ and `CVL` to approximate the original fishblicc setup.
+
+```{r fit-fishblicc-example}
+fit_fishblicc <- fiticc(
+  lfd_fishblicc,
+  stklen_fishblicc,
+  sel_fun = c("dsnormal", "dsnormal", "dsnormal"),
+  catch_by_gear = c(0.1802070, 0.2101353, 0.6096577),
+  settings = list(
+    pop_model = "gamma",
+    obs_model = "nb",
+    CVL = 0.14,
+    CVL.sd = 0.1,
+    linf.sd = 2 / 40,
+    Mk.sd = 0.1
+  )
+)
+```
+
+```{r fishblicc-diagnostics}
+flicc_convergence(fit_fishblicc)
+sprcur_flicc(fit_fishblicc)
+plot_sel(fit_fishblicc)
+plot_len(fit_fishblicc, by_gear = TRUE)
+plot_len(fit_fishblicc)
+```
+
+```{r fishblicc-equilibrium}
+eqstk_fishblicc <- eqstklen(fit_fishblicc, s = 0.7)
+eqstk_fishblicc@refpts
+plot_eqcurves(eqstk_fishblicc)
+```
+
+# Practical guidance
+
+## Choosing selectivity functions
+
+Use gear knowledge wherever possible. Logistic selectivity is appropriate when larger fish remain fully selected. Double-sided normal selectivity is appropriate when the gear or fishing process is expected to be dome-shaped. Avoid adding dome-shaped selectivity only to improve fit unless the pattern is supported by the fishery.
+
+## Choosing natural mortality-at-length
+
+Start with `m_model = "constant"` for transparent baseline analyses. Explore length-dependent alternatives when there is biological justification or when sensitivity to juvenile mortality is important. Report the choice clearly because $M(L)$ strongly affects the inferred survival curve and SPR.
+
+## Choosing observation models
+
+Use `obs_model = "mn"` for a simple multinomial length-composition likelihood, `"nb"` where overdispersion in counts is expected, and `"dm"` where Dirichlet-multinomial overdispersion is preferred. The negative-binomial and Dirichlet-multinomial options are often more robust when sample sizes are nominal rather than truly effective.
+
+## Priors and penalties
+
+Priors or penalties can stabilise weakly identified biological parameters. In FLicc these are commonly provided through standard-deviation settings such as `linf.sd`, `Mk.sd` and `CVL.sd`. Smaller standard deviations imply stronger penalties around the input values. Strong priors should only be used when the life-history information is reliable.
+
+## Interpreting SPR
+
+SPR is a relative reproductive potential metric, not a direct estimate of absolute biomass. In length-only or length-dominated assessments, SPR is often more robust than absolute biomass because it depends on the equilibrium length structure implied by growth, mortality, maturity and selectivity. However, SPR remains sensitive to life-history assumptions and selectivity.
+
+# Summary
+
+This vignette demonstrated a complete basic FLicc workflow:
+
+- convert length-frequency observations into `FLQuants`;
+- inspect the long data structure using `as.data.frame()`;
+- define life-history input with `FLPar`;
+- build an `FLStockLen` object;
+- fit a multi-gear length-based catch-curve model;
+- evaluate convergence and length-composition fit;
+- extract fishing mortality and SPR;
+- derive equilibrium reference points and advice plots;
+- compare population and observation model settings;
+- reproduce the fishblicc-style Bombay duck example.
+
+The next step after this basic workflow is to propagate uncertainty using Monte-Carlo ensembles of life-history and model assumptions. That ensemble workflow is intentionally left for a separate vignette.
