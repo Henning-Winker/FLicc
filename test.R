@@ -138,6 +138,35 @@ plot_sel(stky)
 # compare
 plot_spr(list(all.yr=fit,each.y=fit.y))
 
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+#> Monte-Carlo Ensemble Information theory
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+# Set number of workers (depends on computer)
+future::plan(future::multisession, workers = 10)
+future::nbrOfWorkers() # check
+
+# Run Monte-Carlo
+mc <- mc_flicc(
+  fit,
+  nsim = 500,
+  parallel = TRUE,
+  n_restart = 0,
+  verbose = TRUE
+)
+
+# Check draws random draws from global FishLife correlation matrix
+FLicc::fishlife_corr()
+plot_mcpars(mc)
+# Check plausible draws based delta-AIC selection < 20
+plot_mccor(mc)
+# Check delta-AIC profile for plausible SPR space
+plot_mcprofile(mc)
+# plot ensemble-AIC-weighted SPR distribution
+plot_mcsprdist(mc)
+
+
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # Compare fishblicc and LBSPR population and error models
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
@@ -211,4 +240,6 @@ plot_len(fit)
 eqstk <- eqstklen(fit,s=0.7)
 eqstk@refpts
 plot_eqcurves(eqstk)
+
+
 

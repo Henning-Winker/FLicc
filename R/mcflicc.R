@@ -563,6 +563,14 @@ mc_aic_weights <- function(mc, dAIC_cut = NULL) {
     weight = w,
     keep = if (is.null(dAIC_cut)) TRUE else dAIC <= dAIC_cut
   )
+
+   data.frame(
+    iter = seq_along(w),
+    logLik = as.numeric(mc$logLik),
+    dAIC = dAIC,
+    weight = w,
+    keep = if (is.null(dAIC_cut)) TRUE else dAIC <= dAIC_cut
+  )
 }
 
 #' Weighted quantiles
@@ -1155,7 +1163,7 @@ plot_mcprofile <- function(mc,
 #' @return A data frame with one row per parameter.
 #'
 #' @export
-mc_prior_table <- function(mc,
+mc_lhtab <- function(mc,
                            pars = c("linf", "Mk", "k", "M", "L50", "CVL")) {
 
   df <- as.data.frame(mc$lhpar)
@@ -1183,4 +1191,254 @@ mc_prior_table <- function(mc,
 
   rownames(out) <- NULL
   out
+}
+
+
+
+#' Summarize Monte Carlo SPR uncertainty
+#'
+#' Produces a year-specific summary table of spawning potential ratio (SPR)
+#' uncertainty from a FLicc Monte Carlo ensemble. The table includes the
+#' reference fit estimate, unweighted summaries of retained ensemble members,
+#' Akaike-weighted summaries, the number of retained realizations, and the
+#' effective ensemble size.
+#'
+#' @param mc An object returned by \code{mc_flicc()}.
+#' @param dAIC_cut Delta AIC threshold used to define the retained ensemble.
+#'   Default is \code{20}.
+#' @param years Optional vector of years to summarize. If \code{NULL}, all years
+#'   in \code{mc$spr} are used.
+#'
+#' @return A data frame with columns \code{year}, \code{mle}, \code{mean_uw},
+#'   \code{cv_uw}, \code{mean_w}, \code{cv_w}, \code{n_retained}, and
+#'   \code{n_eff}. Attributes \code{dAIC_cut} and \code{n_total} store the AIC
+#'   cutoff and total number of Monte Carlo realizations.
+#'
+#' @details
+#' The unweighted mean and coefficient of variation summarize the spread of
+#' retained ensemble members after delta AIC filtering. The weighted mean and
+#' coefficient of variation use normalized Akaike weights and therefore reflect
+#' relative likelihood support. The effective ensemble size is calculated as
+#' \deqn{n_{\mathrm{eff}} = 1 / \sum_i w_i^2,}
+#' where \eqn{w_i} are the normalized Akaike weights.
+#'
+#' @export
+mc_spr_tab <- function(mc,
+                                 dAIC_cut = 20,
+                                 years = NULL) {
+
+  if (is.null(years))
+    years <- dimnames(mc$spr)$year
+
+  years <- as.character(years)
+
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+
+  w <- wtab$weight
+  keep <- wtab$keep
+
+  n_eff <- 1 / sum(w^2, na.rm = TRUE)
+
+  out <- vector("list", length(years))
+
+  for (i in seq_along(years)) {
+
+    yr <- years[i]
+
+    spr <- as.numeric(an(mc$spr[, ac(yr)]))
+
+    spr_keep <- spr[keep]
+    w_keep   <- w[keep]
+
+    # normalize retained weights
+    w_keep <- w_keep / sum(w_keep)
+
+    mle <- if (!is.null(mc$fit))
+      as.numeric(an(mc$fit$spr[, ac(yr)]))
+    else
+      NA_real_
+
+    mean_uw <- mean(spr_keep, na.rm = TRUE)
+
+    cv_uw <- stats::sd(spr_keep, na.rm = TRUE) /
+      mean_uw
+
+    mean_w <- weighted.mean(
+      spr_keep,
+      w_keep,
+      na.rm = TRUE
+    )
+
+    sd_w <- sqrt(
+      weighted.mean(
+        (spr_keep - mean_w)^2,
+        w_keep,
+        na.rm = TRUE
+      )
+    )
+
+    cv_w <- sd_w / mean_w
+
+    out[[i]] <- data.frame(
+      year = yr,
+      mle = mle,
+      mean_uw = mean_uw,
+      cv_uw = cv_uw,
+      mean_w = mean_w,
+      cv_w = cv_w,
+      n_retained = sum(keep),
+      n_eff = n_eff
+    )
+  }
+
+  out <- do.call(rbind, out)
+  attr(out, "dAIC_cut") <- dAIC_cut
+  attr(out, "n_total") <- length(w)
+  out
+}
+
+#' Plot weighted and unweighted SPR densities
+#'
+#' Produces faceted density plots comparing unweighted and Akaike-weighted
+#' spawning potential ratio (SPR) distributions across years. The unweighted
+#' density is calculated from the retained Monte Carlo ensemble, while the
+#' weighted density uses normalized Akaike weights. The reference FLicc fit
+#' stored in \code{mc$fit} is shown as a blue dashed vertical line.
+#'
+#' @param mc An object returned by \code{mc_flicc()}.
+#' @param years Optional vector of years to plot. If \code{NULL}, all years in
+#'   \code{mc$spr} are used.
+#' @param dAIC_cut Delta AIC threshold used to define the retained ensemble.
+#'   Default is \code{20}.
+#' @param n Number of points used to evaluate each density. Default is
+#'   \code{300}.
+#' @param bw Bandwidth passed to \code{stats::density()}. Default is
+#'   \code{0.04}.
+#' @param show_fit Logical. If \code{TRUE}, show the reference fit stored in
+#'   \code{mc$fit}. Default is \code{TRUE}.
+#' @param ncol Number of columns in the faceted plot. Default is \code{3}.
+#'
+#' @return A \code{ggplot} object.
+#'
+#' @details
+#' This plot is intended as a diagnostic for assessing how likelihood weighting
+#' changes the retained structural ensemble. The unweighted density represents
+#' the spread of all retained realizations after the \code{dAIC_cut} filter,
+#' while the weighted density emphasizes the subset of realizations with higher
+#' relative support. Large differences between the two densities indicate that
+#' the likelihood is strongly concentrating support within the plausible
+#' structural ensemble.
+#'
+#' @export
+#'
+#' @examples
+#' \dontrun{
+#' mc <- mc_flicc(fit, nsim = 500, parallel = TRUE, workers = 8)
+#'
+#' plot_mcspr_weights(mc)
+#'
+#' plot_mcsprwts(mc, years = 2020:2024, dAIC_cut = 20)
+#' }
+plot_mcsprwts<- function(mc, years = NULL, dAIC_cut = 20,
+                                 n = 300, bw = 0.04,
+                                 show_fit = TRUE, ncol = 3) {
+
+  if (!requireNamespace("ggplot2", quietly = TRUE))
+    stop("Package 'ggplot2' is required.")
+
+  yrs <- dimnames(mc$spr)$year
+  if (is.null(years)) years <- yrs
+  years <- as.character(years)
+
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+  w <- wtab$weight
+  keep <- wtab$keep
+
+  dens_df <- data.frame()
+
+  for (yr in years) {
+
+    spr <- as.numeric(an(mc$spr[, ac(yr)]))
+    ok <- is.finite(spr) & keep
+
+    if (sum(ok) < 3) next
+
+    dd_uw <- stats::density(
+      spr[ok],
+      from = 0, to = 1,
+      n = n, bw = bw,
+      na.rm = TRUE
+    )
+
+    dens_df <- rbind(dens_df, data.frame(
+      year = yr,
+      spr = dd_uw$x,
+      density = dd_uw$y,
+      type = "Unweighted"
+    ))
+
+    ok_w <- ok & is.finite(w) & w > 0
+
+    if (sum(ok_w) >= 3) {
+      dd_w <- stats::density(
+        spr[ok_w],
+        weights = w[ok_w] / sum(w[ok_w]),
+        from = 0, to = 1,
+        n = n, bw = bw,
+        na.rm = TRUE
+      )
+
+      dens_df <- rbind(dens_df, data.frame(
+        year = yr,
+        spr = dd_w$x,
+        density = dd_w$y,
+        type = "Weighted"
+      ))
+    }
+  }
+
+  dens_df$year <- factor(dens_df$year, levels = years)
+  dens_df$type <- factor(dens_df$type, levels = c("Unweighted", "Weighted"))
+
+  p <- ggplot2::ggplot(
+    dens_df,
+    ggplot2::aes(x = spr, y = density, colour = type, fill = type)
+  ) +
+    ggplot2::geom_area(alpha = 0.35, position = "identity") +
+    ggplot2::geom_line(linewidth = 0.8) +
+    ggplot2::scale_colour_manual(
+      values = c(Unweighted = "grey35", Weighted = "grey8"),
+      name = NULL
+    ) +
+    ggplot2::scale_fill_manual(
+      values = c(Unweighted = "grey75", Weighted = "grey50"),
+      name = NULL
+    ) +
+    ggplot2::facet_wrap(~year, ncol = ncol) +
+    ggplot2::coord_cartesian(xlim = c(0, 1)) +
+    ggplot2::theme_bw() +
+    ggplot2::labs(
+      x = "SPR",
+      y = "Density"
+    )
+
+  if (show_fit && !is.null(mc$fit) && !is.null(mc$fit$spr)) {
+
+    fit_df <- data.frame(
+      year = factor(years, levels = years),
+      spr = as.numeric(an(mc$fit$spr[, ac(years)]))
+    )
+
+    p <- p +
+      ggplot2::geom_vline(
+        data = fit_df,
+        ggplot2::aes(xintercept = spr),
+        inherit.aes = FALSE,
+        colour = "blue",
+        linetype = 2,
+        linewidth = 0.9
+      )
+  }
+
+  p
 }
