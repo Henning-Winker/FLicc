@@ -2,9 +2,9 @@
 
 **FLicc: Length-interval catch-curve per-recruit analysis in FLR**
 
-`FLicc` is an user-friendly TMB implementation in the `FLR` and an extension of both the multi-gear length-interval catch-curve framework developed in `fishblicc` and the length-based spawning potential ratio estimation in `LBSRP`.
+`FLicc` is an user-friendly TMB implementation in the `FLR` and a merged generalization of both the multi-gear length-interval catch-curve framework developed in [`fishblicc`](https://github.com/PaulAHMedley/fishblicc) ([Medley 2025](https://academic.oup.com/icesjms/article/82/12/fsaf224/8404907?guestAccessKey=)) and the length-based spawning potential ratio estimation in [`LBSRP`](https://github.com/adrianhordyk/LBSPR) (Hordyk et al. [2015](https://academic.oup.com/icesjms/article/72/1/217/815772?guestAccessKey=.). [2016](https://cdnsciencepub.com/doi/full/10.1139/cjfas-2015-0422)).
 
-`FLicc` retains the biological core of either of the original equilibrium models, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), and yield-per-recruit from length compositions grouped by gear. 
+`FLicc` retains the biological core of either of the original length-based equilibrium models, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), yield-per-recruit from length compositions grouped by gear, and parallel computing utilities. 
 
 An introductory User Guide to Multi-Gear Length-Interval Catch-Curve Analysis in FLR for the `FLicc` package is available [here](https://henning-winker.github.io/FLicc/FLicc_intro_vignette.html). 
 
