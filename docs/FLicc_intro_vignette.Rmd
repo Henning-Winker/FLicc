@@ -569,6 +569,43 @@ plot_spr(list(all.yr = fit, each.y = fit.y))
 
 The joint multi-year fit shares information across years and can stabilise selectivity and fishing mortality estimates. The by-year fit is more flexible but can be noisier, especially when sample sizes are low or gear composition changes among years.
 
+# Handling missing gear-year length data
+
+Real multi-gear length-frequency datasets are often unbalanced. Some gears may not have been sampled in all years, or a year may be missing for one gear but available for another. `FLicc` permits these missing gear-year combinations to be represented explicitly as `NA` values in the input `FLQuants` object. This is preferable to replacing missing samples with zeros, because zeros can be true observations within an observed length composition, whereas a missing gear-year sample means that no likelihood contribution should be made for that gear and year.
+
+The example below creates a copy of the length-frequency data and removes selected gear-year combinations by setting them to `NA`. The model is then fitted in the same way as before.
+
+```{r fit-with-na-gear-years}
+lfd_na <- lfd
+lfd_na$Gillnet[, ac(c(2020, 2022))][] <- NA
+lfd_na$Trawl[, ac(c(2020:2021))][] <- NA
+
+fit.na <- fiticc(
+  lfd_na,
+  stklen,
+  sel_fun = c("dsnormal", "logistic"),
+  catch_by_gear = c(0.7, 0.3),
+  settings = list(
+    prior_sigmaF = c(log(0.5), 0.3, 1),
+    CVL = 0.1
+  )
+)
+```
+
+The by-gear length-composition plot shows the observed bars only where data are available. Missing gear-year combinations have no grey observed bars, but the fitted blue prediction is still shown because the model can still predict the expected length composition from the estimated population and selectivity model.
+
+```{r plot-na-gear-years}
+plot_len(fit.na, by_gear = TRUE, year = 2019:2024)
+```
+
+The SPR trajectory from the fit with missing gear-year samples can be compared with the original fit. Similar trajectories indicate that the missing samples are not being treated as zero catches or zero counts. Instead, the available length-composition data continue to inform the multi-year model.
+
+```{r compare-na-spr}
+plot_spr(list(fit = fit, NAs = fit.na))
+```
+
+This behaviour is useful for applied assessments because it allows an explicitly rectangular year-by-gear input object while preserving the distinction between true zero counts and missing length samples.
+
 # Population and observation model options
 
 FLicc separates two modelling choices that are sometimes bundled together in length-based assessment software:

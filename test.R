@@ -53,7 +53,7 @@ plot_m(m_stks)
 # Fit model
 system.time({
 fit <- fiticc(lfd, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.7,0.3),
-              settings=list(prior_sigmaF = c(log(0.5), 0.3,1),CVL=0.1),n_restart = 10)
+              settings=list(prior_sigmaF = c(log(0.5), 0.3,1),CVL=0.1))
 })
 # log-likelihood
 ll <- LLflicc(fit)
@@ -138,6 +138,21 @@ plot_sel(stky)
 # compare
 plot_spr(list(all.yr=fit,each.y=fit.y))
 
+
+
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+# Handling NAs gear/year in multi-year model
+#><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
+
+lfd_na <- lfd
+lfd_na$Gillnet[,ac(c(2020,2022))][] <- NA
+lfd_na$Trawl[,ac(c(2020:2021))][] <- NA
+fit.na <- fiticc(lfd_na, stklen,sel_fun=c("dsnormal","logistic"),catch_by_gear =c(0.7,0.3),
+              settings=list(prior_sigmaF = c(log(0.5), 0.3,1),CVL=0.1))
+
+plot_len(fit.na,by_gear = T,year=2019:2024)
+# Compare
+plot_spr(list(fit=fit,NAs=fit.na))
 
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # Compare fishblicc and LBSPR population and error models
