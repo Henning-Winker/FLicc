@@ -493,22 +493,19 @@ flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FAL
 
   year <- dimnames(stklen)$year
 
-  N = as.FLQuant(data.frame(age=1,year=year,unit="unique",
-                            season="all",area="unique",iter=1,data=1))
-  B = N
-  H = N
-  C = N
-  D = N
-  L = N
-  B[] <- FLQuant(stock(stk),quant="age")
-  H[] <- FLQuant(fapl(stk),quant="age")
-  C[] <- FLQuant(catch(stk),quant="age")
-  L[] <-  FLQuant(landings(stk),quant="age")
-  D[] <- FLQuant(discards(stk),quant="age")
 
-  eqs<- eqstklen(fit,F=c(0,mean(stk@m)),spr.tgt = spr.btgt*100)
-  spr0 <- an(eqs@refpts["SPR0"])
-  fspr <-  an(eqs@refpts["Fspr"])
+
+  tmpl <- FLQuant(NA_real_, dimnames = list(age = "1", year = year))
+  N <- tmpl; N[] <- 1
+  B <- tmpl; B[] <- stock(stk)
+  H <- tmpl; H[] <- fapl(stk)
+  C <- tmpl; C[] <- catch(stk)
+  L <- tmpl; L[] <- landings(stk)
+  D <- tmpl; D[] <- discards(stk)
+
+  #eqs<- eqstklen(fit,F=c(mean(stk@m)),spr.tgt = spr.btgt*100)
+  #spr0 <- an(eqs@refpts["SPR0"])
+  fspr <-  fspr_flicc(fit_test)
 
   if(rel){
   H <- H/ fspr

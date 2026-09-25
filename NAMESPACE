@@ -122,3 +122,14 @@ export(mc_aic_weights)
 export(mc_spr_tab)
 export(mc_lhtab)
 export(wquantile)
+
+#---lccc.checks
+export(empirical_lc)
+export(plot_empirical_lc)
+export(zlcc_data)
+export(zlcc_fits)
+export(zlcc)
+export(plot_zlcc)
+export(plot_zlcc_year)
+
+
