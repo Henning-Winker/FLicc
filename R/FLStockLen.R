@@ -505,7 +505,7 @@ flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FAL
 
   #eqs<- eqstklen(fit,F=c(mean(stk@m)),spr.tgt = spr.btgt*100)
   #spr0 <- an(eqs@refpts["SPR0"])
-  fspr <-  fspr_flicc(fit_test)
+  fspr <-  fspr_flicc(fit)
 
   if(rel){
   H <- H/ fspr
@@ -554,3 +554,4 @@ flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FAL
 
   return(stkr)
 }
+
