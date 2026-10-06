@@ -73,7 +73,11 @@ growth formulation.}
   (mean, sd, use flag).\}
 
 \\item\{\code{linf.sd, Mk.sd, CVL.sd}\}\{Optional penalties on life-history
-  parameters.\}
+  parameters. Supplying one makes that parameter estimated (otherwise it
+  is fixed at its input value). For \code{pop_model = "gtg"}, the
+  estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
+  \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
+  M/K is \code{Mk * (Linf / L)^Mpow}.\}
 }\if{html}{\out{</div>}}
 
 }}

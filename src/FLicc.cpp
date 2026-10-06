@@ -187,8 +187,10 @@ vector<Type> pop_len_gtg(const vector<Type>& LLB,
       Type num = gtgLinfs(g) - LBins(l);
       Type den = gtgLinfs(g) - LBins(l - 1);
 
-      if(num <= Type(1e-12)) num = Type(1e-12);
-      if(den <= Type(1e-12)) den = Type(1e-12);
+      // AD-safe floor: gtgLinfs depend on estimated Linf and CVL, so a plain
+      // if() would be frozen at the values used when the tape was recorded.
+      num = CppAD::CondExpLe(num, Type(1e-12), Type(1e-12), num);
+      den = CppAD::CondExpLe(den, Type(1e-12), Type(1e-12), den);
 
       NPRFished(l, g) =
         NPRFished(l - 1, g) * pow(num / den, ZKLMat(l - 1, g));
@@ -229,9 +231,10 @@ Type objective_function<Type>::operator() ()
 
   DATA_INTEGER(pop_model);   // 1 = gamma, 2 = gtg
   DATA_INTEGER(ngtg);
-  DATA_VECTOR(gtgLinfs);
-  DATA_VECTOR(recP);
-  DATA_MATRIX(MKMat);        // (nlen + 1) x ngtg
+  DATA_VECTOR(gtg_z);        // standardised GTG Linf nodes, seq(-maxsd, maxsd)
+  DATA_VECTOR(recP);         // recruitment weights by GTG (normal on gtg_z)
+  DATA_VECTOR(LBins_mk);     // nlen + 1 bin boundaries for length-based M/K
+  DATA_SCALAR(Mpow);         // M/K scales as (Linf / L)^Mpow
 
   DATA_IVECTOR(sel_type);
   DATA_IVECTOR(sm_start);
@@ -268,6 +271,22 @@ Type objective_function<Type>::operator() ()
   Type phi    = exp(log_phi);
   Type Gbeta  = Galpha / Linf;
   Type sigmaF = exp(log_sigmaF);
+
+  // --- GTG growth groups and M/K from current parameters ---
+  // Linf groups spread by CVL = 1 / sqrt(Galpha); M/K uses the estimated Mk
+  // and Linf, so priors on Linf, Mk and CVL now reach GTG survival.
+  Type CVL = Type(1) / sqrt(Galpha);
+  vector<Type> gtgLinfs(ngtg);
+  for(int g = 0; g < ngtg; g++) {
+    gtgLinfs(g) = Linf * (Type(1) + CVL * gtg_z(g));
+  }
+  matrix<Type> MKMat(nlen + 1, ngtg);
+  for(int l = 0; l < (nlen + 1); l++) {
+    Type mkl = Mk * pow(Linf / LBins_mk(l), Mpow);
+    for(int g = 0; g < ngtg; g++) {
+      MKMat(l, g) = mkl;
+    }
+  }
 
   // --- COMMON SELECTIVITY ---
   matrix<Type> Sel(nlen, ngear);
@@ -630,6 +649,10 @@ Type objective_function<Type>::operator() ()
   REPORT(Gbeta);
   REPORT(Mk);
   REPORT(phi);
+  REPORT(CVL);
+  REPORT(gtgLinfs);   // GTG Linf groups at the estimates (pop_model = "gtg")
+  REPORT(recP);
+  REPORT(MKMat);      // (nlen + 1) x ngtg M/K used in GTG survival
 
 
 

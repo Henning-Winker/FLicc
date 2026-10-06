@@ -151,29 +151,19 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 2
   Mpow  <- if (!is.null(settings$Mpow))  as.numeric(settings$Mpow)  else 0
 
-  # GTG distribution over Linf #><> check fixed sd
-  SDLinf <- CVL_init * Linf_init
+  # GTG distribution over Linf on a standardised grid. The Linf groups are
+  # built inside the TMB template as Linf * (1 + CVL * gtg_z), so they follow
+  # the estimated Linf and CVL. recP depends only on the grid.
+  gtg_z <- seq(-maxsd, maxsd, length.out = ngtg)
+  recP  <- dnorm(gtg_z)
+  recP  <- recP / sum(recP)
 
-  gtgLinfs <- seq(
-    from = Linf_init - maxsd * SDLinf,
-    to   = Linf_init + maxsd * SDLinf,
-    length.out = ngtg
-  )
-
-  recP <- dnorm(gtgLinfs, mean = Linf_init, sd = SDLinf)
-  recP <- recP / sum(recP)
-
-  # Bin boundaries for GTG mortality scaling
-  LBins <- c(LLB, tail(LLB, 1) + tail(step, 1))
-  #LBins <- c(Lmid, tail(Lmid, 1) + tail(step, 1))
-  #LBins <- LLB#c(LLB, tail(LLB, 1) + tail(step, 1))
-
-
-  # LBSPR-style optional length-based M/K scaling
-  MKL <- Mk_init * (Linf_init / LBins)^Mpow
-
-  # Matrix: one column per GTG
-  MKMat <- matrix(MKL, nrow = length(MKL), ncol = ngtg)
+  # Bin boundaries for GTG mortality scaling; M/K at each boundary is
+  # Mk * (Linf / LBins_mk)^Mpow, computed in the template from the estimates.
+  # A zero lower boundary would give infinite M/K when Mpow > 0, so a
+  # non-positive boundary is replaced by half the first bin width.
+  LBins    <- c(LLB, tail(LLB, 1) + tail(step, 1))
+  LBins_mk <- ifelse(LBins > 0, LBins, step[1] / 2)
 
 
   prior_mu <- numeric()
@@ -213,9 +203,10 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
     ngtg       = as.integer(ngtg),
-    gtgLinfs   = as.numeric(gtgLinfs),
+    gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
-    MKMat      = unname(MKMat),
+    LBins_mk   = as.numeric(LBins_mk),
+    Mpow       = as.numeric(Mpow),
     sel_type   = as.integer(sel_type),
     sm_start   = as.integer(sm_start),
     sm_n       = as.integer(sm_n),
@@ -544,11 +535,8 @@ fiticc_core <- function(lfd, stklen,
     map$log_sigmaF <- factor(NA)
   }
 
-  if (settings$pop_model == "gtg") {
-    map$log_Galpha <- factor(NA)
-  } else if (is.null(settings$CVL.sd)) {
-    map$log_Galpha <- factor(NA)
-  }
+  # CVL (log_Galpha) is fixed unless CVL.sd is given, for both pop models.
+  # For gtg it sets the spread of the Linf groups.
   if (!is.null(fix_res$map_Sm)) {
     map$Sm <- fix_res$map_Sm
   }
@@ -752,7 +740,11 @@ fiticc_core <- function(lfd, stklen,
 #'       (mean, sd, use flag).}
 #'
 #'     \item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
-#'       parameters.}
+#'       parameters. Supplying one makes that parameter estimated (otherwise it
+#'       is fixed at its input value). For \code{pop_model = "gtg"}, the
+#'       estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
+#'       \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
+#'       M/K is \code{Mk * (Linf / L)^Mpow}.}
 #'   }
 #' @param start Optional numeric vector of starting values for the estimated
 #'   TMB parameters. A common use is \code{start = fit$opt$par} to restart
