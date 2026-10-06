@@ -165,6 +165,12 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   LBins    <- c(LLB, tail(LLB, 1) + tail(step, 1))
   LBins_mk <- ifelse(LBins > 0, LBins, step[1] / 2)
 
+  # SPR targets whose Fspr is computed at report time (not during fitting)
+  spr_ref <- if (!is.null(settings$spr_ref)) as.numeric(settings$spr_ref) else 40
+  if (any(!is.finite(spr_ref)) || any(spr_ref <= 0) || any(spr_ref >= 100)) {
+    stop("settings$spr_ref must be SPR percentages in (0, 100).")
+  }
+
   # Upper-tail robustness for the composition likelihood
   rob_eps <- if (!is.null(settings$rob_eps)) as.numeric(settings$rob_eps) else 0
   if (length(rob_eps) != 1 || !is.finite(rob_eps) || rob_eps < 0 || rob_eps >= 1) {
@@ -245,7 +251,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     plus_bin   = as.integer(plus_bin),
     # per-recruit block, off during fitting (see brp_tmb_flicc())
     brp_F       = numeric(0),
-    brp_spr     = numeric(0),
+    brp_spr     = as.numeric(spr_ref) / 100,   # Fspr reported by the fit
     brp_nyears  = 1L,
     brp_k       = as.numeric(lhpar["k"]),
     brp_FMscale = 0L,
@@ -486,6 +492,7 @@ fiticc_core <- function(lfd, stklen,
     CVL.sd = NULL,
     rob_eps = 0,
     Lplus = NULL,
+    spr_ref = 40,
     FM_min = 0.05,
     FM_max = 4,
     FMpen_sd = 0.2
@@ -800,6 +807,12 @@ fiticc_core <- function(lfd, stklen,
 #'       bin before the likelihood (tail compression). Reduces the influence
 #'       of the binning and sampling of the largest fish. Default \code{NULL}
 #'       (off). Predicted compositions in the report stay unpooled.}
+#'
+#'     \item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
+#'       The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
+#'       per-recruit numbers-at-length, computed in TMB after fitting at no
+#'       cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
+#'       reuse them for these targets.}
 #'
 #'     \item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
 #'       parameters. Supplying one makes that parameter estimated (otherwise it

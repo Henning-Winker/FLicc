@@ -625,6 +625,19 @@ brp_fast_ok <- function(fit, Sel = NULL, scale_sel = TRUE) {
     !is.null(fit$obj) && !is.null(fit$tmb_data$gtg_z) && !is.null(fit$report$M)
 }
 
+# Fspr and numbers-at-length at Fspr stored by the fit for settings$spr_ref
+# (computed with nyears = 1, spawn_time = 0, F scale, search bound 5)
+fspr_stored_flicc <- function(fit) {
+  if (isFALSE(getOption("FLicc.brp_tmb", TRUE))) return(NULL)
+  r <- fit$report
+  f <- if (!is.null(r$Fspr)) r$Fspr else r$brp_Fspr
+  N <- if (!is.null(r$Nspr)) r$Nspr else r$brp_Nspr
+  sp <- fit$tmb_data$brp_spr
+  if (is.null(f) || is.null(sp) || length(f) != length(sp)) return(NULL)
+  f <- as.numeric(f); f[f < 0] <- NA_real_
+  list(spr = 100 * as.numeric(sp), F = f, N = N)
+}
+
 # FLQuant template with the same dimensions as calc_Z_l() output
 brp_tmpl_flicc <- function(fit, nyears = 1) {
   years <- dimnames(fit$report$N)$year
@@ -666,6 +679,17 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
   fin <- resolve_f_input_flicc(F = F, FM = FM, default_FM = 1)
 
   if (!return_surv && brp_fast_ok(fit, Sel, scale_sel)) {
+    # numbers at a stored Fspr (e.g. LBIspr at the SPR target)
+    st <- if (!is.null(fin$F) && nyears == 1 && length(fin$F) == 1) fspr_stored_flicc(fit) else NULL
+    if (!is.null(st) && !is.null(st$N)) {
+      j <- which(abs(st$F - fin$F) <= 1e-12 * max(fin$F, 1e-12))
+      if (length(j) >= 1) {
+        out <- brp_tmpl_flicc(fit, nyears)
+        out[] <- as.matrix(st$N)[, j[1]] * R0 / 1000
+        FLCore::units(out) <- "1000"
+        return(out)
+      }
+    }
     b <- brp_tmb_flicc(fit, Fseq = if (is.null(fin$F)) fin$FM else fin$F,
                        nyears = nyears, FM = is.null(fin$F))
     if (!is.null(b)) {
@@ -986,6 +1010,16 @@ fspr_flicc <- function(fit, spr = 40, nyears = 1,
                        input = c( "F","FM")) {
 
   input <- match.arg(input)
+
+  # value stored by the fit for settings$spr_ref: no computation needed
+  if (input == "F" && nyears == 1 && spawn_time == 0 && interval[2] == 5 &&
+      is.null(Sel) && isTRUE(scale_sel)) {
+    st <- fspr_stored_flicc(fit)
+    if (!is.null(st)) {
+      i <- match(round(spr, 8), round(st$spr, 8))
+      if (!anyNA(i) && !anyNA(st$F[i])) return(st$F[i])
+    }
+  }
 
   if (brp_fast_ok(fit, Sel, scale_sel)) {
     b <- brp_tmb_flicc(fit, spr = spr, nyears = nyears, FM = input == "FM",

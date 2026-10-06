@@ -360,6 +360,11 @@ Type objective_function<Type>::operator() ()
   spr_y.setZero();
   N_y.setZero();
   plen_all_y.setZero();
+  plen.setZero();
+  Fk.setZero();
+  spr_y.setZero();
+  N_y.setZero();
+  plen_all_y.setZero();
 
 
   // --- LOOP OVER YEARS ---
@@ -735,6 +740,17 @@ Type objective_function<Type>::operator() ()
       brp_Fspr(j) = exp(c);
     }
 
+    // numbers-at-length per recruit at each Fspr (reference LFD, LBIspr)
+    matrix<Type> brp_Nspr(nlen, nS);
+    brp_Nspr.setZero();
+    for(int j = 0; j < nS; j++) {
+      if(brp_Fspr(j) > Type(0)) {
+        vector<Type> NI = popN(brp_Fspr(j), Fl, Zl);
+        for(int l = 0; l < nlen; l++) brp_Nspr(l, j) = NI(l) / scale0;
+      }
+    }
+
+    REPORT(brp_Nspr);
     REPORT(brp_SBPR0);
     REPORT(brp_SBPR);
     REPORT(brp_YPR);

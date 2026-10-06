@@ -87,6 +87,12 @@ growth formulation.}
   of the binning and sampling of the largest fish. Default \code{NULL}
   (off). Predicted compositions in the report stay unpooled.\}
 
+\\item\{\code{spr_ref}\}\{SPR target(s) in percent (default \code{40}).
+  The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
+  per-recruit numbers-at-length, computed in TMB after fitting at no
+  cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
+  reuse them for these targets.\}
+
 \\item\{\code{linf.sd, Mk.sd, CVL.sd}\}\{Optional penalties on life-history
   parameters. Supplying one makes that parameter estimated (otherwise it
   is fixed at its input value). For \code{pop_model = "gtg"}, the

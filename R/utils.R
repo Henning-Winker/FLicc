@@ -292,6 +292,14 @@ as_FLQuants <- function(fit,stklen) {
     out$node <- tmb_data$node
     out$quad_wt <- tmb_data$quad_wt
   }
+  # Fspr for settings$spr_ref and per-recruit numbers-at-length at Fspr,
+  # computed in TMB at report time (FLicc >= 1.0.9)
+  if (!is.null(report$brp_Fspr) && !is.null(tmb_data$brp_spr)) {
+    fs <- as.numeric(report$brp_Fspr); fs[fs < 0] <- NA_real_
+    out$spr_ref <- 100 * as.numeric(tmb_data$brp_spr)
+    out$Fspr <- stats::setNames(fs, paste0("Fspr", out$spr_ref))
+    out$Nspr <- report$brp_Nspr
+  }
   if (pop_model == "gtg") {
     # GTG inputs at the estimates, used by nf_from_flicc() and reference points
     out$gtgLinfs <- report$gtgLinfs
