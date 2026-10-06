@@ -100,11 +100,6 @@ export(plot_mat)
 export(plot_lw)
 export(plot_LBIp)
 
-# --- MSE ------
-export(spr_rule)
-export(r_rule)
-export(hcr_sprlbi)
-export(plot_hcrspr)
 
 #---Monte-Carlo Ensemble---
 export(mc_flicc)
@@ -132,4 +127,10 @@ export(zlcc)
 export(plot_zlcc)
 export(plot_zlcc_year)
 
-
+# --- MSE ------
+export(spr_rule)
+export(r_rule)
+export(hcr_sprlbi)
+export(plot_hcrspr)
+export(flicc.sa)
+export(lbi.hcr)
