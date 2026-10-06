@@ -606,7 +606,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   pl <- fit$obj$env$parList(fit$opt$par)
   obj <- TMB::MakeADFun(data = td, parameters = pl, DLL = fit$obj$env$DLL,
                         type = "Fun", silent = TRUE)
-  rep <- obj$report()
+  rep <- obj$report(obj$env$par)
   Fspr <- as.numeric(rep$brp_Fspr)
   Fspr[Fspr < 0] <- NA_real_
   list(F = as.numeric(Fseq), SBPR0 = rep$brp_SBPR0,
