@@ -4,6 +4,25 @@
 #'
 #' @return Character string, one of \code{"gamma"} or \code{"gtg"}.
 #' @export
+gtg_inputs_flicc <- function(fit) {
+  # GTG Linf groups, recruitment weights and M/K at the estimates.
+  # Taken from the fit report (FLicc >= 1.0.6), else from the TMB object,
+  # else from tmb_data for fits made with earlier versions.
+  pick <- function(src) {
+    if (!is.null(src$gtgLinfs) && !is.null(src$recP) && !is.null(src$MKMat)) {
+      list(gtgLinfs = as.numeric(src$gtgLinfs),
+           recP     = as.numeric(src$recP),
+           MKMat    = as.matrix(src$MKMat))
+    } else NULL
+  }
+  out <- pick(fit$report)
+  if (is.null(out) && !is.null(fit$obj))
+    out <- pick(fit$obj$report(fit$obj$env$last.par.best))
+  if (is.null(out)) out <- pick(fit$tmb_data)
+  if (is.null(out)) stop("GTG inputs (gtgLinfs, recP, MKMat) not found in fit.")
+  out
+}
+
 pop_model_flicc <- function(fit) {
 
   if (!is.null(fit$pop_model)) {
@@ -323,9 +342,10 @@ nf_from_flicc <- function(fit,
   } else if (pop_model == "gtg") {
 
     td <- fit$tmb_data
+    gtg <- gtg_inputs_flicc(fit)
 
     nlen <- length(ref$Len)
-    ngtg <- td$ngtg
+    ngtg <- length(gtg$gtgLinfs)
 
     # total mortality on the gtg scale
     # natural mortality comes from MKMat * yearly Mscaler
@@ -338,16 +358,16 @@ nf_from_flicc <- function(fit,
 
     for (g in seq_len(ngtg)) {
       for (l in seq_len(nlen)) {
-        ZKLMat[l, g] <- td$MKMat[l, g] * Mscale[l] + Fki[l]
+        ZKLMat[l, g] <- gtg$MKMat[l, g] * Mscale[l] + Fki[l]
       }
-      ZKLMat[nlen + 1, g] <- td$MKMat[nlen + 1, g] * Mscale[nlen] + Fki[nlen]
+      ZKLMat[nlen + 1, g] <- gtg$MKMat[nlen + 1, g] * Mscale[nlen] + Fki[nlen]
     }
 
     res <- n_f_gtg_flicc(
       Len = ref$Len,
-      gtgLinfs = td$gtgLinfs,
+      gtgLinfs = gtg$gtgLinfs,
       ZKLMat = ZKLMat,
-      recP = td$recP,
+      recP = gtg$recP,
       return_surv = return_surv
     )
 

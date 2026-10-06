@@ -274,6 +274,7 @@ as_FLQuants <- function(fit,stklen) {
   }
 
   if (pop_model == "gtg") {
+    if (!is.null(report$CVL))     par_list$CVL   <- report$CVL
     if (!is.null(tmb_data$ngtg))  par_list$ngtg  <- tmb_data$ngtg
     if (!is.null(fit$settings$maxsd)) par_list$maxsd <- fit$settings$maxsd
     if (!is.null(fit$settings$Mpow))  par_list$Mpow  <- fit$settings$Mpow
@@ -290,6 +291,12 @@ as_FLQuants <- function(fit,stklen) {
   if (pop_model == "gamma") {
     out$node <- tmb_data$node
     out$quad_wt <- tmb_data$quad_wt
+  }
+  if (pop_model == "gtg") {
+    # GTG inputs at the estimates, used by nf_from_flicc() and reference points
+    out$gtgLinfs <- report$gtgLinfs
+    out$recP     <- report$recP
+    out$MKMat    <- report$MKMat
   }
   out$logLik <- -fit$opt$objective
   out$pop_model <- pop_model
