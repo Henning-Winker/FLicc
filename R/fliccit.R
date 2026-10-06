@@ -604,9 +604,12 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
   pl <- fit$obj$env$parList(fit$opt$par)
-  obj <- TMB::MakeADFun(data = td, parameters = pl, DLL = fit$obj$env$DLL,
-                        type = "Fun", silent = TRUE)
-  rep <- obj$report(obj$env$par)
+  # all parameters fixed at the estimates: nothing is recorded on the AD
+  # tape, and report() runs one double evaluation including the brp block
+  map <- lapply(pl, function(x) factor(rep(NA, length(x))))
+  obj <- TMB::MakeADFun(data = td, parameters = pl, map = map,
+                        DLL = fit$obj$env$DLL, silent = TRUE)
+  rep <- obj$report()
   Fspr <- as.numeric(rep$brp_Fspr)
   Fspr[Fspr < 0] <- NA_real_
   list(F = as.numeric(Fseq), SBPR0 = rep$brp_SBPR0,
