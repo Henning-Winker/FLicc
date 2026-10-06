@@ -147,8 +147,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   Galpha_init <- 1 / CVL_init^2
 
   # GTG controls
-  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 19L
-  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 3
+  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 13L
+  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 2
   Mpow  <- if (!is.null(settings$Mpow))  as.numeric(settings$Mpow)  else 0
 
   # GTG distribution over Linf on a standardised grid. The Linf groups are
@@ -189,7 +189,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
   # Warn when observations fall in bins the GTG model cannot reach
   # (lower bound at or beyond the largest GTG Linf at the input values).
-  if (pop_model == "gtg") {
+  if (pop_model == "gtg" && isTRUE(settings$tail_warning)) {
     maxLinf <- Linf_init * (1 + maxsd * CVL_init)
     beyond  <- LLB >= maxLinf
     if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
@@ -483,8 +483,8 @@ fiticc_core <- function(lfd, stklen,
     catch.sd = 0.05,
     pop_model = "gtg",
     obs_model = "mn",
-    ngtg = 19,
-    maxsd = 3,
+    ngtg = 13,
+    maxsd = 2,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
@@ -493,6 +493,7 @@ fiticc_core <- function(lfd, stklen,
     rob_eps = 0,
     Lplus = NULL,
     spr_ref = 40,
+    tail_warning = FALSE,
     FM_min = 0.05,
     FM_max = 4,
     FMpen_sd = 0.2
@@ -782,14 +783,18 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
-#'       \code{pop_model = "gtg"}. Default is 19 (13 before FLicc 1.0.7).}
+#'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
 #'
 #'     \item{\code{maxsd}}{Range (in standard deviations) for GTG Linf
-#'       distribution. Default is 3 (2 before FLicc 1.0.7, as in LBSPR). The
-#'       groups cover \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the
-#'       actual Linf spread (about 0.88 * CVL at 2, 0.99 * CVL at 3) and caps
-#'       the largest length the model can produce. Use \code{maxsd = 2,
-#'       ngtg = 13} to reproduce earlier fits.}
+#'       distribution. Default is 2, as in LBSPR. The groups cover
+#'       \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the actual Linf
+#'       spread (about 0.88-0.91 * CVL at 2, 0.99 * CVL at 3) and caps the
+#'       largest length the model can produce. \code{maxsd = 3, ngtg = 19}
+#'       makes CVL close to the actual spread.}
+#'
+#'     \item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
+#'       fish lie in length bins at or above the largest GTG Linf, where the
+#'       model gives them near-zero probability. Default \code{FALSE}.}
 #'
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
@@ -898,8 +903,8 @@ fiticc <- function(lfd, stklen,
                      catch.sd = 0.05,
                      pop_model = "gtg",
                      obs_model = "mn",
-                     ngtg = 19,
-                     maxsd = 3,
+                     ngtg = 13,
+                     maxsd = 2,
                      Mpow = 0,
                      prior_sigmaF = c(log(0.5), 0.3, 1),
                      linf.sd = NULL,

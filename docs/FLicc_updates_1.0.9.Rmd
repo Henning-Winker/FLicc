@@ -1,5 +1,5 @@
 ---
-title: "FLicc 1.0.6 – 1.0.9: Growth groups, robust likelihood, biomass-scale status and fast reference points"
+title: "FLicc 1.0.6 – 1.0.9: Growth groups, robust likelihood, biomass-scale status, fast reference points and MSE tools"
 author: "Henning Winker (FAO-NFI)"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
@@ -28,12 +28,14 @@ knitr::opts_chunk$set(
 
 This document describes the changes to `FLicc` between versions 1.0.5 and 1.0.9. All examples run on the `alfonsino` example data with the GTG population model, so every number shown here is produced by the current code.
 
-| Version | Change | Default behaviour changed? |
+| Version | Change | Default results changed? |
 |---|---|---|
 | 1.0.6 | GTG survival now uses the estimated Linf, M/K and CVL | Only for fits with `linf.sd`, `Mk.sd` or `CVL.sd` |
-| 1.0.7 | Robust likelihood options `rob_eps` and `Lplus`; warning for unreachable fish; GTG defaults `maxsd = 3`, `ngtg = 19` | Yes: GTG tails (use `maxsd = 2, ngtg = 13` for earlier results) |
+| 1.0.7 | Robust likelihood options `rob_eps` and `Lplus`; optional warning for unreachable fish (`tail_warning`) | No |
 | 1.0.8 | Steepness option `flicc2FLStockR(s = )`; `spr2brel()`, `sprbrel_flicc()`, `fbrel_flicc()` | No (`s = NULL` by default) |
-| 1.0.9 | Per-recruit calculations in TMB; Fspr reported by the fit (`spr_ref`); `brp_tmb_flicc()` | No (same results, much faster) |
+| 1.0.9 | Per-recruit calculations in TMB; Fspr reported by the fit (`spr_ref`); `brp_tmb_flicc()`; MSE tools `flicc.sa()`, `lbi.hcr()`, `flicc.is()` and HCR helpers; `fit$report$N` first dimension named `len` | No (same results, much faster) |
+
+The GTG defaults remain those of LBSPR (`maxsd = 2`, `ngtg = 13`); Section 3 explains what they imply and when to change them.
 
 ```{r data}
 library(FLicc)
@@ -81,11 +83,11 @@ rbind(fixed     = c(Linf = c(fit.fix$report$lhpar["linf"]), Mk = c(fit.fix$repor
 
 Two smaller fixes came with this: the GTG length floors use `CppAD::CondExpLe` so they remain correct when the GTG Linfs depend on parameters, and a zero lower bin boundary no longer gives infinite M/K when `Mpow > 0`.
 
-# GTG tails: `maxsd` and `ngtg` (1.0.7)
+# GTG tails: what `maxsd` and `ngtg` do
 
 ## How the GTG represents growth variation
 
-Each GTG is a single growth curve with no variation of its own; all variation comes from the spread of Linf across groups. `CVL` sets the scale ($\sigma = CV_L \cdot L_\infty$) and `maxsd` how far out the outermost groups sit, in units of $\sigma$ (λ in Hordyk et al. 2016, fixed at 2 in LBSPR). `ngtg` only sets how finely that range is divided.
+Each GTG is a single growth curve with no variation of its own; all variation comes from the spread of Linf across groups. `CVL` sets the scale ($\sigma = CV_L \cdot L_\infty$) and `maxsd` how far out the outermost groups sit, in units of $\sigma$ (λ in Hordyk et al. 2016, fixed at 2 in LBSPR). `ngtg` only sets how finely that range is divided. The defaults remain those of LBSPR, `maxsd = 2` and `ngtg = 13`.
 
 Cutting the normal distribution at ±`maxsd` makes the actual spread smaller than `CVL` and caps the largest length the model can produce at $L_\infty(1 + maxsd \cdot CV_L)$:
 
@@ -98,30 +100,30 @@ knitr::kable(data.frame(maxsd = c(1, 1.5, 2, 2.5, 3),
              caption = "Effect of truncating the GTG Linf distribution (continuous normal).")
 ```
 
-With the former default `maxsd = 2`, a CVL of 0.10 was effectively about 0.088–0.091, and SPR depends strongly on that spread. The defaults are now `maxsd = 3`, `ngtg = 19`, so CVL is effectively the actual spread and the cap moves out.
+With the default `maxsd = 2`, a CVL of 0.10 is effectively about 0.09. SPR depends strongly on that spread, so CVL values taken from other sources (e.g. an integrated assessment) should be interpreted with this in mind. `maxsd = 3, ngtg = 19` makes CVL close to the actual spread.
 
 ```{r maxsd-fits}
-fit.legacy <- fitf(maxsd = 2, ngtg = 13)      # LBSPR / FLicc <= 1.0.6
-fit.ng30   <- fitf(maxsd = 3, ngtg = 30)
+fit.wide <- fitf(maxsd = 3, ngtg = 19)
+fit.ng30 <- fitf(maxsd = 3, ngtg = 30)
 
 cv_gtg <- function(fit) {                     # actual CV of the GTG Linf distribution
   L <- fit$report$gtgLinfs; w <- fit$report$recP
   sqrt(sum(w * (L - sum(w * L))^2)) / sum(w * L)
 }
-data.frame(setting = c("maxsd 3, ngtg 19 (default)", "maxsd 2, ngtg 13 (legacy)", "maxsd 3, ngtg 30"),
-           actual_CV = round(sapply(list(fit.fix, fit.legacy, fit.ng30), cv_gtg), 3),
-           SPR = sapply(list(fit.fix, fit.legacy, fit.ng30), lastspr))
+data.frame(setting = c("maxsd 2, ngtg 13 (default, LBSPR)", "maxsd 3, ngtg 19", "maxsd 3, ngtg 30"),
+           actual_CV = round(sapply(list(fit.fix, fit.wide, fit.ng30), cv_gtg), 3),
+           SPR = sapply(list(fit.fix, fit.wide, fit.ng30), lastspr))
 ```
 
-`ngtg` hardly matters beyond about 9–13 groups; `maxsd` acts through the actual spread. **To reproduce earlier assessments or LBSPR, use `maxsd = 2, ngtg = 13`.**
+`ngtg` hardly matters beyond about 9–13 groups; `maxsd` acts through the actual spread.
 
-# Warning for fish beyond the largest GTG Linf (1.0.7)
+# Optional warning for fish beyond the largest GTG Linf (1.0.7)
 
-The GTG model cannot produce fish longer than its largest group's Linf, so observations in bins at or above it get near-zero probability. A few such fish can dominate the likelihood, create steps in CVL profiles and drive status estimates. `fiticc()` now warns when this happens:
+The GTG model cannot produce fish longer than its largest group's Linf, so observations in bins at or above it get near-zero probability. A few such fish can dominate the likelihood, create steps in CVL profiles and drive status estimates. With `tail_warning = TRUE`, `fiticc()` warns when this happens (off by default):
 
 ```{r warn}
 w <- NULL
-fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7),
+fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7, tail_warning = TRUE),
   warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
 cat(w[grepl("largest GTG Linf", w)])
 ```
@@ -209,6 +211,7 @@ The R per-recruit functions ran many population recursions in R with FLQuant ove
 * The TMB template has an optional per-recruit block, evaluated only in TMB's double evaluation (`obj$report()`) and never during optimisation. It computes numbers, catch and F at length, YPR and SBPR for a vector of F (or F/M), and Fspr for target SPRs, at the fitted parameters, for both population models.
 * **`settings$spr_ref`** (default `40`, may be a vector): the fit reports `fit$report$Fspr` and per-recruit numbers-at-length at Fspr. `fspr_flicc()` returns the stored value for these targets, and `LBIspr()` and `flicc2FLStockR()` need no per-recruit computation at the target.
 * **`brp_tmb_flicc()`** does the same for any F values or targets in one TMB call. `spr_flicc()`, `pr_flicc()`, `nf_flicc()` and `prbrp_flicc()` (and through them `eqstklen()`) use it.
+* `flicc.sa()` sets `spr_ref` to its `spr` target automatically, so `LBIspr()` inside the management procedure reuses the stored Fspr.
 * The previous R implementation remains as a fallback for non-default options (`Sel`, `scale_sel = FALSE`), for fits from earlier versions, and with `options(FLicc.brp_tmb = FALSE)`.
 
 ```{r speed-fit}
@@ -244,6 +247,58 @@ sapply(names(new$v), function(k) signif(reldiff(new$v[[k]], old$v[[k]]), 3))
 
 Per-recruit numbers, catch, YPR and SBPR agree with the previous implementation to rounding error. Fspr differs only by the tolerance at which `uniroot()` stopped in the old code (up to about 4e-4 relative); the new solve is exact. Reported Fspr has no standard error from `sdreport()`, because it is computed outside the AD tape.
 
+# Management procedure tools for `mse` (1.0.9)
+
+These functions plug an FLicc length-based assessment and an empirical harvest control rule into the `mp()` function of the FLR `mse` package.
+
+| Function | Role in `mp()` | What it does |
+|---|---|---|
+| `flicc.sa()` | estimator (`est`) | Fits `fiticc()` to each iteration's sampled length data (`attr(stk, "lfd")`) and catch split (`attr(stk, "catch_gear")`), optionally in parallel and over a rolling window (`nyrs`); returns `LBIspr()` indicators by gear plus the SPR series, and tracks convergence, SPR at the boundary, refits and usable iterations |
+| `lbi.hcr()` | harvest control rule (`hcr`) | Combines a trend ratio on a gear's length indicator (recent `n1` years over the previous `n2`) with the SPR rule; the SPR multiplier is applied only when both point the same direction, otherwise no change |
+| `flicc.is()` | implementation system (`isys`) | Converts the multiplier into a TAC (previous TAC × multiplier), with optional limits on the change (`dtaclow`, `dtacupp`), a maximum (`Cmax`) and a split across areas (`catch_area`) |
+
+Helpers usable outside `mp()`:
+
+* `spr_rule(spr, b1, b2, b3, b4, dlow, dopt, dhi)`: SPR-based change multiplier with four triggers (fixed reduction below `b1`, linear to the no-change plateau between `b2` and `b3`, linear increase to `b4`, fixed increase above).
+* `r_rule(idx, n1, n2)`: trend ratio of an index.
+* `hcr_sprlbi(fit, gear, ...)`: the combined rule applied to a single fit.
+* `plot_hcrspr(...)`: plot of the SPR rule with status zones.
+
+```{r hcr-plot, fig.height = 4.5}
+plot_hcrspr(b1 = 0.1, b2 = 0.3, b3 = 0.5, b4 = 0.8, blim = 0.1, bthr = 0.3,
+            dlow = -0.2, dopt = 0, dup = 0.15, spr_target = 0.4,
+            obs = c(fit.fix$report$spr), years = dimnames(fit.fix$report$spr)$year)
+```
+
+```{r hcr-fit}
+idx <- LBIspr(fit.fix)
+round(c(trend_ratio_Trawl = r_rule(idx[["Trawl"]]),
+        spr_multiplier = spr_rule(tail(c(fit.fix$report$spr), 1)),
+        combined_Trawl = hcr_sprlbi(fit.fix, gear = "Trawl")), 3)
+```
+
+A management procedure using these components (the operating model `om` and an observation error model `oem` that attaches `lfd` and `catch_gear` to the stock are required and not shown):
+
+```{r mp-setup, eval = FALSE}
+library(mse)
+
+ctrl <- mpCtrl(list(
+  est  = mseCtrl(method = flicc.sa,
+                 args = list(lhpar = lhpar, sel_fun = c("dsnormal", "logistic"),
+                             settings = list(pop_model = "gtg", obs_model = "dm"),
+                             spr = 40, thresh = 0.75, ess.g = 150, nyrs = 5)),
+  hcr  = mseCtrl(method = lbi.hcr,
+                 args = list(gear = "Trawl", b1 = 0.1, b2 = 0.3, b3 = 0.5, b4 = 0.75,
+                             dlow = -0.2, dopt = 0, dhi = 0.15, n1 = 2, n2 = 3)),
+  isys = mseCtrl(method = flicc.is,
+                 args = list(initac = 1000, dtaclow = 0.85, dtacupp = 1.15))))
+
+run <- mp(om, oem, ctrl = ctrl,
+          args = list(iy = 2024, fy = 2044, frq = 2, management_lag = 1))
+```
+
+With the per-recruit speed work in Section 7, the reference-point part of each assessment (Fspr and the `LBIspr()` reference length distribution) adds almost nothing to the fitting time inside `mp()`.
+
 # Background: the growth-phase proposal
 
 The starting point for this work was a proposal to add variation in the growth origin ("growth phase") to correct overly narrow predicted length distributions near the origin under year-round sampling. Mapping it against the code showed:
@@ -255,12 +310,12 @@ The starting point for this work was a proposal to add variation in the growth o
 
 The remaining development candidates are a Linf × K GTG and a review of other parameter-dependent `if()` statements in the template.
 
-# Reproducing earlier fits
+# Other changes and reproducing earlier fits
+
+* `fit$report$N` now has `len` (not `lens`) as its first dimension, consistent with the other length-based report quantities.
+* Default GTG fits are unchanged. Only GTG fits with `linf.sd`, `Mk.sd` or `CVL.sd` differ from versions before 1.0.6 (Section 2).
 
 ```{r legacy, eval = FALSE}
-# FLicc <= 1.0.6 GTG defaults
-fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-              settings = list(maxsd = 2, ngtg = 13))
 # previous R per-recruit code (results identical apart from uniroot tolerance)
 options(FLicc.brp_tmb = FALSE)
 ```

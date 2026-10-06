@@ -530,7 +530,9 @@ hcr_sprlbi <- function(fit, gear,
 #' @param m_model Natural-mortality-at-length model passed to stocklen():
 #'   one of "constant", "inverse", "Lorenzen", "Gislason".
 #' @param settings List of fiticc() model settings (pop_model, obs_model,
-#'   ngtg, ...); see ?fiticc.
+#'   ngtg, ...); see ?fiticc. If \code{settings$spr_ref} is not given it is
+#'   set to \code{spr}, so each fit reports Fspr at the indicator target and
+#'   \code{LBIspr()} reuses it.
 #' @param spr,thresh Passed to LBIspr() to compute the length-based
 #'   indicator (target SPR%, cumulative threshold defining Lref).
 #' @param ess.g Numeric scalar or vector of effective sample sizes by gear.
@@ -618,6 +620,10 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
             "(mp() itself is running parallel) -- nested parallel backends are unsafe.")
     parallel <- FALSE
   }
+
+  # Fspr at the indicator target is reported by each fit, so LBIspr()
+  # reuses it instead of solving for it (see settings$spr_ref in ?fiticc)
+  if (is.null(settings$spr_ref)) settings$spr_ref <- spr
 
   gears <- names(lfd)
   it <- args$it
@@ -816,8 +822,28 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
   list(ctrl = ctrl, tracking = tracking)
 }
 
-# FLicc implementation
-
+#' mp()-compatible implementation system for lbi.hcr()
+#'
+#' Turns the relative multiplier returned by \code{lbi.hcr()} into a TAC
+#' (or effort) advice: the previous TAC (from tracking, or \code{initac} in
+#' the first cycle) times the multiplier, with optional limits on the change
+#' and an optional split of the advice across units (areas).
+#'
+#' @param stk The FLStock passed by \code{mp()}.
+#' @param ctrl The \code{fwdControl} returned by \code{lbi.hcr()}, holding
+#'   the multiplier.
+#' @param args,tracking \code{mp()}'s per-cycle args and tracking object.
+#' @param output "catch" (default) or "effort".
+#' @param dtaclow,dtacupp Optional lower and upper limits on the TAC change
+#'   relative to the previous TAC (e.g. 0.85, 1.15), applied to iterations
+#'   flagged by the HCR decision.
+#' @param Cmax Optional absolute maximum TAC.
+#' @param initac TAC used as the previous TAC in the first cycle (required).
+#' @param catch_area Optional vector of shares to split the TAC across units.
+#'
+#' @return A list with \code{ctrl} (a \code{fwdControl} for year
+#'   \code{ay + management_lag}) and \code{tracking} (with "tac.is").
+#' @export
 flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
                      dtaclow = NA, dtacupp = NA, Cmax = NA,
                      initac = NULL,catch_area=NULL) {

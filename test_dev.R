@@ -1,8 +1,8 @@
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # Tests for FLicc dev-lbsrp additions (versions 1.0.6 - 1.0.9)
 #  1. GTG uses estimated Linf, M/K and CVL
-#  2. GTG tails: maxsd / ngtg defaults and legacy settings
-#  3. Warning for fish beyond the largest GTG Linf
+#  2. GTG tails: maxsd / ngtg (defaults as in LBSPR: maxsd = 2, ngtg = 13)
+#  3. Optional warning for fish beyond the largest GTG Linf (tail_warning)
 #  4. Robust likelihood options: rob_eps and Lplus
 #  5. Steepness: spr2brel(), sprbrel_flicc(), fbrel_flicc(),
 #     flicc2FLStockR(s = )
@@ -38,18 +38,21 @@ rbind(fixed     = c(Linf = c(fit.fix$report$lhpar["linf"]), Mk = c(fit.fix$repor
                     CVL = c(fit.est$report$pars["CVL"]), SPR = lastspr(fit.est)))
 
 # GTG Linf groups follow the estimates: Linf * (1 + CVL * z)
-z <- seq(-3, 3, length.out = 19)                             # default maxsd = 3, ngtg = 19
+z <- seq(-2, 2, length.out = 13)                             # default maxsd = 2, ngtg = 13
 stopifnot(isTRUE(all.equal(fit.est$report$gtgLinfs,
   c(fit.est$report$lhpar["linf"]) * (1 + c(fit.est$report$pars["CVL"]) * z))))
 # estimated parameters actually change the population model
 stopifnot(abs(lastspr(fit.est) - lastspr(fit.fix)) > 1e-4)
 
+# fit$report$N has 'len' as its first dimension
+stopifnot(names(dimnames(fit.fix$report$N))[1] == "len")
+
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # 2. GTG tails: maxsd changes the actual Linf spread, ngtg only resolution
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
-fit.legacy <- fitf(maxsd = 2, ngtg = 13)                     # LBSPR / FLicc <= 1.0.6
-fit.ng30   <- fitf(maxsd = 3, ngtg = 30)
-c(default_maxsd3_ngtg19 = lastspr(fit.fix), legacy_maxsd2_ngtg13 = lastspr(fit.legacy),
+fit.wide <- fitf(maxsd = 3, ngtg = 19)                       # CVL close to actual spread
+fit.ng30 <- fitf(maxsd = 3, ngtg = 30)
+c(default_maxsd2_ngtg13 = lastspr(fit.fix), maxsd3_ngtg19 = lastspr(fit.wide),
   maxsd3_ngtg30 = lastspr(fit.ng30))
 
 # actual CV of the GTG Linf distribution versus CVL = 0.1
@@ -57,13 +60,14 @@ cv_gtg <- function(fit) {
   L <- fit$report$gtgLinfs; w <- fit$report$recP
   sqrt(sum(w * (L - sum(w * L))^2)) / sum(w * L)
 }
-round(c(maxsd3 = cv_gtg(fit.fix), maxsd2 = cv_gtg(fit.legacy)), 3)   # ~0.099 vs ~0.091 (13 groups)
+round(c(maxsd2 = cv_gtg(fit.fix), maxsd3 = cv_gtg(fit.wide)), 3)     # ~0.091 vs ~0.099
 
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # 3. Warning when observed fish lie beyond the largest GTG Linf
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 w <- NULL
-fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7),
+fit.nowarn <- fitf(maxsd = 0.5, ngtg = 7)                    # off by default: silent
+fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7, tail_warning = TRUE),
   warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
 print(w[grepl("largest GTG Linf", w)])
 stopifnot(any(grepl("largest GTG Linf", w)))

@@ -79,7 +79,7 @@ as_FLQuants <- function(fit,stklen) {
   out$N <- FLCore::FLQuant(
     report$N_y,
     dimnames = list(
-      lens = lens,
+      len = lens,
       year = yrs,
       unit = "unique",
       season = "all",

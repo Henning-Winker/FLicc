@@ -66,7 +66,9 @@ varies by iteration and cycle.}
 one of "constant", "inverse", "Lorenzen", "Gislason".}
 
 \item{settings}{List of fiticc() model settings (pop_model, obs_model,
-ngtg, ...); see ?fiticc.}
+ngtg, ...); see ?fiticc. If \code{settings$spr_ref} is not given it is
+set to \code{spr}, so each fit reports Fspr at the indicator target and
+\code{LBIspr()} reuses it.}
 
 \item{spr, thresh}{Passed to LBIspr() to compute the length-based
 indicator (target SPR\%, cumulative threshold defining Lref).}
