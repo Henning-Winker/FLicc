@@ -9,8 +9,19 @@ for (pm in c("gtg", "gamma")) for (mm in c("constant", "inverse")) {
   stklen <- stocklen(lfd, lhpar, m_model = mm)
   set <- list(prior_sigmaF = c(log(0.5), 0.3, 1), CVL = 0.1, pop_model = pm,
               obs_model = if (pm == "gtg") "mn" else "nb")
-  fit <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3), settings = set)
+  tfit <- system.time(fit <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3),
+                                   settings = c(set, list(spr_ref = c(40, 20, 10)))))["elapsed"]
   cat("\n==========", pm, "/ M", mm, "==========\n")
+  cat(sprintf("fit time %.2fs; fit$report$Fspr: %s\n", tfit,
+              paste(names(fit$report$Fspr), round(fit$report$Fspr, 5), collapse = "  ")))
+  options(FLicc.brp_tmb = FALSE); oldF <- sapply(c(40, 20, 10), function(x) fspr_flicc(fit, spr = x))
+  options(FLicc.brp_tmb = TRUE)
+  d0 <- rel(fit$report$Fspr, oldF)
+  cat(sprintf("stored Fspr vs old uniroot: max rel diff %.2e\n", d0)); if (d0 > 1e-3) fail <- TRUE
+  t30 <- system.time(f30 <- fspr_flicc(fit, spr = 30))["elapsed"]
+  options(FLicc.brp_tmb = FALSE); f30o <- fspr_flicc(fit, spr = 30); options(FLicc.brp_tmb = TRUE)
+  cat(sprintf("non-stored target Fspr30: new %.5f (%.3fs) old %.5f  rel diff %.2e\n", f30, t30, f30o, rel(f30, f30o)))
+  if (rel(f30, f30o) > 1e-3) fail <- TRUE
   run <- function(fast) {
     options(FLicc.brp_tmb = fast)
     t <- list(); v <- list()
