@@ -4,7 +4,14 @@
 \alias{flicc2FLStockR}
 \title{Convert a FLicc fit and FLStockLen template to a simplified FLStockR}
 \usage{
-flicc2FLStockR(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FALSE)
+flicc2FLStockR(
+  fit,
+  spr.btgt = 0.4,
+  bpa = 0.2,
+  blim = 0.1,
+  rel = FALSE,
+  s = NULL
+)
 }
 \arguments{
 \item{fit}{A fitted \code{FLicc} object.}
@@ -21,6 +28,15 @@ The default is \code{0.2}.}
 \item{rel}{Logical. If \code{FALSE} (default), the output is on the absolute
 SPR scale. If \code{TRUE}, SPR and fishing mortality are rescaled relative
 to the SPR target and \code{Fspr}, respectively.}
+
+\item{s}{Optional Beverton-Holt steepness (e.g. \code{0.75}). If \code{NULL}
+(default), status is SPR as before. If given, SPR is converted to
+equilibrium spawning biomass, \code{B/B0 = (4 s SPR - (1 - s)) / (5 s - 1)}:
+the stock slot and \code{Bspr} become \code{B/B0} (or \code{B/Btgt} with
+\code{rel = TRUE}), and \code{Bpa} and \code{Blim} keep their fractions
+of the target (\code{bpa / spr.btgt}, \code{blim / spr.btgt}) on the
+biomass scale. This corrects the optimism of SPR-based status at low
+stock size, where biomass falls faster than SPR. \code{Fspr} is unchanged.}
 }
 \value{
 An object of class \code{FLStockR}.
@@ -82,7 +98,9 @@ ssb(stkr)
 fbar(stkr)
 refpts(stkr)
 
-stkr_rel <- flicc2FLStockR(fit rel = TRUE)
+stkr_rel <- flicc2FLStockR(fit, rel = TRUE)
+# status on the biomass scale under steepness 0.75
+stkr_s <- flicc2FLStockR(fit, rel = TRUE, s = 0.75)
 ssb(stkr_rel)
 fbar(stkr_rel)
 refpts(stkr_rel)

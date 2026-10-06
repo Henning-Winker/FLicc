@@ -909,6 +909,80 @@ fspr_flicc <- function(fit, spr = 40, nyears = 1,
 
   stats::uniroot(fobj, interval = interval)$root
 }
+
+#' Biomass-equivalent reference points from SPR under steepness
+#'
+#' Under Beverton-Holt recruitment with steepness \code{s}, equilibrium
+#' spawning biomass is linear in SPR, \code{B/B0 = (4 s SPR - (1 - s)) / (5 s - 1)},
+#' so biomass falls faster than SPR as the stock is depleted. These helpers
+#' convert between SPR and equilibrium biomass relative to the biomass at a
+#' reference SPR (e.g. SPR40 as an Bmsy proxy, or SPRmsy), without refitting.
+#'
+#' \code{fbrel_flicc()} returns the fishing mortality at which equilibrium
+#' biomass is \code{brel} times the reference biomass, e.g. \code{brel = 0.25}
+#' for a Blim at a quarter of the B40 proxy. It solves for the equivalent SPR
+#' in closed form and then calls \code{fspr_flicc()}, so it is as fast as
+#' \code{fspr_flicc()}.
+#'
+#' @param fit A fitted \code{"flicc_tmb_fit"} object.
+#' @param brel Equilibrium biomass relative to the reference biomass
+#'   (e.g. \code{0.25}, \code{0.5}, \code{1}). Vectorised in the helpers.
+#' @param s Beverton-Holt steepness.
+#' @param sprref Reference SPR in percent, defining the reference biomass
+#'   (default \code{40}). Use \code{100 * SPRmsy} to express results relative
+#'   to Bmsy.
+#' @param spr SPR as a proportion (e.g. \code{fit$report$spr} or
+#'   \code{sprcur_flicc(fit)}); numeric or \code{FLQuant}.
+#' @param ... Further arguments passed to \code{fspr_flicc()}, e.g.
+#'   \code{nyears}, \code{input}.
+#'
+#' @return \code{fbrel_flicc()}: fishing mortality (scale set by \code{input}).
+#'   \code{sprbrel_flicc()}: SPR in percent giving \code{brel}.
+#'   \code{spr2brel()}: equilibrium biomass relative to the reference
+#'   biomass, truncated at zero (stock collapse).
+#'
+#' @examples
+#' \dontrun{
+#' sprbrel_flicc(c(1, 0.5, 0.25), s = 0.75)   # 40.0 24.2 16.2 (percent)
+#' fbrel_flicc(fit, brel = 0.25, s = 0.75)    # F at 0.25 * B40
+#' spr2brel(fit$report$spr, s = 0.75)         # status as B / B40
+#' }
+#' @export
+fbrel_flicc <- function(fit, brel = 0.25, s = 0.75, sprref = 40, ...) {
+  if (length(brel) != 1) stop("fbrel_flicc() takes a single 'brel'.")
+  fspr_flicc(fit, spr = sprbrel_flicc(brel, s = s, sprref = sprref), ...)
+}
+
+#' @rdname fbrel_flicc
+#' @export
+sprbrel_flicc <- function(brel, s = 0.75, sprref = 40) {
+  check_steep_flicc(s, sprref)
+  ref <- sprref / 100
+  bref <- 4 * s * ref - (1 - s)
+  100 * ((1 - s) + brel * bref) / (4 * s)
+}
+
+#' @rdname fbrel_flicc
+#' @export
+spr2brel <- function(spr, s = 0.75, sprref = 40) {
+  check_steep_flicc(s, sprref)
+  ref <- sprref / 100
+  bref <- 4 * s * ref - (1 - s)
+  b <- 4 * s * spr - (1 - s)
+  b[] <- pmax(as.numeric(b), 0)
+  b / bref
+}
+
+check_steep_flicc <- function(s, sprref) {
+  if (length(s) != 1 || !is.finite(s) || s <= 0.2 || s > 1) {
+    stop("'s' must be a single steepness value in (0.2, 1].")
+  }
+  if (4 * s * sprref / 100 <= 1 - s) {
+    stop("The reference SPR (", sprref, "%) is at or below the collapse SPR ",
+         "for s = ", s, " (", round(100 * (1 - s) / (4 * s), 1), "%).")
+  }
+  invisible(TRUE)
+}
 #' Yield-per-recruit from an FLicc fit
 #'
 #' @inheritParams pr_flicc

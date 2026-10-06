@@ -444,6 +444,14 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
 #' @param rel Logical. If \code{FALSE} (default), the output is on the absolute
 #'   SPR scale. If \code{TRUE}, SPR and fishing mortality are rescaled relative
 #'   to the SPR target and \code{Fspr}, respectively.
+#' @param s Optional Beverton-Holt steepness (e.g. \code{0.75}). If \code{NULL}
+#'   (default), status is SPR as before. If given, SPR is converted to
+#'   equilibrium spawning biomass, \code{B/B0 = (4 s SPR - (1 - s)) / (5 s - 1)}:
+#'   the stock slot and \code{Bspr} become \code{B/B0} (or \code{B/Btgt} with
+#'   \code{rel = TRUE}), and \code{Bpa} and \code{Blim} keep their fractions
+#'   of the target (\code{bpa / spr.btgt}, \code{blim / spr.btgt}) on the
+#'   biomass scale. This corrects the optimism of SPR-based status at low
+#'   stock size, where biomass falls faster than SPR. \code{Fspr} is unchanged.
 #'
 #' @return An object of class \code{FLStockR}.
 #'
@@ -479,13 +487,16 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
 #' fbar(stkr)
 #' refpts(stkr)
 #'
-#' stkr_rel <- flicc2FLStockR(fit rel = TRUE)
+#' stkr_rel <- flicc2FLStockR(fit, rel = TRUE)
+#' # status on the biomass scale under steepness 0.75
+#' stkr_s <- flicc2FLStockR(fit, rel = TRUE, s = 0.75)
 #' ssb(stkr_rel)
 #' fbar(stkr_rel)
 #' refpts(stkr_rel)
 #'
 #' @export
-flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FALSE) {
+flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FALSE,
+                           s = NULL) {
 
   stklen <- fit$stklen
 
@@ -505,11 +516,28 @@ flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FAL
 
   #eqs<- eqstklen(fit,F=c(mean(stk@m)),spr.tgt = spr.btgt*100)
   #spr0 <- an(eqs@refpts["SPR0"])
-  fspr <-  fspr_flicc(fit)
+  fspr <-  fspr_flicc(fit, spr = 100 * spr.btgt)
+
+  # Optional steepness correction: express status as equilibrium biomass
+  # under Beverton-Holt, B/B0 = (4 s SPR - (1 - s)) / (5 s - 1), instead of
+  # SPR. Bpa and Blim keep their fractions of the target on the biomass scale.
+  btgt <- spr.btgt
+  if (!is.null(s)) {
+    check_steep_flicc(s, 100 * spr.btgt)
+    b0rel <- function(x) {
+      v <- (4 * s * x - (1 - s)) / (5 * s - 1)
+      v[] <- pmax(as.numeric(v), 0)
+      v
+    }
+    B    <- b0rel(B)
+    btgt <- b0rel(spr.btgt)
+    bpa  <- btgt * bpa / spr.btgt
+    blim <- btgt * blim / spr.btgt
+  }
 
   if(rel){
   H <- H/ fspr
-  B <- B/ spr.btgt
+  B <- B/ btgt
   }
 
 
@@ -538,19 +566,20 @@ flicc2FLStockR <- function(fit, spr.btgt = 0.4, bpa = 0.2, blim = 0.1, rel = FAL
 
   stkr@refpts = FLPar(
     Fspr =fspr ,
-    Bspr = spr.btgt,
+    Bspr = btgt,
     Bpa= bpa,
-    Blim= blim,
+    Blim= blim
   )
   if(rel){
     stkr@refpts = FLPar(
       Fspr =1,
       Bspr = 1,
-      Bpa= bpa/spr.btgt,
-      Blim= blim/spr.btgt,
+      Bpa= bpa/btgt,
+      Blim= blim/btgt
     )
 
   }
+  attr(stkr, "steepness") <- s
 
   return(stkr)
 }
