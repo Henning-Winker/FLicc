@@ -254,6 +254,9 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(FM_min);
   DATA_SCALAR(FM_max);
   DATA_SCALAR(FMpen_sd);
+  // Upper-tail robustness for the composition likelihood
+  DATA_SCALAR(rob_eps);      // 0 = off
+  DATA_INTEGER(plus_bin);    // 0-based first pooled bin; -1 = off
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -532,65 +535,65 @@ Type objective_function<Type>::operator() ()
     }
 
     // Observation likelihood
-    if(obs_model == 1) {
-      // Negative binomial on ESS-scaled counts
-      for(int g = 0; g < ngear; g++) {
-        for(int l = 0; l < nlen; l++) {
+    // Optional robustness for the upper tail (both off by default):
+    //  - plus_bin >= 0 pools observed and predicted counts in bins
+    //    l >= plus_bin into bin plus_bin (tail compression);
+    //  - rob_eps > 0 mixes predicted proportions with a uniform:
+    //    p = (1 - rob_eps) * p + rob_eps / nb.
+    int nb = (plus_bin >= 0 && plus_bin < nlen) ? (plus_bin + 1) : nlen;
 
-          if(pred_gear(g) > Type(0)) {
-            mu(l,g) = obs_gear(g) * Cpred(l,g) / pred_gear(g) + Type(1e-12);
-          } else {
-            mu(l,g) = Type(1e-12);
-          }
-
-          nll -= dnbinom_phi(obs(l,y,g), mu(l,g), phi, 1);
+    for(int g = 0; g < ngear; g++) {
+      vector<Type> o(nb), p(nb);
+      o.setZero(); p.setZero();
+      for(int l = 0; l < nlen; l++) {
+        int k = (l < nb) ? l : (nb - 1);
+        o(k) += obs(l,y,g);
+        if(pred_gear(g) > Type(0)) p(k) += Cpred(l,g) / pred_gear(g);
+      }
+      if(rob_eps > Type(0)) {
+        for(int k = 0; k < nb; k++) {
+          p(k) = (Type(1) - rob_eps) * p(k) + rob_eps / Type(nb);
         }
       }
 
-    } else if(obs_model == 2) {
-      // Multinomial on within-gear compositions
-      // obs is already ESS-scaled by lfdess()
-      for(int g = 0; g < ngear; g++) {
+      if(obs_model == 1) {
+        // Negative binomial on ESS-scaled counts
+        for(int k = 0; k < nb; k++) {
+          Type muk = obs_gear(g) * p(k) + Type(1e-12);
+          if(k < nlen) mu(k,g) = muk;
+          nll -= dnbinom_phi(o(k), muk, phi, 1);
+        }
+
+      } else if(obs_model == 2) {
+        // Multinomial on within-gear compositions
+        // obs is already ESS-scaled by lfdess()
         if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
-          for(int l = 0; l < nlen; l++) {
-            Type p_pred = Cpred(l,g) / pred_gear(g);
+          for(int k = 0; k < nb; k++) {
+            Type p_pred = p(k);
             if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
-
-            nll -= obs(l,y,g) * log(p_pred);
+            nll -= o(k) * log(p_pred);
           }
         }
-      }
 
-    } else if(obs_model == 3) {
-      // Dirichlet-multinomial on within-gear compositions
-      // Here obs_gear(g) acts as fixed ESS / precision
-      for(int g = 0; g < ngear; g++) {
+      } else if(obs_model == 3) {
+        // Dirichlet-multinomial on within-gear compositions
+        // Here obs_gear(g) acts as fixed ESS / precision
         if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
-
           Type alpha0 = obs_gear(g);
-
-          vector<Type> alpha_l(nlen);
-          for(int l = 0; l < nlen; l++) {
-            Type p_pred = Cpred(l,g) / pred_gear(g);
-            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
-            alpha_l(l) = alpha0 * p_pred;
-          }
-
           nll -= lgamma(alpha0);
           nll += lgamma(obs_gear(g) + alpha0);
-
-          for(int l = 0; l < nlen; l++) {
-            Type yobs = obs(l,y,g);
-            Type a = alpha_l(l);
-
-            nll -= lgamma(yobs + a);
+          for(int k = 0; k < nb; k++) {
+            Type p_pred = p(k);
+            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
+            Type a = alpha0 * p_pred;
+            nll -= lgamma(o(k) + a);
             nll += lgamma(a);
           }
         }
-      }
 
-    } else {
-      error("Unknown obs_model");
+      } else {
+        error("Unknown obs_model");
+      }
     }
 
 

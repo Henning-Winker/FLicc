@@ -10,7 +10,7 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "mn", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
+    "mn", ngtg = 19, maxsd = 3, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
     NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
@@ -61,16 +61,31 @@ growth formulation.}
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
 
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
-  \code{pop_model = "gtg"}. Default is 13.\}
+  \code{pop_model = "gtg"}. Default is 19 (13 before FLicc 1.0.7).\}
 
 \\item\{\code{maxsd}\}\{Range (in standard deviations) for GTG Linf
-  distribution. Default is 2.\}
+  distribution. Default is 3 (2 before FLicc 1.0.7, as in LBSPR). The
+  groups cover \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the
+  actual Linf spread (about 0.88 * CVL at 2, 0.99 * CVL at 3) and caps
+  the largest length the model can produce. Use \code{maxsd = 2,
+  ngtg = 13} to reproduce earlier fits.\}
 
 \\item\{\code{Mpow}\}\{Optional length-dependent mortality scaling
   exponent (GTG only). Default is 0.\}
 
 \\item\{\code{prior_sigmaF}\}\{Prior for annual fishing mortality variation
   (mean, sd, use flag).\}
+
+\\item\{\code{rob_eps}\}\{Robustness of the composition likelihood to
+  sparse or outlying bins. Predicted proportions become
+  \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
+  few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).\}
+
+\\item\{\code{Lplus}\}\{Optional plus-group length. Observed and predicted
+  counts in bins with lower bound \code{>= Lplus} are pooled into one
+  bin before the likelihood (tail compression). Reduces the influence
+  of the binning and sampling of the largest fish. Default \code{NULL}
+  (off). Predicted compositions in the report stay unpooled.\}
 
 \\item\{\code{linf.sd, Mk.sd, CVL.sd}\}\{Optional penalties on life-history
   parameters. Supplying one makes that parameter estimated (otherwise it

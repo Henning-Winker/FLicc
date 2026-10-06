@@ -147,8 +147,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   Galpha_init <- 1 / CVL_init^2
 
   # GTG controls
-  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 13L
-  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 2
+  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 19L
+  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 3
   Mpow  <- if (!is.null(settings$Mpow))  as.numeric(settings$Mpow)  else 0
 
   # GTG distribution over Linf on a standardised grid. The Linf groups are
@@ -164,6 +164,40 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # non-positive boundary is replaced by half the first bin width.
   LBins    <- c(LLB, tail(LLB, 1) + tail(step, 1))
   LBins_mk <- ifelse(LBins > 0, LBins, step[1] / 2)
+
+  # Upper-tail robustness for the composition likelihood
+  rob_eps <- if (!is.null(settings$rob_eps)) as.numeric(settings$rob_eps) else 0
+  if (length(rob_eps) != 1 || !is.finite(rob_eps) || rob_eps < 0 || rob_eps >= 1) {
+    stop("settings$rob_eps must be a single value in [0, 1).")
+  }
+  plus_bin <- -1L
+  if (!is.null(settings$Lplus)) {
+    Lplus <- as.numeric(settings$Lplus)
+    idx <- which(LLB >= Lplus)
+    if (length(idx) == 0) {
+      warning("settings$Lplus = ", Lplus, " is above the largest length bin; no plus group used.")
+    } else {
+      plus_bin <- as.integer(min(idx) - 1L)   # 0-based for C++
+    }
+  }
+
+  # Warn when observations fall in bins the GTG model cannot reach
+  # (lower bound at or beyond the largest GTG Linf at the input values).
+  if (pop_model == "gtg") {
+    maxLinf <- Linf_init * (1 + maxsd * CVL_init)
+    beyond  <- LLB >= maxLinf
+    if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
+    n_beyond <- sum(obs[beyond, , , drop = FALSE], na.rm = TRUE)
+    if (n_beyond > 0) {
+      warning(sprintf(paste0(
+        "%s observed fish (%.1f%% of the total) lie in length bins at or above the ",
+        "largest GTG Linf (%.1f = Linf * (1 + maxsd * CVL)); the model gives them ",
+        "near-zero probability, which can drive CVL and status estimates. ",
+        "Consider a larger maxsd, settings$Lplus or settings$rob_eps."),
+        format(round(n_beyond, 1)), 100 * n_beyond / sum(obs, na.rm = TRUE), maxLinf),
+        call. = FALSE)
+    }
+  }
 
 
   prior_mu <- numeric()
@@ -207,6 +241,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     recP       = as.numeric(recP),
     LBins_mk   = as.numeric(LBins_mk),
     Mpow       = as.numeric(Mpow),
+    rob_eps    = as.numeric(rob_eps),
+    plus_bin   = as.integer(plus_bin),
     sel_type   = as.integer(sel_type),
     sm_start   = as.integer(sm_start),
     sm_n       = as.integer(sm_n),
@@ -432,13 +468,15 @@ fiticc_core <- function(lfd, stklen,
     catch.sd = 0.05,
     pop_model = "gtg",
     obs_model = "mn",
-    ngtg = 13,
-    maxsd = 2,
+    ngtg = 19,
+    maxsd = 3,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
     Mk.sd = NULL,
     CVL.sd = NULL,
+    rob_eps = 0,
+    Lplus = NULL,
     FM_min = 0.05,
     FM_max = 4,
     FMpen_sd = 0.2
@@ -728,16 +766,31 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
-#'       \code{pop_model = "gtg"}. Default is 13.}
+#'       \code{pop_model = "gtg"}. Default is 19 (13 before FLicc 1.0.7).}
 #'
 #'     \item{\code{maxsd}}{Range (in standard deviations) for GTG Linf
-#'       distribution. Default is 2.}
+#'       distribution. Default is 3 (2 before FLicc 1.0.7, as in LBSPR). The
+#'       groups cover \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the
+#'       actual Linf spread (about 0.88 * CVL at 2, 0.99 * CVL at 3) and caps
+#'       the largest length the model can produce. Use \code{maxsd = 2,
+#'       ngtg = 13} to reproduce earlier fits.}
 #'
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
 #'
 #'     \item{\code{prior_sigmaF}}{Prior for annual fishing mortality variation
 #'       (mean, sd, use flag).}
+#'
+#'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
+#'       sparse or outlying bins. Predicted proportions become
+#'       \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
+#'       few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).}
+#'
+#'     \item{\code{Lplus}}{Optional plus-group length. Observed and predicted
+#'       counts in bins with lower bound \code{>= Lplus} are pooled into one
+#'       bin before the likelihood (tail compression). Reduces the influence
+#'       of the binning and sampling of the largest fish. Default \code{NULL}
+#'       (off). Predicted compositions in the report stay unpooled.}
 #'
 #'     \item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
 #'       parameters. Supplying one makes that parameter estimated (otherwise it
@@ -823,8 +876,8 @@ fiticc <- function(lfd, stklen,
                      catch.sd = 0.05,
                      pop_model = "gtg",
                      obs_model = "mn",
-                     ngtg = 13,
-                     maxsd = 2,
+                     ngtg = 19,
+                     maxsd = 3,
                      Mpow = 0,
                      prior_sigmaF = c(log(0.5), 0.3, 1),
                      linf.sd = NULL,
