@@ -1,0 +1,272 @@
+---
+title: "FLicc 1.0.6 – 1.0.9: Growth groups, robust likelihood, biomass-scale status and fast reference points"
+author: "Henning Winker (FAO-NFI)"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    self_contained: true
+    toc: true
+    toc_float: true
+    number_sections: true
+    fig_width: 6.5
+    fig_height: 4.5
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.align = "center",
+  fig.width = 7,
+  fig.height = 4.5,
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+# Overview
+
+This document describes the changes to `FLicc` between versions 1.0.5 and 1.0.9. All examples run on the `alfonsino` example data with the GTG population model, so every number shown here is produced by the current code.
+
+| Version | Change | Default behaviour changed? |
+|---|---|---|
+| 1.0.6 | GTG survival now uses the estimated Linf, M/K and CVL | Only for fits with `linf.sd`, `Mk.sd` or `CVL.sd` |
+| 1.0.7 | Robust likelihood options `rob_eps` and `Lplus`; warning for unreachable fish; GTG defaults `maxsd = 3`, `ngtg = 19` | Yes: GTG tails (use `maxsd = 2, ngtg = 13` for earlier results) |
+| 1.0.8 | Steepness option `flicc2FLStockR(s = )`; `spr2brel()`, `sprbrel_flicc()`, `fbrel_flicc()` | No (`s = NULL` by default) |
+| 1.0.9 | Per-recruit calculations in TMB; Fspr reported by the fit (`spr_ref`); `brp_tmb_flicc()` | No (same results, much faster) |
+
+```{r data}
+library(FLicc)
+
+data("alfonsino")
+lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)),
+                  unit = "cm", midL = FALSE)
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
+               a = 0.004721956 / 1000, b = 3.146168)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+sel_fun <- c("dsnormal", "logistic")
+cbg     <- c(0.7, 0.3)
+base    <- list(prior_sigmaF = c(log(0.5), 0.3, 1), CVL = 0.1)
+
+# helper: fit with the base settings plus any extra settings
+fitf <- function(...) fiticc(lfd, stklen, sel_fun = sel_fun,
+                             catch_by_gear = cbg, settings = c(base, list(...)))
+lastspr <- function(fit) round(tail(c(fit$report$spr), 1), 4)
+```
+
+# GTG survival uses the estimated life-history parameters (1.0.6)
+
+## What changed
+
+For `pop_model = "gtg"`, the Linf of each growth-type group (GTG), the recruitment weights and the M/K matrix were previously built in R from the **input** values and passed to TMB as fixed data. With `linf.sd` or `Mk.sd`, Linf and M/K were estimated but only reached selectivity scaling and the F/M penalty, not GTG survival, and CVL could not be estimated for GTG at all.
+
+Now the template builds them from the current parameters:
+
+$$L_{\infty,g} = L_\infty\,(1 + CV_L\, z_g), \qquad M/K(L) = M_k \left(\frac{L_\infty}{L}\right)^{M_{pow}}$$
+
+on a fixed standardised grid $z_g$. Priors on Linf, M/K and CVL (`linf.sd`, `Mk.sd`, `CVL.sd`) now act on the population model, and CVL is estimated for GTG when `CVL.sd` is given (as for the gamma model).
+
+```{r gtg-est}
+fit.fix <- fitf()                                           # Linf, M/K, CVL fixed
+fit.est <- fitf(linf.sd = 0.1, Mk.sd = 0.2, CVL.sd = 0.2)    # estimated
+
+rbind(fixed     = c(Linf = c(fit.fix$report$lhpar["linf"]), Mk = c(fit.fix$report$lhpar["Mk"]),
+                    CVL = c(fit.fix$report$pars["CVL"]), SPR = lastspr(fit.fix)),
+      estimated = c(Linf = c(fit.est$report$lhpar["linf"]), Mk = c(fit.est$report$lhpar["Mk"]),
+                    CVL = c(fit.est$report$pars["CVL"]), SPR = lastspr(fit.est)))
+```
+
+**GTG fits made before 1.0.6 with `linf.sd`, `Mk.sd` or `CVL.sd` should be rerun**: the life-history estimates they reported did not affect SPR. Fits with these parameters fixed (the default) are unchanged.
+
+Two smaller fixes came with this: the GTG length floors use `CppAD::CondExpLe` so they remain correct when the GTG Linfs depend on parameters, and a zero lower bin boundary no longer gives infinite M/K when `Mpow > 0`.
+
+# GTG tails: `maxsd` and `ngtg` (1.0.7)
+
+## How the GTG represents growth variation
+
+Each GTG is a single growth curve with no variation of its own; all variation comes from the spread of Linf across groups. `CVL` sets the scale ($\sigma = CV_L \cdot L_\infty$) and `maxsd` how far out the outermost groups sit, in units of $\sigma$ (λ in Hordyk et al. 2016, fixed at 2 in LBSPR). `ngtg` only sets how finely that range is divided.
+
+Cutting the normal distribution at ±`maxsd` makes the actual spread smaller than `CVL` and caps the largest length the model can produce at $L_\infty(1 + maxsd \cdot CV_L)$:
+
+```{r maxsd-table, echo = FALSE}
+trunc_sd <- function(a) sqrt(1 - 2 * a * dnorm(a) / (2 * pnorm(a) - 1))
+knitr::kable(data.frame(maxsd = c(1, 1.5, 2, 2.5, 3),
+                        `actual CV / CVL` = round(trunc_sd(c(1, 1.5, 2, 2.5, 3)), 3),
+                        `largest Linf at CVL 0.1 (x Linf)` = 1 + 0.1 * c(1, 1.5, 2, 2.5, 3),
+                        check.names = FALSE),
+             caption = "Effect of truncating the GTG Linf distribution (continuous normal).")
+```
+
+With the former default `maxsd = 2`, a CVL of 0.10 was effectively about 0.088–0.091, and SPR depends strongly on that spread. The defaults are now `maxsd = 3`, `ngtg = 19`, so CVL is effectively the actual spread and the cap moves out.
+
+```{r maxsd-fits}
+fit.legacy <- fitf(maxsd = 2, ngtg = 13)      # LBSPR / FLicc <= 1.0.6
+fit.ng30   <- fitf(maxsd = 3, ngtg = 30)
+
+cv_gtg <- function(fit) {                     # actual CV of the GTG Linf distribution
+  L <- fit$report$gtgLinfs; w <- fit$report$recP
+  sqrt(sum(w * (L - sum(w * L))^2)) / sum(w * L)
+}
+data.frame(setting = c("maxsd 3, ngtg 19 (default)", "maxsd 2, ngtg 13 (legacy)", "maxsd 3, ngtg 30"),
+           actual_CV = round(sapply(list(fit.fix, fit.legacy, fit.ng30), cv_gtg), 3),
+           SPR = sapply(list(fit.fix, fit.legacy, fit.ng30), lastspr))
+```
+
+`ngtg` hardly matters beyond about 9–13 groups; `maxsd` acts through the actual spread. **To reproduce earlier assessments or LBSPR, use `maxsd = 2, ngtg = 13`.**
+
+# Warning for fish beyond the largest GTG Linf (1.0.7)
+
+The GTG model cannot produce fish longer than its largest group's Linf, so observations in bins at or above it get near-zero probability. A few such fish can dominate the likelihood, create steps in CVL profiles and drive status estimates. `fiticc()` now warns when this happens:
+
+```{r warn}
+w <- NULL
+fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7),
+  warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
+cat(w[grepl("largest GTG Linf", w)])
+```
+
+# Robust likelihood options (1.0.7)
+
+Two options reduce the influence of the largest fish on the composition likelihood. Both are off by default and work with the `nb`, `mn` and `dm` observation models.
+
+* **`rob_eps`** mixes the predicted proportions with a small uniform probability,
+  $$\tilde p_l = (1 - \varepsilon)\, p_l + \varepsilon / n_{bins},$$
+  which bounds the cost of a few fish in bins the model barely reaches.
+* **`Lplus`** pools observed and predicted counts in all bins with lower bound $\geq$ `Lplus` into one plus group before the likelihood (tail compression, as in SS3). The likelihood then only sees how many fish are at or above `Lplus`, not how they fall into bins. Predicted compositions in the report and plots stay unpooled.
+
+```{r robust}
+rob <- list(
+  dm              = fitf(obs_model = "dm"),
+  rob0.001        = fitf(obs_model = "dm", rob_eps = 0.001),
+  rob0.01         = fitf(obs_model = "dm", rob_eps = 0.01),
+  plus45          = fitf(obs_model = "dm", Lplus = 45),
+  plus45_rob0.001 = fitf(obs_model = "dm", Lplus = 45, rob_eps = 0.001))
+
+data.frame(nll = sapply(rob, function(f) round(f$opt$objective, 2)),
+           SPR = sapply(rob, lastspr),
+           Fspr40 = sapply(rob, function(f) round(fspr_flicc(f), 4)))
+```
+
+```{r robust-plot, fig.height = 4}
+plot_spr(rob)
+```
+
+With well-behaved data, as here, the options change results little; they are insurance against sparse or outlying upper-tail bins rather than a tuning device. Guidance:
+
+* `rob_eps = 0.001` is a safe value; larger values (0.01) start to affect fitted selectivity and F even with clean data.
+* Choose `Lplus` where counts become sparse, typically around Linf.
+* Compare negative log-likelihoods only between fits with the same `Lplus`: pooling changes the data the likelihood sees.
+
+# Biomass-scale status under steepness (1.0.8)
+
+## Why SPR/SPR40 overstates depleted stocks
+
+Under Beverton–Holt recruitment with steepness $s$, equilibrium spawning biomass is linear in SPR but does not pass through zero:
+
+$$\frac{B}{B_0} = \frac{4 s\, SPR - (1 - s)}{5 s - 1}$$
+
+Recruitment declines as SPR falls, so biomass falls faster than SPR. Status expressed as SPR/SPR40 is therefore optimistic at low stock size, and SPR-based limits such as SPR10 sit far below a quarter of the biomass target.
+
+```{r steep-table}
+s <- 0.75
+data.frame(SPR = c(0.40, 0.30, 0.20, 0.15, 0.10),
+           `SPR/SPR40` = c(0.40, 0.30, 0.20, 0.15, 0.10) / 0.4,
+           `B/B40` = round(spr2brel(c(0.40, 0.30, 0.20, 0.15, 0.10), s = s), 3),
+           check.names = FALSE)
+sprbrel_flicc(c(1, 0.5, 0.25), s = s)     # SPR (%) giving B/B40 = 1, 0.5, 0.25
+```
+
+## Functions
+
+* `spr2brel(spr, s, sprref = 40)` converts SPR to equilibrium biomass relative to the biomass at a reference SPR (use `100 * SPRmsy` for B/Bmsy).
+* `sprbrel_flicc(brel, s, sprref = 40)` gives the SPR (%) at which biomass is `brel` times the reference.
+* `fbrel_flicc(fit, brel, s, sprref = 40)` gives the F at which biomass is `brel` times the reference; it is as fast as `fspr_flicc()`.
+* `flicc2FLStockR(fit, ..., s = NULL)`: with `s` given, the stock slot and `Bspr` become equilibrium biomass (B/B0, or B/Btgt with `rel = TRUE`), and `Bpa` and `Blim` keep their fractions of the target on the biomass scale. `Fspr` is unchanged. With `s = NULL` the behaviour is as before.
+
+```{r steep-fit}
+c(F_at_0.25_B40 = fbrel_flicc(fit.fix, brel = 0.25, s = s),
+  Fspr10 = fspr_flicc(fit.fix, spr = 10))
+
+stk.spr <- flicc2FLStockR(fit.fix, rel = TRUE)           # SPR / SPR40
+stk.b   <- flicc2FLStockR(fit.fix, rel = TRUE, s = s)    # B / B40 under s = 0.75
+rbind(`SPR/SPR40` = round(tail(c(stk.spr@stock), 5), 3),
+      `B/B40`     = round(tail(c(stk.b@stock), 5), 3))
+```
+
+```{r steep-plot, fig.height = 5}
+plot_LBAdvice(stk.b)
+```
+
+The conversion is an equilibrium measure. During a recovery, actual biomass lags behind, so some difference to dynamic B/Bmsy remains even after the correction.
+
+# Fast reference points in TMB (1.0.9)
+
+## What changed
+
+The R per-recruit functions ran many population recursions in R with FLQuant overhead: `fspr_flicc()` recomputed the unfished state at every `uniroot()` step, and `prbrp_flicc()` looped over 101 F values. This slowed `flicc2FLStockR()`, `LBIspr()` and `eqstklen()`, which are used repeatedly in simulation testing and `flicc.sa()`.
+
+* The TMB template has an optional per-recruit block, evaluated only in TMB's double evaluation (`obj$report()`) and never during optimisation. It computes numbers, catch and F at length, YPR and SBPR for a vector of F (or F/M), and Fspr for target SPRs, at the fitted parameters, for both population models.
+* **`settings$spr_ref`** (default `40`, may be a vector): the fit reports `fit$report$Fspr` and per-recruit numbers-at-length at Fspr. `fspr_flicc()` returns the stored value for these targets, and `LBIspr()` and `flicc2FLStockR()` need no per-recruit computation at the target.
+* **`brp_tmb_flicc()`** does the same for any F values or targets in one TMB call. `spr_flicc()`, `pr_flicc()`, `nf_flicc()` and `prbrp_flicc()` (and through them `eqstklen()`) use it.
+* The previous R implementation remains as a fallback for non-default options (`Sel`, `scale_sel = FALSE`), for fits from earlier versions, and with `options(FLicc.brp_tmb = FALSE)`.
+
+```{r speed-fit}
+fit.sp <- fitf(spr_ref = c(40, 20, 10))
+fit.sp$report$Fspr
+
+b <- brp_tmb_flicc(fit.sp, Fseq = c(0, 0.05, 0.1, 0.2), spr = c(40, 30))
+b$Fspr                       # F at SPR 40% and 30%
+round(b$SBPR / b$SBPR0, 4)   # SPR at the F values
+```
+
+## Speed and agreement with the previous implementation
+
+```{r speed-compare}
+timeit <- function() {
+  t <- c(fspr40 = system.time(a1 <- fspr_flicc(fit.sp, spr = 40))[["elapsed"]],
+         prbrp  = system.time(a2 <- prbrp_flicc(fit.sp))[["elapsed"]],
+         eqstklen = system.time(a3 <- eqstklen(fit.sp, s = s))[["elapsed"]],
+         LBIspr = system.time(a4 <- LBIspr(fit.sp))[["elapsed"]],
+         flicc2FLStockR = system.time(a5 <- flicc2FLStockR(fit.sp))[["elapsed"]])
+  list(t = t, v = list(Fspr40 = a1, SBPR = c(a2$SBPR), refpts = c(a3@refpts)))
+}
+options(FLicc.brp_tmb = FALSE); old <- timeit()     # previous R implementation
+options(FLicc.brp_tmb = TRUE);  new <- timeit()     # TMB
+
+knitr::kable(rbind(`old (s)` = old$t, `new (s)` = new$t,
+                   speedup = round(old$t / pmax(new$t, 1e-3))),
+             caption = "Elapsed time on this machine (seconds).")
+
+reldiff <- function(a, b) max(abs(a - b) / pmax(abs(b), 1e-12), na.rm = TRUE)
+sapply(names(new$v), function(k) signif(reldiff(new$v[[k]], old$v[[k]]), 3))
+```
+
+Per-recruit numbers, catch, YPR and SBPR agree with the previous implementation to rounding error. Fspr differs only by the tolerance at which `uniroot()` stopped in the old code (up to about 4e-4 relative); the new solve is exact. Reported Fspr has no standard error from `sdreport()`, because it is computed outside the AD tape.
+
+# Background: the growth-phase proposal
+
+The starting point for this work was a proposal to add variation in the growth origin ("growth phase") to correct overly narrow predicted length distributions near the origin under year-round sampling. Mapping it against the code showed:
+
+* Both FLicc population models are equilibrium, per-recruit, length-structured models that integrate over a continuum of ages. Pulse recruitment sampled in proportion to catch through the year averages to the same equilibrium length composition, so a growth-phase term has almost no effect on the predicted catch length composition (maximum difference of order 1e-5 in simulation). The SS3 practice of inflating CV at L1 compensates for discrete annual age classes, which the GTG model does not have.
+* Variation in growth rate (K), unlike timing, does persist along the length path and matters; the GTG's CVL then acts as an effective total growth variation.
+* When data come from a model without persistent growth groups (fixed CV of length at age), the GTG model tends to underestimate F and overestimate SPR at high F, as reported by Hordyk et al. (2016, Fig. 5).
+* SPR-based status is optimistic at low stock size relative to biomass (Section 6), which explains part of the apparent bias against operating-model B/Bmsy.
+
+The remaining development candidates are a Linf × K GTG and a review of other parameter-dependent `if()` statements in the template.
+
+# Reproducing earlier fits
+
+```{r legacy, eval = FALSE}
+# FLicc <= 1.0.6 GTG defaults
+fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+              settings = list(maxsd = 2, ngtg = 13))
+# previous R per-recruit code (results identical apart from uniroot tolerance)
+options(FLicc.brp_tmb = FALSE)
+```
+
+# References
+
+Hordyk, A.R., Ono, K., Prince, J.D. and Walters, C.J. (2016). A simple length-structured model based on life history ratios and incorporating size-dependent selectivity: application to spawning potential ratios for data-poor stocks. *Canadian Journal of Fisheries and Aquatic Sciences* 73: 1787–1799. https://doi.org/10.1139/cjfas-2015-0422
+
+Kristensen, K., Nielsen, A., Berg, C.W., Skaug, H. and Bell, B.M. (2016). TMB: Automatic Differentiation and Laplace Approximation. *Journal of Statistical Software* 70(5): 1–21. https://doi.org/10.18637/jss.v070.i05
