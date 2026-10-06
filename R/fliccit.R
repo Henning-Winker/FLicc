@@ -562,6 +562,68 @@ flicc_refpars <- function(fit, nyears = 1, scale_sel = TRUE) {
   return(out)
 }
 
+#' Fast per-recruit quantities from an FLicc fit, computed in TMB
+#'
+#' Evaluates numbers, catch and fishing mortality at length, yield and
+#' spawning biomass per recruit for a vector of fishing levels, and the F
+#' giving target SPR values, in one compiled TMB evaluation at the fitted
+#' parameters (double precision, no AD taping). It reproduces
+#' \code{pr_flicc()} / \code{spr_flicc()} for \code{Sel = NULL} and
+#' \code{scale_sel = TRUE}, and is used internally by \code{fspr_flicc()},
+#' \code{spr_flicc()}, \code{pr_flicc()}, \code{nf_flicc()} and
+#' \code{prbrp_flicc()} (so also \code{eqstklen()}, \code{LBIspr()} and
+#' \code{flicc2FLStockR()}). Set \code{options(FLicc.brp_tmb = FALSE)} to use
+#' the previous R implementation instead.
+#'
+#' @param fit A fitted \code{"flicc_tmb_fit"} object (FLicc >= 1.0.9).
+#' @param Fseq Numeric vector of apical F (or F/M if \code{FM = TRUE}).
+#' @param spr Numeric vector of target SPR in percent for Fspr.
+#' @param nyears Number of terminal years averaged.
+#' @param FM Logical; \code{Fseq} and the returned Fspr are F/M multipliers
+#'   of natural mortality at length.
+#' @param spawn_time Spawning time fraction.
+#' @param Fmax Upper bound of the Fspr search.
+#'
+#' @return A list with \code{F}, \code{SBPR0}, \code{SBPR}, \code{YPR},
+#'   matrices \code{N}, \code{C}, \code{Fl} (length x F) and \code{Fspr}
+#'   (\code{NA} if not reached), or \code{NULL} if the fit cannot be
+#'   evaluated this way (e.g. fits from earlier FLicc versions).
+#' @export
+brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
+                          FM = FALSE, spawn_time = 0, Fmax = 5) {
+  td <- fit$tmb_data
+  if (is.null(fit$obj) || is.null(fit$opt$par) || is.null(td$gtg_z)) return(NULL)
+  k <- as.numeric(fit$stklen@lhpar["k"])
+  td$brp_F       <- as.numeric(Fseq)
+  td$brp_spr     <- as.numeric(spr) / 100
+  td$brp_nyears  <- as.integer(nyears)
+  td$brp_k       <- k
+  td$brp_FMscale <- as.integer(isTRUE(FM))
+  td$brp_spawn   <- as.numeric(spawn_time)
+  td$brp_Fmax    <- as.numeric(Fmax)
+  pl <- fit$obj$env$parList(fit$opt$par)
+  obj <- TMB::MakeADFun(data = td, parameters = pl, DLL = fit$obj$env$DLL,
+                        type = "Fun", silent = TRUE)
+  rep <- obj$report()
+  Fspr <- as.numeric(rep$brp_Fspr)
+  Fspr[Fspr < 0] <- NA_real_
+  list(F = as.numeric(Fseq), SBPR0 = rep$brp_SBPR0,
+       SBPR = as.numeric(rep$brp_SBPR), YPR = as.numeric(rep$brp_YPR),
+       N = rep$brp_N, C = rep$brp_C, Fl = rep$brp_Fl, Fspr = Fspr)
+}
+
+brp_fast_ok <- function(fit, Sel = NULL, scale_sel = TRUE) {
+  is.null(Sel) && isTRUE(scale_sel) && !isFALSE(getOption("FLicc.brp_tmb", TRUE)) &&
+    !is.null(fit$obj) && !is.null(fit$tmb_data$gtg_z) && !is.null(fit$report$M)
+}
+
+# FLQuant template with the same dimensions as calc_Z_l() output
+brp_tmpl_flicc <- function(fit, nyears = 1) {
+  years <- dimnames(fit$report$N)$year
+  years <- tail(years, min(length(years), nyears))
+  FLCore::yearMeans(fit$report$M[, years])
+}
+
 #' Equilibrium numbers-at-length from an FLicc fit
 #'
 #' Computes equilibrium numbers-at-length from a fitted
@@ -593,9 +655,20 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
                      return_surv = FALSE,
                      R0 = 1000) {
 
-  ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
-
   fin <- resolve_f_input_flicc(F = F, FM = FM, default_FM = 1)
+
+  if (!return_surv && brp_fast_ok(fit, Sel, scale_sel)) {
+    b <- brp_tmb_flicc(fit, Fseq = if (is.null(fin$F)) fin$FM else fin$F,
+                       nyears = nyears, FM = is.null(fin$F))
+    if (!is.null(b)) {
+      out <- brp_tmpl_flicc(fit, nyears)
+      out[] <- b$N[, 1] * R0 / 1000
+      FLCore::units(out) <- "1000"
+      return(out)
+    }
+  }
+
+  ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
 
   if (!is.null(Sel)) {
     ref$Sel <- as.numeric(Sel)
@@ -751,10 +824,26 @@ pr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
                      spawn_time = 0,
                      R0 = 1000) {
 
-  ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
-
-
   fin <- resolve_f_input_flicc(F = F, FM = FM, default_FM = 1)
+
+  if (brp_fast_ok(fit, Sel, scale_sel)) {
+    b <- brp_tmb_flicc(fit, Fseq = if (is.null(fin$F)) fin$FM else fin$F,
+                       nyears = nyears, FM = is.null(fin$F),
+                       spawn_time = spawn_time)
+    if (!is.null(b)) {
+      sc <- R0 / 1000
+      Mq <- brp_tmpl_flicc(fit, nyears)
+      Fq <- Mq; Fq[] <- b$Fl[, 1]
+      Zq <- Mq + Fq
+      Nl <- Mq; Nl[] <- b$N[, 1] * sc; FLCore::units(Nl) <- "1000"
+      Cn <- Mq; Cn[] <- b$C[, 1] * sc; FLCore::units(Cn) <- "1000"
+      ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
+      return(list(YPR = b$YPR * sc, SBPR = b$SBPR * sc, Cn = Cn, N = Nl,
+                  Z = Zq, F = Fq, Len = ref$Len, year = ref$year, R0 = R0))
+    }
+  }
+
+  ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
 
   if (!is.null(Sel)) {
     ref$Sel <- as.numeric(Sel)
@@ -822,11 +911,17 @@ spr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
                       Sel = NULL, scale_sel = TRUE,
                       spawn_time = 0) {
 
-  ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
-
-
-
   fin <- resolve_f_input_flicc(F = F, FM = FM)
+
+  if (brp_fast_ok(fit, Sel, scale_sel)) {
+    b <- brp_tmb_flicc(fit, Fseq = if (is.null(fin$F)) fin$FM else fin$F,
+                       nyears = nyears, FM = is.null(fin$F),
+                       spawn_time = spawn_time)
+    if (!is.null(b)) {
+      if (!is.finite(b$SBPR0) || b$SBPR0 <= 0) return(NA_real_)
+      return(b$SBPR / b$SBPR0)
+    }
+  }
 
   sb0 <- pr_flicc(
     fit = fit,
@@ -883,6 +978,18 @@ fspr_flicc <- function(fit, spr = 40, nyears = 1,
                        input = c( "F","FM")) {
 
   input <- match.arg(input)
+
+  if (brp_fast_ok(fit, Sel, scale_sel)) {
+    b <- brp_tmb_flicc(fit, spr = spr, nyears = nyears, FM = input == "FM",
+                       spawn_time = spawn_time, Fmax = interval[2])
+    if (!is.null(b)) {
+      if (anyNA(b$Fspr)) {
+        stop("Target SPR not reached for F in (1e-8, ", interval[2], ").")
+      }
+      return(b$Fspr)
+    }
+  }
+
   target <- spr / 100
 
   fobj <- function(x) {

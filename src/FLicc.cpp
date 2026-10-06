@@ -257,6 +257,15 @@ Type objective_function<Type>::operator() ()
   // Upper-tail robustness for the composition likelihood
   DATA_SCALAR(rob_eps);      // 0 = off
   DATA_INTEGER(plus_bin);    // 0-based first pooled bin; -1 = off
+  // Per-recruit reference points at the estimates (evaluated only in double
+  // mode, i.e. obj$report(), and only when requested; never during fitting)
+  DATA_VECTOR(brp_F);        // apical F (or F/M if brp_FMscale) values
+  DATA_VECTOR(brp_spr);      // SPR targets (proportions) for Fspr
+  DATA_INTEGER(brp_nyears);  // terminal years averaged
+  DATA_SCALAR(brp_k);        // von Bertalanffy k (annual scale)
+  DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
+  DATA_SCALAR(brp_spawn);    // spawning time fraction
+  DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -597,6 +606,117 @@ Type objective_function<Type>::operator() ()
     }
 
 
+  }
+
+
+  // --- PER-RECRUIT REFERENCE POINTS (double mode only, on request) ---
+  // Mirrors the R functions pr_flicc() / spr_flicc(): terminal-year averages
+  // of joint selectivity (scaled to apical 1), M, maturity and weight;
+  // numbers per recruit scaled to the first bin of the unfished state;
+  // Baranov catch; SBPR = sum(N * mat * exp(-Z * spawn) * w).
+  if(isDouble<Type>::value && (brp_F.size() > 0 || brp_spr.size() > 0)) {
+    int ny = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
+    int y0 = nyear - ny;
+    vector<Type> sA(nlen), Ms(nlen), MA(nlen), matA(nlen), wtA(nlen);
+    sA.setZero(); Ms.setZero(); matA.setZero(); wtA.setZero();
+    for(int l = 0; l < nlen; l++) {
+      for(int y = y0; y < nyear; y++) {
+        sA(l)   += sel_joint(l, y) / Type(ny);
+        Ms(l)   += Mscaler(l, y)   / Type(ny);
+        matA(l) += mat(l, y)       / Type(ny);
+        wtA(l)  += wt(l, y)        / Type(ny);
+      }
+    }
+    Type smax = Type(0);
+    for(int l = 0; l < nlen; l++) if(sA(l) > smax) smax = sA(l);
+    for(int l = 0; l < nlen; l++) {
+      if(smax > Type(0)) sA(l) = sA(l) / smax;
+      MA(l) = Mk * brp_k * Ms(l);
+    }
+
+    // numbers-at-length per recruit (unscaled) for fishing level x
+    auto popN = [&](Type x, vector<Type>& Fl, vector<Type>& Zl) {
+      for(int l = 0; l < nlen; l++) {
+        Fl(l) = (brp_FMscale == 1) ? x * MA(l) * sA(l) : x * sA(l);
+        Zl(l) = MA(l) + Fl(l);
+      }
+      vector<Type> NI(nlen);
+      if(pop_model == 1) {
+        vector<Type> Zk(nlen);
+        for(int l = 0; l < nlen; l++) Zk(l) = Zl(l) / brp_k;
+        NI = pop_len_glq(node, quad_wt, LLB, Zk, Galpha, Gbeta);
+      } else {
+        matrix<Type> ZK(nlen + 1, ngtg);
+        for(int g = 0; g < ngtg; g++) {
+          for(int l = 0; l < nlen; l++) {
+            ZK(l, g) = MKMat(l, g) * Ms(l) + Fl(l) / brp_k;
+          }
+          ZK(nlen, g) = MKMat(nlen, g) * Ms(nlen - 1) + Fl(nlen - 1) / brp_k;
+        }
+        NI = pop_len_gtg(LLB, gtgLinfs, ZK, recP);
+      }
+      return NI;
+    };
+
+    vector<Type> Fl(nlen), Zl(nlen);
+    vector<Type> NI0 = popN(Type(0), Fl, Zl);
+    Type scale0 = NI0(0);
+    Type brp_SBPR0 = Type(0);
+    for(int l = 0; l < nlen; l++) {
+      brp_SBPR0 += NI0(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+    }
+    auto sbpr = [&](Type x) {
+      vector<Type> NI = popN(x, Fl, Zl);
+      Type sb = Type(0);
+      for(int l = 0; l < nlen; l++) {
+        sb += NI(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+      }
+      return sb;
+    };
+
+    int nF = brp_F.size();
+    matrix<Type> brp_N(nlen, nF), brp_C(nlen, nF), brp_Fl(nlen, nF);
+    vector<Type> brp_SBPR(nF), brp_YPR(nF);
+    for(int i = 0; i < nF; i++) {
+      vector<Type> NI = popN(brp_F(i), Fl, Zl);
+      Type sb = Type(0), yp = Type(0);
+      for(int l = 0; l < nlen; l++) {
+        Type n = NI(l) / scale0;
+        Type c = (Zl(l) > Type(0)) ? n * Fl(l) / Zl(l) * (Type(1) - exp(-Zl(l))) : Type(0);
+        brp_N(l, i) = n; brp_C(l, i) = c; brp_Fl(l, i) = Fl(l);
+        sb += n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+        yp += c * wtA(l);
+      }
+      brp_SBPR(i) = sb; brp_YPR(i) = yp;
+    }
+
+    // Fspr by bisection on log F (SPR decreases monotonically with F);
+    // -1 when the target is not reached within (1e-8, brp_Fmax)
+    int nS = brp_spr.size();
+    vector<Type> brp_Fspr(nS);
+    for(int j = 0; j < nS; j++) {
+      Type tgt = brp_spr(j) * brp_SBPR0;
+      Type lo = log(Type(1e-8)), hi = log(brp_Fmax);
+      if(sbpr(exp(hi)) > tgt || sbpr(exp(lo)) < tgt) {
+        brp_Fspr(j) = Type(-1);
+      } else {
+        for(int it = 0; it < 80; it++) {
+          Type mid = Type(0.5) * (lo + hi);
+          if(sbpr(exp(mid)) > tgt) lo = mid; else hi = mid;
+        }
+        brp_Fspr(j) = exp(Type(0.5) * (lo + hi));
+      }
+    }
+
+    REPORT(brp_SBPR0);
+    REPORT(brp_SBPR);
+    REPORT(brp_YPR);
+    REPORT(brp_N);
+    REPORT(brp_C);
+    REPORT(brp_Fl);
+    REPORT(brp_Fspr);
+    REPORT(sA);
+    REPORT(MA);
   }
 
   // Penalty on random walk F

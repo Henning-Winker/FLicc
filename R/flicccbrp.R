@@ -244,6 +244,20 @@ prbrp_flicc <- function(fit, nyears = 1, Fseq = NULL,
 
 
   ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
+  lens = dimnames(fit$report$sel)$len
+  nlen <- length(ref$Len)
+
+  # one compiled TMB evaluation for all F values (see brp_tmb_flicc())
+  b <- if (brp_fast_ok(fit, NULL, scale_sel)) {
+    brp_tmb_flicc(fit, Fseq = Fseq, nyears = nyears, spawn_time = spawn_time)
+  } else NULL
+
+  if (!is.null(b)) {
+    spr0 <- b$SBPR0
+    YPR  <- FLQuant(b$YPR,  quant = "all", unit = "kg")
+    SBPR <- FLQuant(b$SBPR, quant = "all", unit = "kg")
+    nf <- unname(b$N); cf <- unname(b$C); ff <- unname(b$Fl)
+  } else {
 
   pr_list <- lapply(Fseq, function(ff) {
     pr_flicc(
@@ -266,8 +280,6 @@ prbrp_flicc <- function(fit, nyears = 1, Fseq = NULL,
   YPR  <- FLQuant(vapply(pr_list, function(x) as.numeric(x$YPR), numeric(1)), quant = "all",unit="kg")
   SBPR <- FLQuant(vapply(pr_list, function(x) as.numeric(x$SBPR), numeric(1)), quant = "all",unit="kg")
 
-  lens = dimnames(fit$report$sel)$len
-  nlen <- length(ref$Len)
   nf <- array(NA_real_, dim = c(nlen, length(Fseq)))
   cf <- array(NA_real_, dim = c(nlen, length(Fseq)))
   ff <- array(NA_real_, dim = c(nlen, length(Fseq)))
@@ -276,6 +288,7 @@ prbrp_flicc <- function(fit, nyears = 1, Fseq = NULL,
     nf[, i] <- as.numeric(pr_list[[i]]$N)
     cf[, i] <- as.numeric(pr_list[[i]]$Cn)
     ff[, i] <- as.numeric(pr_list[[i]]$F)
+  }
   }
 
   nf <- FLQuant(nf,quant="len",unit="1000",dimnames=list(len=lens))
