@@ -266,6 +266,8 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
+  DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
+                             //    terminal brp_nyears (objective not used)
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -353,10 +355,20 @@ Type objective_function<Type>::operator() ()
 
   sel_joint.setZero();
   Fk_l.setZero();
+  plen.setZero();
+  Fk.setZero();
+  spr_y.setZero();
+  N_y.setZero();
+  plen_all_y.setZero();
 
 
   // --- LOOP OVER YEARS ---
-  for(int y = 0; y < nyear; y++) {
+  int y_first = 0;
+  if(brp_only == 1) {
+    int nyb = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
+    y_first = nyear - nyb;
+  }
+  for(int y = y_first; y < nyear; y++) {
 
     vector<Type> Z(nlen), N(nlen);
     matrix<Type> F_len(nlen, ngear), Cpred(nlen, ngear), mu(nlen, ngear);
@@ -690,22 +702,37 @@ Type objective_function<Type>::operator() ()
       brp_SBPR(i) = sb; brp_YPR(i) = yp;
     }
 
-    // Fspr by bisection on log F (SPR decreases monotonically with F);
-    // -1 when the target is not reached within (1e-8, brp_Fmax)
+    // Fspr on log F by the Illinois method (bracketed regula falsi; SPR
+    // decreases monotonically with F); -1 when the target is not reached
+    // within (1e-8, brp_Fmax)
     int nS = brp_spr.size();
     vector<Type> brp_Fspr(nS);
+    Type xlo = log(Type(1e-8)), xhi = log(brp_Fmax);
+    Type glo0 = sbpr(exp(xlo)), ghi0 = sbpr(exp(xhi));
     for(int j = 0; j < nS; j++) {
       Type tgt = brp_spr(j) * brp_SBPR0;
-      Type lo = log(Type(1e-8)), hi = log(brp_Fmax);
-      if(sbpr(exp(hi)) > tgt || sbpr(exp(lo)) < tgt) {
+      Type a = xlo, b = xhi, fa = glo0 - tgt, fb = ghi0 - tgt;
+      if(fa < Type(0) || fb > Type(0)) {
         brp_Fspr(j) = Type(-1);
-      } else {
-        for(int it = 0; it < 80; it++) {
-          Type mid = Type(0.5) * (lo + hi);
-          if(sbpr(exp(mid)) > tgt) lo = mid; else hi = mid;
-        }
-        brp_Fspr(j) = exp(Type(0.5) * (lo + hi));
+        continue;
       }
+      int side = 0;
+      Type c = a;
+      for(int it = 0; it < 200; it++) {
+        c = (a * fb - b * fa) / (fb - fa);
+        Type fc = sbpr(exp(c)) - tgt;
+        if(fabs(fc) <= Type(1e-14) * brp_SBPR0 || fabs(b - a) < Type(1e-12)) break;
+        if(fc > Type(0)) {          // root lies above c
+          a = c; fa = fc;
+          if(side == -1) fb /= Type(2);
+          side = -1;
+        } else {
+          b = c; fb = fc;
+          if(side == 1) fa /= Type(2);
+          side = 1;
+        }
+      }
+      brp_Fspr(j) = exp(c);
     }
 
     REPORT(brp_SBPR0);
