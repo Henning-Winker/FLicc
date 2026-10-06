@@ -601,6 +601,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_FMscale <- as.integer(isTRUE(FM))
   td$brp_spawn   <- as.numeric(spawn_time)
   td$brp_Fmax    <- as.numeric(Fmax)
+  td$brp_only    <- 1L
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
   pl <- fit$obj$env$parList(fit$opt$par)
