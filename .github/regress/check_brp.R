@@ -28,7 +28,7 @@ for (pm in c("gtg", "gamma")) for (mm in c("constant", "inverse")) {
     v$lbi <- unlist(lapply(lb, function(x) c(index(x))))
     t$stkr     <- system.time(st <- flicc2FLStockR(fit, rel = TRUE))["elapsed"]
     v$stkr <- c(unlist(as.list(st@refpts)), c(st@stock), c(st@harvest))
-    list(t = unlist(t), v = v)
+    list(t = sapply(t, function(x) as.numeric(x)), v = v)
   }
   old <- run(FALSE); new <- run(TRUE)
   cat(sprintf("%-10s %9s %9s %8s   %s\n", "function", "old(s)", "new(s)", "speedup", "max rel diff"))
