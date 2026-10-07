@@ -32,9 +32,9 @@ of natural mortality at length.}
 }
 \value{
 A list with \code{F}, \code{SBPR0}, \code{SBPR}, \code{YPR},
-  matrices \code{N}, \code{C}, \code{Fl} (length x F) and \code{Fspr}
-  (\code{NA} if not reached), or \code{NULL} if the fit cannot be
-  evaluated this way (e.g. fits from earlier FLicc versions).
+matrices \code{N}, \code{C}, \code{Fl} (length x F) and \code{Fspr}
+(\code{NA} if not reached), or \code{NULL} if the fit cannot be
+evaluated this way (e.g. fits from earlier FLicc versions).
 }
 \description{
 Evaluates numbers, catch and fishing mortality at length, yield and

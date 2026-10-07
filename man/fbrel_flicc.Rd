@@ -32,9 +32,9 @@ to Bmsy.}
 }
 \value{
 \code{fbrel_flicc()}: fishing mortality (scale set by \code{input}).
-  \code{sprbrel_flicc()}: SPR in percent giving \code{brel}.
-  \code{spr2brel()}: equilibrium biomass relative to the reference
-  biomass, truncated at zero (stock collapse).
+\code{sprbrel_flicc()}: SPR in percent giving \code{brel}.
+\code{spr2brel()}: equilibrium biomass relative to the reference
+biomass, truncated at zero (stock collapse).
 }
 \description{
 Under Beverton-Holt recruitment with steepness \code{s}, equilibrium

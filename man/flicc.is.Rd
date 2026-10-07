@@ -39,7 +39,7 @@ flagged by the HCR decision.}
 }
 \value{
 A list with \code{ctrl} (a \code{fwdControl} for year
-  \code{ay + management_lag}) and \code{tracking} (with "tac.is").
+\code{ay + management_lag}) and \code{tracking} (with "tac.is").
 }
 \description{
 Turns the relative multiplier returned by \code{lbi.hcr()} into a TAC
