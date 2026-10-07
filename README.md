@@ -708,6 +708,30 @@ Future developments could include:
 
 ---
 
+## Use of generative AI
+
+`FLicc` was conceived, designed and is maintained by Henning Winker. The
+scientific choices behind the package (model structure, assumptions,
+estimation methods, default settings and validation strategy) are the
+author's own.
+
+Generative AI (Claude, Anthropic) has been used as a development aid for
+parts of writing and refactoring R and TMB code, drafting documentation
+(roxygen comments, vignettes, README text) and writing tests.
+
+Every AI-assisted contribution is reviewed, edited and tested by the author
+before being merged, and changes reach the `main` branch through pull
+requests reviewed by the maintainer. Model outputs are checked against the
+original implementations, for example reproducing LBSPR-type inference and
+the `fishblicc` example (see the [test workflow](https://github.com/Henning-Winker/FLicc/blob/main/test.R)).
+
+The author takes full responsibility for the correctness of the code and its
+scientific content. If you find an error, please
+[open an issue](https://github.com/Henning-Winker/FLicc/issues). See
+[CONTRIBUTING](.github/CONTRIBUTING.md) for how to contribute.
+
+---
+
 ## References
 
 - Griffiths, C.A., Winker, H., Bartolino, V., Wennhage, H., Orio, A. and Cardinale, M., 2024. Including older fish in fisheries management: A new age‐based indicator and reference point for exploited fish stocks. Fish and Fisheries, 25(1), pp.18-37.
