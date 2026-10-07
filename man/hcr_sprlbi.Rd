@@ -37,13 +37,13 @@ from \code{LBIspr(fit, thresh = thresh)}.}
 \item{b4}{SPR trigger where the maximum increase is reached.}
 
 \item{dlow}{Relative change below \code{b1}, e.g. \code{-0.20} for a
-20\\% reduction.}
+20\% reduction.}
 
 \item{dopt}{Relative change between \code{b2} and \code{b3}, usually
 \code{0}.}
 
 \item{dhi}{Relative change above \code{b4}, e.g. \code{0.15} for a
-15\\% increase.}
+15\% increase.}
 
 \item{nyrs}{Number of most recent years of \code{fit$report$spr} used to
 calculate mean current SPR. Default is 1.}

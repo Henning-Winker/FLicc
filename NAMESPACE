@@ -2,8 +2,8 @@ useDynLib(FLicc, .registration = TRUE)
 
 import("TMB")
 import("FLCore")
-import("ggplot2")
-import("ggplotFL")
+import("ggplot2", except = "%+%")
+import("ggplotFL", except = "%+%")
 import("doFuture")
 importFrom("progressr",
   "progressor")
