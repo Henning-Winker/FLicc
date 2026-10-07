@@ -762,7 +762,7 @@ plot_lfd <- function(lfd,
 #'   mortality value where relative yield exceeds \code{yield_tol}, plus a
 #'   buffer.
 #' @param trim_buffer Numeric proportional buffer added to the trimmed upper
-#'   x-limit. The default \code{0.2} corresponds to 20\%.
+#'   x-limit. The default \code{0.2} corresponds to 20%.
 #' @param yield_tol Numeric tolerance used to determine where relative yield is
 #'   effectively zero when trimming the x-axis.
 #'

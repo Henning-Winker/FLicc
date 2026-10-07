@@ -428,11 +428,11 @@ r_rule <- function(idx, n1 = 2, n2 = 3) {
 #' @param b3 SPR trigger where the upper slope starts.
 #' @param b4 SPR trigger where the maximum increase is reached.
 #' @param dlow Relative change below \code{b1}, e.g. \code{-0.20} for a
-#'   20\% reduction.
+#'   20% reduction.
 #' @param dopt Relative change between \code{b2} and \code{b3}, usually
 #'   \code{0}.
 #' @param dhi Relative change above \code{b4}, e.g. \code{0.15} for a
-#'   15\% increase.
+#'   15% increase.
 #' @param nyrs Number of most recent years of \code{fit$report$spr} used to
 #'   calculate mean current SPR. Default is 1.
 #' @param n1 Number of recent years used by \code{r_rule()} for the numerator
