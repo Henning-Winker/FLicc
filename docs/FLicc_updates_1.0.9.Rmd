@@ -5,6 +5,7 @@ date: "`r format(Sys.Date(), '%d %B %Y')`"
 output:
   html_document:
     self_contained: true
+    math_method: mathml
     toc: true
     toc_float: true
     number_sections: true
@@ -65,7 +66,7 @@ For `pop_model = "gtg"`, the Linf of each growth-type group (GTG), the recruitme
 
 Now the template builds them from the current parameters:
 
-$$L_{\infty,g} = L_\infty\,(1 + CV_L\, z_g), \qquad M/K(L) = M_k \left(\frac{L_\infty}{L}\right)^{M_{pow}}$$
+$$L_{\infty,g} = L_\infty\,(1 + CV_L\, z_g), \qquad M/K(L) = M_k \left(\frac{L_\infty}{L}\right)^{M_{\text{pow}}}$$
 
 on a fixed standardised grid $z_g$. Priors on Linf, M/K and CVL (`linf.sd`, `Mk.sd`, `CVL.sd`) now act on the population model, and CVL is estimated for GTG when `CVL.sd` is given (as for the gamma model).
 
@@ -89,7 +90,7 @@ Two smaller fixes came with this: the GTG length floors use `CppAD::CondExpLe` s
 
 Each GTG is a single growth curve with no variation of its own; all variation comes from the spread of Linf across groups. `CVL` sets the scale ($\sigma = CV_L \cdot L_\infty$) and `maxsd` how far out the outermost groups sit, in units of $\sigma$ (λ in Hordyk et al. 2016, fixed at 2 in LBSPR). `ngtg` only sets how finely that range is divided. The defaults remain those of LBSPR, `maxsd = 2` and `ngtg = 13`.
 
-Cutting the normal distribution at ±`maxsd` makes the actual spread smaller than `CVL` and caps the largest length the model can produce at $L_\infty(1 + maxsd \cdot CV_L)$:
+Cutting the normal distribution at ±`maxsd` makes the actual spread smaller than `CVL` and caps the largest length the model can produce at $L_\infty(1 + \text{maxsd} \cdot CV_L)$:
 
 ```{r maxsd-table, echo = FALSE}
 trunc_sd <- function(a) sqrt(1 - 2 * a * dnorm(a) / (2 * pnorm(a) - 1))
@@ -133,7 +134,7 @@ cat(w[grepl("largest GTG Linf", w)])
 Two options reduce the influence of the largest fish on the composition likelihood. Both are off by default and work with the `nb`, `mn` and `dm` observation models.
 
 * **`rob_eps`** mixes the predicted proportions with a small uniform probability,
-  $$\tilde p_l = (1 - \varepsilon)\, p_l + \varepsilon / n_{bins},$$
+  $$\tilde p_l = (1 - \varepsilon)\, p_l + \varepsilon / n_{\text{bins}},$$
   which bounds the cost of a few fish in bins the model barely reaches.
 * **`Lplus`** pools observed and predicted counts in all bins with lower bound $\geq$ `Lplus` into one plus group before the likelihood (tail compression, as in SS3). The likelihood then only sees how many fish are at or above `Lplus`, not how they fall into bins. Predicted compositions in the report and plots stay unpooled.
 
@@ -166,7 +167,7 @@ With well-behaved data, as here, the options change results little; they are ins
 
 Under Beverton–Holt recruitment with steepness $s$, equilibrium spawning biomass is linear in SPR but does not pass through zero:
 
-$$\frac{B}{B_0} = \frac{4 s\, SPR - (1 - s)}{5 s - 1}$$
+$$\frac{B}{B_0} = \frac{4 s\, \text{SPR} - (1 - s)}{5 s - 1}$$
 
 Recruitment declines as SPR falls, so biomass falls faster than SPR. Status expressed as SPR/SPR40 is therefore optimistic at low stock size, and SPR-based limits such as SPR10 sit far below a quarter of the biomass target.
 
