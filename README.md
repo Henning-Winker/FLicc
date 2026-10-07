@@ -95,7 +95,7 @@ As a result, the joint likelihood across gears constrains the solution space, re
 
 ## Core model idea
 
-The model assumes an approximate steady state and tracks survival through sequential length intervals under growth and mortality. In the underlying framework, survival to length interval $n$ is computed across intervals and integrated over variability in asymptotic length $L_\infty$, allowing growth variability to be carried into the expected length composition. Numerical integration is then used to obtain relative abundance-at-length. :contentReference[oaicite:4]{index=4}
+The model assumes an approximate steady state and tracks survival through sequential length intervals under growth and mortality. In the underlying framework, survival to length interval $n$ is computed across intervals and integrated over variability in asymptotic length $L_\infty$, allowing growth variability to be carried into the expected length composition. Numerical integration is then used to obtain relative abundance-at-length.
 
 Catch in length interval $i$ is given by:
 
@@ -123,7 +123,7 @@ $$
 Z_i = M_i + \sum_j F_j \sum_k w_k \, sel_{ijk}
 $$
 
-where $F_j$ is the apical fishing mortality for gear $j$, $sel_{ijk}$ is the selectivity component at length for gear $j$, and $w_k$ are mixture weights when multiple selectivity components are used. This is the key decomposition that allows `FLicc` to separate gear impact from information on stock size structure. :contentReference[oaicite:6]{index=6}
+where $F_j$ is the apical fishing mortality for gear $j$, $sel_{ijk}$ is the selectivity component at length for gear $j$, and $w_k$ are mixture weights when multiple selectivity components are used. This is the key decomposition that allows `FLicc` to separate gear impact from information on stock size structure.
 
 ---
 
@@ -318,7 +318,7 @@ $$
 
 These functions correspond roughly to asymptotic, symmetric dome-shaped, and flexible dome-shaped patterns. The ability to fit dome-shaped selectivity is especially important in gillnet and mixed-gear fisheries, where assuming logistic selectivity alone can bias SPR estimates. Medley’s simulations showed much poorer performance when dome-shaped selectivity was mis-specified as logistic. 
 
-A key practical advantage of fitting multiple gears simultaneously is that one gear may still detect larger fish even when another gear is dome-shaped or truncated. That improves the ability to separate selectivity from the declining abundance pattern with length. :contentReference[oaicite:8]{index=8}
+A key practical advantage of fitting multiple gears simultaneously is that one gear may still detect larger fish even when another gear is dome-shaped or truncated. That improves the ability to separate selectivity from the declining abundance pattern with length.
 
 ---
 
@@ -705,6 +705,41 @@ Future developments could include:
 - additional selectivity options 
 - diagnostics: residuals, likelihood profiling, sensitivities
 - MSE implementation: develop management procedure mp.flicc with harvest control rule options 
+
+---
+
+## Use of generative AI
+
+`FLicc` was conceived, designed and is maintained by Henning Winker. The
+scientific choices behind the package (model structure, assumptions,
+estimation methods, default settings and validation strategy) are the
+author's own.
+
+Generative AI tools have been used as development aids: ChatGPT (OpenAI),
+initially for checking code and text, and Claude (Anthropic) for parts of
+writing and refactoring R and TMB code, drafting documentation (roxygen
+comments, vignettes, README text) and writing tests.
+
+Every AI-assisted contribution is reviewed, edited and tested by the author
+before being merged, and changes reach the `main` branch through pull
+requests reviewed by the maintainer. Model outputs are checked against the
+original implementations, for example reproducing LBSPR-type inference and
+the `fishblicc` example (see the [test workflow](https://github.com/Henning-Winker/FLicc/blob/main/test.R)).
+
+The author takes full responsibility for the correctness of the code and its
+scientific content. If you find an error, please
+[open an issue](https://github.com/Henning-Winker/FLicc/issues). See
+[CONTRIBUTING](.github/CONTRIBUTING.md) for how to contribute.
+
+---
+
+## Licence
+
+Copyright © Food and Agriculture Organization of the United Nations (FAO).
+
+`FLicc` is released under the GNU General Public License, version 3 or later
+(GPL-3); see [LICENSE.md](LICENSE.md). The licence is provisional, pending
+formal FAO open-source clearance.
 
 ---
 
