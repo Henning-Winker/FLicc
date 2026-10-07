@@ -1,10 +1,13 @@
 Package: FLicc
 Title: Length-Interval Catch-Curve Models in TMB
 Version: 1.0.9
-Authors@R: person(given = "Henning", family = "Winker", email = "henning.winker@fao.org", role = c("aut", "cre"))
+Authors@R: c(
+    person(given = "Henning", family = "Winker", email = "henning.winker@fao.org", role = c("aut", "cre")),
+    person(given = "Food and Agriculture Organization of the United Nations", role = "cph")
+  )
 Description: FLR-friendly TMB implementation of equilibrium multi-gear
     length-interval catch-curve models inspired by fishblicc.
-License: EUPL
+License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)

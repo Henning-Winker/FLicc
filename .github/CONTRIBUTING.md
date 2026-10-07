@@ -59,6 +59,8 @@ You are responsible for your contribution regardless of the tools used.
 
 ## Licence
 
-FLicc is released under the European Union Public Licence (EUPL), as stated
-in the `DESCRIPTION` file. By contributing, you agree that your contributions
-are released under the same licence.
+FLicc is copyright of the Food and Agriculture Organization of the United
+Nations (FAO) and is released under the licence stated in the `DESCRIPTION`
+and `LICENSE.md` files (currently GPL-3, pending formal FAO open-source
+clearance). By contributing, you agree that your contributions are released
+under the same licence.
