@@ -1,0 +1,218 @@
+---
+title: "FLicc structural uncertainty framework"
+author: "Henning Winker (FAO-NFI)"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  pdf_document:
+    toc: false
+    number_sections: true
+    fig_caption: true
+    latex_engine: xelatex
+fontsize: 11pt
+geometry: margin=1in
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 7,
+  fig.height = 5
+)
+```
+
+# Methods: structural uncertainty and likelihood-supported $SPR$ ensembles
+
+## Rationale
+
+Length-based assessments can be highly informative about the size structure of an exploited population, but they do not always identify a unique biological and exploitation history from the length composition data alone. In particular, the same observed length distribution may sometimes be explained by different combinations of growth, natural mortality, length variation, selectivity, recruitment history and fishing mortality. This is an identifiability problem rather than simply an optimization problem (Punt et al., 2014). A single optimizer may converge to a local or boundary solution, or to a statistically adequate but biologically implausible state, without revealing the broader likelihood-supported region of biologically plausible parameter space.
+
+The FLicc Monte Carlo ensemble is designed to expose this structure explicitly. Rather than treating fixed life-history inputs as known without error, FLicc draws alternative biologically plausible combinations of life-history parameters, refits the assessment model for each draw, and evaluates support using the objective function. The result is not a replacement for maximum likelihood estimation, but a complementary diagnostic and uncertainty framework. This is to evaluate whether the data, once confronted with a biologically constrained prior ensemble, identify a restricted region of $SPR$ outcomes. In this sense, the approach can provide evidence for partial identifiability: the plausible $SPR$ region may be much narrower than the full biological prior space even if direct optimization alone cannot reliably distinguish among all correlated biological and selectivity mechanisms.
+
+This interpretation is closely aligned with modern risk-analysis practice in integrated stock assessment. Maunder et al. (2020) frame risk analysis as a probabilistic assessment of multiple hypotheses or states of nature, noting that uncertainty can be expressed through alternative assumptions about the stock, biological processes, selectivity, stock-recruitment dynamics, data representation and sampling distributions. They also caution that model fit alone is often insufficient in complex integrated assessments because biologically implausible models may fit the data well. FLicc adopts the same principle in a length-based setting: likelihood is used to assess support, but biological plausibility determines the candidate space to be explored.
+
+Punt et al. (2014) provided an assessment-specific motivation for this approach. They emphasize that in integrated assessments, selectivity is typically parameterized to reduce estimation variance, but incorrect selectivity assumptions can introduce bias. They also show that selectivity, natural mortality and recruitment trends can be confounded in catch-at-age or catch-at-length data, such that very different assumptions can fit the composition data similarly while implying different fishing mortality and abundance. FLicc therefore treats the Monte Carlo ensemble not merely as a sensitivity analysis, but as a structured exploration of the confounded biological and fishing mortality space.
+
+Ducharme-Barth and Vincent (2022) provide a direct methodological parallel for the Monte Carlo component. They distinguish estimation uncertainty from model uncertainty and show how uncertainty in biological parameters that are fixed in complex integrated assessments can be propagated efficiently using a Monte-Carlo/bootstrap ensemble. In FLicc, this logic is applied to the life-history parameters that strongly condition length-based inference, including asymptotic length, growth, natural mortality, the ratio $M/k$, length-at-maturity or length-at-selectivity parameters, and length variation. Because these parameters are often informed externally rather than estimated freely from the length data, drawing them jointly from a biologically plausible multivariate distribution is a practical way to represent structural uncertainty without forcing all biological parameters to be estimated internally.
+
+The biological prior ensemble can be based on life-history parameter correlations from FishLife (Thorson et al. 2017;2020). FishLife provides a global comparative framework for predicting fish life-history parameters and their correlations. In the FLicc implementation, a global correlation matrix among life-history traits can be used to draw from a multivariate lognormal distribution. This is important because independent univariate draws can generate biologically inconsistent combinations, whereas correlated multivariate draws preserve the expected trade-offs among parameters such as $L_\infty$, $k$, $M$, $M/k$, maturity and length variation. The ensemble therefore represents biologically coherent states of nature rather than arbitrary factorial combinations.
+
+## Information-theoretic weighting and plausibility thresholds
+
+For each Monte Carlo draw $i$, FLicc refits the model and records the negative log-likelihood or log-likelihood. If all refits share the same likelihood structure and the same number of estimated parameters, relative support can be summarized using
+
+\[
+\Delta \mathrm{AIC}_i = \mathrm{AIC}_i - \min(\mathrm{AIC})
+\]
+
+which is equivalent to twice the difference in negative log-likelihood under a common parameter count. Akaike weights are then computed as
+
+\[
+w_i = \frac{\exp(-0.5\Delta \mathrm{AIC}_i)}{\sum_j \exp(-0.5\Delta \mathrm{AIC}_j)}.
+\]
+
+The classical Burnham and Anderson interpretation is useful as a reference scale: $\Delta \mathrm{AIC}$ of 0--2 indicates substantial support, 4--7 much less support, and values greater than about 10 little support relative to the best model. However, in the present context these thresholds are not used as strict model-selection rules. The FLicc Monte Carlo ensemble is not a set of alternative regression models with different covariates. It is a biological structural uncertainty ensemble in which the purpose is to retain a broad but defensible region of states of nature. For this reason, a more liberal plausibility threshold such as $\Delta\mathrm{AIC}\le20$ can be used to define a broad plausible ensemble, while Akaike weights provide a smooth likelihood-weighted summary within that region.
+
+This distinction is important. A hard $\Delta\mathrm{AIC}\le10$ rule can be useful for identifying a strongly supported core, but may be too restrictive for structural uncertainty when the likelihood is flat, multi-modal, or affected by confounding among life-history, selectivity and fishing mortality. A broader $\Delta\mathrm{AIC}\le20$ threshold still gives very low weight to weakly supported fits because $\exp(-0.5\times20)\approx4.5\times10^{-5}$ before normalization. Thus, such fits may remain visible as part of the plausible envelope, while contributing little to weighted means or density estimates. The threshold therefore separates the diagnostic task of displaying the plausible region from the inferential task of computing likelihood-weighted summaries.
+
+Model averaging theory supports this interpretation but also motivates caution. Dormann et al. (2018) review Bayesian, information-theoretic and tactical model averaging and emphasize that model averaging is most useful when it represents uncertainty among plausible models, but that estimated weights themselves introduce uncertainty and can perform poorly if many inadequate or highly correlated models are included. They also emphasize that model-averaged predictions should be accompanied by uncertainty estimates rather than only point estimates. In FLicc, this motivates presenting both unweighted and weighted ensemble summaries. The unweighted retained ensemble describes the biologically plausible region after likelihood screening, while the weighted ensemble describes the likelihood-supported center of mass within that region.
+
+## Identifiability interpretation
+
+The FLicc Monte Carlo ensemble can be interpreted as an identifiability diagnostic. Direct optimization provides one maximum likelihood solution conditional on a given parameterization and starting values. However, when growth, natural mortality, length variation and selectivity are confounded, that solution may not reveal whether nearby or biologically alternative explanations fit nearly as well. The ensemble instead maps a biologically constrained likelihood surface. If the retained and weighted Monte Carlo draws occupy a narrow $SPR$ range, this suggests that $SPR$ is identifiable, or at least practically identifiable, despite uncertainty in the individual biological parameters. Conversely, if retained draws span a wide $SPR$ range, the length data do not identify the exploitation state without stronger biological assumptions or additional data.
+
+The key point is that identifiability is being assessed for the management-relevant derived quantity, $SPR$, not necessarily for each individual biological or selectivity parameter. This is consistent with the risk-analysis framing of Maunder et al. (2020), where alternative states of nature are propagated into probability distributions of management quantities. It is also consistent with Punt et al. (2014), who emphasize that selectivity model choice and diagnostic evaluation matter because incorrect selectivity assumptions can bias assessment outputs even when fits to composition data appear adequate. In FLicc, the likelihood profile of $SPR$ over the Monte Carlo ensemble directly shows whether statistically similar fits imply similar or divergent management conclusions.
+
+## Example workflow
+
+The following code illustrates the intended workflow. The specific objects `lfd`, `stklen`, and `catch_by_gear` are assumed to have been prepared before fitting.
+
+```{r fit-flicc, eval=TRUE,warning=FALSE,message=FALSE}
+
+library(FLicc)
+data(alfonsino)
+lfd <- lfd_alfonsino
+stklen <- stocklen(lfd_alfonsino,lhpar_alfonsino)
+
+fit <- fiticc(
+  lfd,
+  stklen,
+  sel_fun = c("dsnormal", "logistic"),
+  catch_by_gear = c(0.7,0.3),
+  settings = list(
+    pop_model = "gtg",
+    obs_model = "mn",
+    CVL = 0.10
+  )
+)
+```
+
+The workflow has four steps. First, generate a biologically plausible Monte Carlo ensemble of life-history parameters using prior means, variances and correlations. Second, refit FLicc for each draw, preserving convergence diagnostics, likelihood values, fitted $SPR$ time series, and the associated life-history inputs. Third, compute $\Delta$AIC and Akaike weights, optionally retaining only fits within a broad structural plausibility threshold. Fourth, summarize and plot the resulting $SPR$ distributions using both unweighted and weighted statistics.
+
+```{r load-mc, eval=TRUE}
+## Example: load a previously saved Monte Carlo ensemble.
+## The object should contain at least mc$spr, mc$fit, mc$lhpar and likelihood/AIC fields
+## required by mc_dAIC(), mc_aic_weights(), plot_mcprofile(), plot_mcsprdist(),
+## plot_mcsprwts() and mc_spr_tab().
+
+data("flicc_mc_example")
+
+```
+
+```{r run-mc, eval=FALSE}
+## Example: run a new ensemble.
+## Workers should be chosen explicitly and conservatively according to the machine.
+## On a laptop, workers = 4 may be safer than using all available cores.
+
+mc <- mc_flicc(
+  fit = fit,
+  nsim = 1000,
+  parallel = TRUE,
+  workers = 4,
+  dAIC_cut = 20
+)
+
+```
+
+## Life-history draws and biological plausibility
+
+The first diagnostic is the distribution of Monte Carlo life-history draws. The red dashed line represents the reference fit or input mean stored in `mc$fit$lhpar`. These plots confirm whether the Monte Carlo design is centered on the intended biological assumptions and whether the prior draws span a sufficiently broad but plausible region.
+
+```{r mc-pars, fig.cap="Monte Carlo life-history parameter draws used in the FLicc structural uncertainty ensemble. Each panel shows the marginal distribution of one biological input parameter, while the dashed vertical line indicates the corresponding reference value used in the original FLicc fit. The purpose is to verify that the prior ensemble is biologically plausible, centered on the intended input values, and broad enough to represent uncertainty in externally specified life-history parameters.", fig.width=6.5, fig.height=6, eval=TRUE}
+plot_mcpars(mc)
+```
+
+The second diagnostic examines correlations among key life-history parameters. Grey points show the full biological ensemble, while coloured points show the likelihood-supported region, with colour intensity reflecting $\Delta$AIC. This plot is important because the plausible region may occupy only a subset of the prior biological space. In that case, the length data have contributed information that constrains the joint biological and exploitation state, even if no single parameter is uniquely identified.
+
+```{r mc-cor, fig.cap="Joint life-history parameter relationships in the FLicc Monte Carlo ensemble. Grey points show the full biological prior ensemble and coloured points show retained or likelihood-supported draws, with colour indicating relative support based on delta AIC. Concentration of supported points within the prior cloud indicates that the length-composition data and biological constraints jointly identify a narrower plausible region of parameter space.", fig.width=6.5, fig.height=6, eval=TRUE}
+plot_mccor(mc)
+```
+
+## Likelihood profile over $SPR$
+
+The likelihood profile over $SPR$ is the central identifiability diagnostic. Each point represents one refitted Monte Carlo draw. The y-axis is expressed as $\Delta$AIC, which makes the scale directly interpretable in information-theoretic terms. The plot indicates whether implausible states, such as near-zero fishing mortality or $SPR$ close to one in an exploited fishery, are excluded or downweighted by the combination of biological priors and likelihood support.
+
+```{r mc-profile, fig.cap="Likelihood profile of the FLicc Monte Carlo structural ensemble. Each point represents a biologically plausible life-history draw refitted to the length-composition data. The x-axis shows SPR and the y-axis shows delta AIC relative to the best-supported ensemble member. A restricted low-delta-AIC region indicates practical identifiability of SPR within the biologically plausible space, even if direct optimization alone is affected by confounding among growth, mortality, selectivity and fishing mortality.", fig.width=6.5, fig.height=6, eval=TRUE}
+plot_mcprofile(mc)
+```
+
+## Weighted SPR distributions
+
+
+
+The weighted and unweighted density comparison separates two distinct quantities. The unweighted density shows the retained plausible ensemble after the $\Delta$AIC filter. The weighted density shows how the likelihood redistributes support within that retained region. When the weighted density is much narrower than the unweighted density, the data strongly concentrate support within the plausible biological ensemble. When the two densities are similar, the likelihood is relatively flat over the retained plausible region.
+
+```{r mc-sprwts, fig.cap="Comparison of unweighted and Akaike-weighted SPR densities by year. Grey densities show the retained plausible ensemble after delta-AIC filtering, while coloured densities show the likelihood-weighted ensemble. Differences between the two distributions indicate how strongly the likelihood concentrates support within the biologically plausible region. Similar densities imply broad structural uncertainty, whereas narrower weighted densities imply stronger likelihood-based identification of SPR.", fig.width=6.5, fig.height=6.5, eval=TRUE}
+plot_mcsprwts(mc)
+```
+Hard thresholds are useful diagnostics, but they can create artificial discontinuities. A likelihood-weighted distribution provides a smoother representation of support. The resulting $SPR$ distribution can be interpreted as the likelihood-supported structural uncertainty distribution over the biological ensemble.
+
+```{r mc-sprdist, fig.cap="Likelihood-weighted SPR distributions by year. The distributions summarize structural uncertainty across biologically plausible Monte Carlo refits, weighted by relative Akaike support. The blue marker indicates the reference FLicc fit where available. Weighted distributions provide a smoother alternative to hard delta-AIC filtering and help identify whether supported SPR is narrow, broad, skewed or multi-modal.", fig.width=6.5, fig.height=5, eval=TRUE}
+plot_mcsprdist(mc)
+```
+
+\newpage
+
+## Summary table
+
+The summary table reports the reference fit, unweighted retained ensemble summaries, weighted summaries, the number of retained runs and the effective ensemble size. The coefficient of variation is reported on the SPR scale as $\mathrm{CV}=\mathrm{SD}/\mathrm{mean}$, not as a percentage.
+
+```{r mc-spr-tab}
+sprtab <- mc_spr_tab(mc)
+```
+
+
+```{r,echo=FALSE}
+## Keep years as labels
+sprtab$year <- as.character(sprtab$year)
+
+## Round for reporting. Use 3 decimals for SPR/CV and 2 for n_eff.
+sprtab[,2:6] <- round(sprtab[,2:6],3)
+sprtab[,8] <- round(sprtab[,8],2)
+
+
+
+knitr::kable(
+  sprtab,
+  caption = paste0(
+    "Summary of FLicc Monte Carlo structural uncertainty in SPR. ",
+    "The table reports the reference fit estimate (mle), unweighted mean and CV across retained ensemble members, ",
+    "Akaike-weighted mean and CV, the number of retained ensemble members, and the effective ensemble size."
+  )
+)
+```
+
+The effective ensemble size is calculated as
+
+\[
+n_{\mathrm{eff}} = \frac{1}{\sum_i w_i^2},
+\]
+
+where $w_i$ are normalized Akaike weights. This quantity measures the number of effectively contributing models after likelihood weighting. If many runs are retained but $n_{\mathrm{eff}}$ is small, the ensemble is formally broad but support is concentrated among a small subset of draws. If $n_{\mathrm{eff}}$ is large, support is distributed across many biologically plausible states, indicating substantial structural uncertainty.
+
+## Interpretation
+
+The FLicc structural uncertainty framework should be interpreted as a risk-analysis and identifiability diagnostic rather than as a mechanical model-selection procedure. The central result is not only the weighted mean $SPR$, but the relationship between the biological prior ensemble, the likelihood profile, and the weighted $SPR$ distribution. A narrow weighted distribution relative to the prior ensemble suggests that the length data and biological constraints identify the exploitation state. A broad or multi-modal distribution indicates that additional data, stronger biological constraints, or alternative observation models may be required.
+
+This distinction is especially important for implausible low-fishing or high-$SPR$ states. In exploited fisheries, $SPR$ close to one or fishing mortality close to zero may be statistically reachable if selectivity, growth or mortality assumptions compensate for the observed length composition. Such states should not be accepted merely because the model fits the data. Instead, they should be evaluated as part of a structured ensemble where biological plausibility, convergence, diagnostics and likelihood support are considered jointly. The FLicc Monte Carlo ensemble provides a transparent way to show whether such states are isolated, down-weighted, or part of a broader unresolved likelihood-supported region.
+
+# References
+
+Akaike, H. 1973. Information theory and an extension of the maximum likelihood principle. In B. N. Petrov and F. Csaki, editors. *Second International Symposium on Information Theory*. Akademiai Kiado, Budapest.
+
+Burnham, K. P., and D. R. Anderson. 2002. *Model selection and multimodel inference: a practical information-theoretic approach*. Second edition. Springer, New York.
+
+Dormann, C. F., et al. 2018. Model averaging in ecology: a review of Bayesian, information-theoretic, and tactical approaches for predictive inference. *Ecological Monographs* 88:485--504. https://doi.org/10.1002/ecm.1309
+
+Ducharme-Barth, N. D., and M. T. Vincent. 2022. Focusing on the front end: a framework for incorporating uncertainty in biological parameters in model ensembles of integrated stock assessments. *Fisheries Research* 255:106452. https://doi.org/10.1016/j.fishres.2022.106452
+
+Maunder, M. N., H. Xu, C. E. Lennert-Cody, J. L. Valero, A. Aires-da-Silva, and C. Minte-Vera. 2020. Implementing reference point-based fishery harvest control rules within a probabilistic framework that considers multiple hypotheses. IATTC Scientific Advisory Committee, Document SAC-11-INF-F.
+
+Maunder, M. N., and A. E. Punt. 2013. A review of integrated analysis in fisheries stock assessment. *Fisheries Research* 142:61--74. https://doi.org/10.1016/j.fishres.2012.07.025
+
+Punt, A. E., F. Hurtado-Ferro, and A. R. Whitten. 2014. Model selection for selectivity in fisheries stock assessments. *Fisheries Research* 158:124--134. https://doi.org/10.1016/j.fishres.2013.06.003
+
+Thorson, J. T., S. B. Munch, J. M. Cope, and J. Gao. 2017. Predicting life history parameters for all fishes worldwide. *Ecological Applications* 27:2262--2276. https://doi.org/10.1002/eap.1606
+
+Thorson, J. T. 2020. Predicting recruitment density dependence and intrinsic growth rate for all fishes worldwide using a data-integrated life-history model. *Fish and Fisheries* 21:237--251. https://doi.org/10.1111/faf.12427
