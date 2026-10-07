@@ -8,7 +8,7 @@
 
 An introductory User Guide to Multi-Gear Length-Interval Catch-Curve Analysis in FLR for the `FLicc` package is available [here](https://henning-winker.github.io/FLicc/FLicc_intro_vignette.html). An overview with illustrations of the FLicc utilities is provided in the form of a [presentation](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf). 
 
-The most recent FLicc developments are documented [here](https://henning-winker.github.io/FLicc/FLicc_updates_1.0.9.html), including the latest implementations of robust likelihood options, fast equilibrium reference point estimation in c++ and MSE tools. 
+The most recent developments from `FLicc` version 1.0.6 to version 1.0.9 are documented [here](https://henning-winker.github.io/FLicc/FLicc_updates_1.0.9.html), including the latest implementations of robust likelihood options, fast equilibrium reference point estimation in c++ and MSE tools. 
 
 ---
 
