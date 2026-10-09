@@ -533,8 +533,23 @@ hcr_sprlbi <- function(fit, gear,
 #'   one of "constant", "inverse", "Lorenzen", "Gislason".
 #' @param settings List of fiticc() model settings (pop_model, obs_model,
 #'   ngtg, ...); see ?fiticc.
-#' @param spr,thresh Passed to LBIspr() to compute the length-based
-#'   indicator (target SPR%, cumulative threshold defining Lref).
+#' @param spr,thresh Target SPR (%) for LBIspr() and Ztgt, and the cumulative
+#'   threshold defining LBIspr()'s Lref.
+#' @param lbi Which length indicators to compute: "spr" (LBIspr(), share of
+#'   catch above Lref relative to the SPR-target reference) and/or "mean"
+#'   (LBImean(), mean length relative to the reference at F = M).
+#' @param pool How gear indices are pooled into `LBIspr` / `LBImean`:
+#'   `"none"` (default, only per-gear indices are returned), `"equal"`,
+#'   `"catch"` (reported catch shares by year), or a named numeric vector of
+#'   weights by gear (normalised). Gears differ in how informative their
+#'   length compositions are (e.g. a gear selecting large fish responds more
+#'   to changes in survival), so catch weighting is not necessarily the best
+#'   choice for an indicator.
+#' @param lbimean_args List of arguments passed to LBImean(): `ref`
+#'   ("FM" = reference at F = FM x M, the ICES-type L_F=M; "spr" = reference
+#'   at F_SPRx), `FM` (F/M ratio, default 1), `lc` ("sel50" = length at 50%
+#'   gear selectivity, "none", or numeric by gear), and optionally `spr`
+#'   (defaults to flicc.sa()'s `spr`), `nyears`, `scale_sel`.
 #' @param ess.g Numeric scalar or vector (gear order) of effective sample
 #'   sizes passed to lfdess(); each gear-year LFD is rescaled to this total.
 #'   `NULL` keeps the sampled counts (e.g. the OEM's `ess_len`). A scalar
@@ -573,11 +588,22 @@ hcr_sprlbi <- function(fit, gear,
 #'   attr(stk, "lfd") (y0:dy), matching the previous behaviour.
 #' @param ... Additional arguments passed to fiticc().
 #'
-#' @return A list containing the (unchanged) stk, the length-based
-#'   indicator ind -- an FLQuants with one element per gear (LBIspr()'s own
-#'   indicator, unwrapped from FLIndexBiomass) plus a final "SPR" element
-#'   (the fitted SPR time series) -- and the tracking object with a
-#'   per-iteration "conv.est" convergence flag.
+#' @return A list with the (unchanged) stk, the indicators `ind` and the
+#'   tracking object. `ind` is an FLQuants (year x iter; NA for unusable
+#'   iterations) with
+#'   \describe{
+#'     \item{LBIspr.<gear>, LBIspr}{LBIspr() index by gear (= 1 at the SPR
+#'       target), and the pooled index if `pool` is not "none".}
+#'     \item{LBImean.<gear>, LBImean}{LBImean() index by gear (= 1 at the
+#'       reference, default F = M), and the pooled index if `pool` is not
+#'       "none".}
+#'     \item{SPR}{Fitted SPR (absolute, 0-1).}
+#'     \item{Z, Ztgt, Zrel}{Z = Fap + M, Ztgt = F_SPRx + M (apical F, fitted
+#'       M), and Zrel = Z / Ztgt (> 1: fishing above target).}
+#'   }
+#'   Tracking adds conv.est, sprbound.est, refit.est, used.est, the LBIspr
+#'   cut-off Lref.<gear> and the LBImean reference Lmeanref.<gear>, so that
+#'   drift of the references between refits can be monitored.
 #'
 #' @name flicc.sa
 #' @rdname flicc.sa
@@ -592,6 +618,9 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
                        ngtg = 13, maxsd = 2, Mpow = 0
                      ),
                      spr = 40, thresh = 0.75, ess.g = 150,
+                     lbi = c("spr", "mean"),  # LBIspr() and/or LBImean()
+                     lbimean_args = list(ref = "FM", FM = 1, lc = "sel50"),
+                     pool = "none",           # "none" | "equal" | "catch" | named weights
                      nyrs = NULL,
                      drop_nonconv = TRUE,     # non-converged fits -> mult = 1
                      spr_max = 0.99,          # SPR >= spr_max flagged as boundary; NULL = off
@@ -740,38 +769,101 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
     warning("flicc.sa(): no usable fits at ay = ", ay,
             " -- all iterations get NA indicators (mult = 1 in lbi.hcr)")
 
-  # --- LBIspr() on usable iterations --------------------------------------
-  ind_i <- vector("list", it)
-  ind_i[use] <- lapply(res[use], function(r)
-    LBIspr(r$fit, gear = gears, spr = spr, thresh = thresh))
+  # --- Indicators on usable iterations -----------------------------------
+  lbi <- match.arg(lbi, several.ok = TRUE)
 
-  # NA templates so unusable iterations never inherit another's values
+  ## catch weights by gear for pooled indices: from the OEM's reported catch
+  ## (yearly shares), or the catch_by_gear fallback -- FLQuants (shares or
+  ## catches, by year) or a static numeric vector; always normalised
+  gear_w <- function(i) {
+    if (identical(pool, "equal"))
+      return(as.list(setNames(rep(1 / length(gears), length(gears)), gears)))
+    if (is.numeric(pool)) {
+      if (is.null(names(pool)) || !all(gears %in% names(pool)))
+        stop("flicc.sa(): numeric 'pool' must be named by gear: ", paste(gears, collapse = ", "))
+      return(as.list(pool[gears] / sum(pool[gears])))
+    }
+    if (inherits(catch_by_gear, "FLQuants")) {
+      ## shares or catches: normalise to sum to 1 per year
+      w   <- lapply(setNames(nm = gears), function(g) iter(catch_by_gear[[g]], i))
+      tot <- Reduce(`+`, w)
+      lapply(w, function(x) { s <- x / tot; s[!is.finite(s)] <- 0; s })
+    } else {
+      w <- catch_by_gear
+      if (is.null(names(w))) names(w) <- gears
+      as.list(w[gears] / sum(w[gears]))
+    }
+  }
+
+  make_ind <- function(fit, i) {
+    out <- list()
+    w <- if (identical(pool, "none")) NULL else gear_w(i)
+    if ("spr" %in% lbi) {
+      li <- LBIspr(fit, gear = gears, spr = spr, thresh = thresh)
+      for (g in gears) out[[paste0("LBIspr.", g)]] <- index(li[[g]])
+      if (!identical(pool, "none"))
+        out$LBIspr <- Reduce(`+`, lapply(gears, function(g)
+          out[[paste0("LBIspr.", g)]] * w[[g]]))
+      attr(out, "Lref") <- attr(li, "Lref")
+    }
+    if ("mean" %in% lbi) {
+      la <- utils::modifyList(list(spr = spr), lbimean_args)   # flicc.sa's spr unless set
+      lm <- do.call(LBImean, c(list(fit = fit, gear = gears), la))
+      for (g in gears) out[[paste0("LBImean.", g)]] <- index(lm[[g]])
+      if (!identical(pool, "none"))
+        out$LBImean <- Reduce(`+`, lapply(gears, function(g)
+          out[[paste0("LBImean.", g)]] * w[[g]]))
+      attr(out, "Lmean_ref") <- attr(lm, "Lmean_ref")
+    }
+    out$SPR  <- fit$report$spr
+    M        <- c(fit$report$lhpar["M"])                 # fitted M (Mk * k)
+    out$Z    <- fit$report$Fap + M                       # apical F + M
+    out$Ztgt <- out$Z
+    out$Ztgt[] <- fspr_flicc(fit, spr = spr) + M         # F_SPRx + M
+    out$Zrel <- out$Z / out$Ztgt
+    out
+  }
+
+  ind_i <- vector("list", it)
+  ind_i[use] <- lapply(which(use), function(i) make_ind(res[[i]]$fit, i))
+
+  ## NA templates so unusable iterations never inherit another's values
   if (any(use)) {
-    template <- ind_i[[which(use)[1]]]
-    gear_q <- setNames(lapply(gears, function(g) {
-      q <- propagate(index(template[[g]]), it); q[] <- NA; q
-    }), gears)
-    spr_q <- propagate(res[[which(use)[1]]]$fit$report$spr, it)
-    spr_q[] <- NA
+    first <- ind_i[[which(use)[1]]]
+    ind <- lapply(first, function(x) { q <- propagate(x, it); q[] <- NA; q })
+    for (i in which(use))
+      for (nm in names(ind)) iter(ind[[nm]], i) <- ind_i[[i]][[nm]]
   } else {
+    pooled <- !identical(pool, "none")
+    nms <- c(if ("spr" %in% lbi) c(paste0("LBIspr.", gears), if (pooled) "LBIspr"),
+             if ("mean" %in% lbi) c(paste0("LBImean.", gears), if (pooled) "LBImean"),
+             "SPR", "Z", "Ztgt", "Zrel")
     na_q <- FLQuant(NA, dimnames = list(year = dimnames(lfd[[1]])$year,
                                         iter = seq_len(it)))
-    gear_q <- setNames(rep(list(na_q), length(gears)), gears)
-    spr_q  <- na_q
+    ind <- setNames(rep(list(na_q), length(nms)), nms)
   }
-
-  for (i in which(use)) {
-    for (g in gears)
-      iter(gear_q[[g]], i) <- index(ind_i[[i]][[g]])
-    iter(spr_q, i) <- res[[i]]$fit$report$spr
-  }
-  ind <- FLQuants(c(gear_q, list(SPR = spr_q)))
+  ind <- FLQuants(ind)
 
   # --- Tracking -----------------------------------------------------------
   track(tracking, "conv.est",     ac(ay)) <- conv           # 1 / 0 / NA (error)
   track(tracking, "sprbound.est", ac(ay)) <- bound          # 1 = SPR at boundary
   track(tracking, "refit.est",    ac(ay)) <- refit          # 1 = rescued by refit
   track(tracking, "used.est",     ac(ay)) <- as.numeric(use) # 0 -> mult = 1
+  if ("spr" %in% lbi) {
+    for (g in gears) {
+      lr <- rep(NA_real_, it)
+      lr[use] <- vapply(ind_i[use], function(x) unname(attr(x, "Lref")[g]), numeric(1))
+      track(tracking, paste0("Lref.", g), ac(ay)) <- lr   # LBIspr cut-off drift
+    }
+  }
+  if ("mean" %in% lbi) {
+    for (g in gears) {
+      lm_ref <- rep(NA_real_, it)
+      lm_ref[use] <- vapply(ind_i[use], function(x)
+        unname(attr(x, "Lmean_ref")[g]), numeric(1))
+      track(tracking, paste0("Lmeanref.", g), ac(ay)) <- lm_ref  # reference drift
+    }
+  }
 
   list(stk = stk, ind = ind, tracking = tracking)
 }
@@ -789,17 +881,26 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
 #' particular stock's tuned gain/trigger constants -- b1-b4/dlow/dhi below
 #' are spr_rule()'s own defaults and need calibrating against this OM.
 #'
-#' @param gear Character name or numeric index of the ind element (a gear,
-#'   e.g. "Trawl") supplying the trend ratio r.
+#' @param gear Name of the `ind` element (from [flicc.sa()]) supplying the
+#'   trend ratio r: `"SPR"` (default), a gear's length indicator
+#'   `"LBIspr.<gear>"` or `"LBImean.<gear>"` (e.g. `"LBIspr.Trawl"`,
+#'   `"LBIspr.Gillnet"`), or a pooled `"LBIspr"` / `"LBImean"` (only when
+#'   flicc.sa() is run with `pool` other than "none"). Plain gear names
+#'   (e.g. "Trawl") are no longer valid. A numeric index is also accepted.
 #' @param output "catch" (TAC, the default) or "effort" -- whichever
 #'   fwd.om's projection method expects a relative-to-previous adjustment
 #'   applied to. NOT "fbar" -- this rule has no F to set.
 #' @param spr_trigger SPR below which `decision.hcr` is set to 3, so that
-#'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.5;
+#'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.1;
 #'   0 disables the limits.
 #' @param ... Passed through, unused (dispatch compatibility).
+#' @examples
+#' \dontrun{
+#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
+#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
+#' }
 #' @export
-lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
+lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
                     b1 = 0.10, b2 = 0.3, b3 = 0.50, b4 = 0.75,
                     dlow = -0.20, dopt = 0.00, dhi = 0.15,
                     nyrs = 1, n1 = 2, n2 = 3, output = "catch",
@@ -807,9 +908,12 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
 
   FLCore::spread(args)
 
-  # trend ratio -- r_rule()'s own logic, applied directly to the FLQuant
-  # (ind[[gear]] already IS the indicator, unlike LBIspr(fit)[[gear]] in
-  # hcr_sprlbi(), which needed index() to unwrap it from FLIndexBiomass)
+  # trend ratio -- r_rule()'s own logic, applied to the FLQuant ind[[gear]]
+  # (flicc.sa() already unwraps LBIspr()/LBImean() from FLIndexBiomass)
+  if (is.character(gear) && !gear %in% names(ind))
+    stop("lbi.hcr(): '", gear, "' not in ind (",
+         paste(names(ind), collapse = ", "), "). Gear indicators are named ",
+         "e.g. 'LBIspr.Trawl' or 'LBImean.Trawl'.")
   idx <- ind[[gear]]
   r <- c(yearMeans(tail(idx, n1)) / yearMeans(head(tail(idx, n1 + n2), n2)))
   #browser()
@@ -818,9 +922,10 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
   s <- spr_rule(spr_cur, b1 = b1, b2 = b2, b3 = b3, b4 = b4,
                 dlow = dlow, dopt = dopt, dhi = dhi)
 
+
   # apply s only when r and s agree on direction, exactly as hcr_sprlbi()
   mult <- ifelse((r < 1 & s < 1) | (r > 1 & s > 1), s, 1)
-
+  #browser()
   # iterations without a usable fit (NA indicators from flicc.sa()) keep
   # the previous TAC: mult = 1
   mult[!is.finite(mult)] <- 1
@@ -829,11 +934,12 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
   # 3 = TAC-change limits apply (SPR below spr_trigger), 1 = otherwise
   decision <- ifelse(is.finite(spr_cur) & spr_cur < spr_trigger, 3, 1)
 
+  track(tracking, "trend.hcr", ac(ay)) <- FLQuant(c(r), dimnames = list(iter = seq_along(decision)))
   track(tracking, "metric.hcr", ac(ay)) <- ind[["SPR"]][, ac(dy)]
   track(tracking, "decision.hcr", ac(ay)) <-
     FLQuant(decision, dimnames = list(iter = seq_along(decision)))
   track(tracking, "mult.hcr", ac(ay)) <-
-    FLQuant(c(mult), dimnames = list(iter = seq_along(decision)))
+    FLQuant(c(mult), dimnames = list(iter = seq_along(mult)))
 
   #browser()
   ctrl <- fwdControl(list(year = ay, quant = output, value = c(mult)))
@@ -842,7 +948,188 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
 }
 
 
-#' mp()-compatible implementation system for lbi.hcr()
+#' mp()-compatible trend x status harvest control rule
+#'
+#' Ports hcr_sprlbi()'s own combined logic -- a recent-trend ratio on a
+#' length indicator (r_rule()'s "recent n1 years vs prior n2 years" ratio),
+#' combined with an SPR-based status check (spr_rule()), applied only when
+#' both point the same direction -- onto flicc.sa()'s own `ind` output
+#' (FLQuants: one element per gear plus "SPR"), returning a *relative*
+#' multiplicative adjustment to the previous catch/TAC rather than an
+#' absolute output level. Broadly the shape used by trend-driven empirical
+#' MPs (e.g. CCSBT's own Bali Procedure): NOT a reproduction of any
+#' particular stock's tuned gain/trigger constants -- b1-b4/dlow/dhi below
+#' are spr_rule()'s own defaults and need calibrating against this OM.
+#'
+#' @param gear Name of the `ind` element (from [flicc.sa()]) supplying the
+#'   trend ratio r: `"SPR"` (default), a gear's length indicator
+#'   `"LBIspr.<gear>"` or `"LBImean.<gear>"` (e.g. `"LBIspr.Trawl"`,
+#'   `"LBIspr.Gillnet"`), or a pooled `"LBIspr"` / `"LBImean"` (only when
+#'   flicc.sa() is run with `pool` other than "none"). Plain gear names
+#'   (e.g. "Trawl") are no longer valid. A numeric index is also accepted.
+#' @param output "catch" (TAC, the default) or "effort" -- whichever
+#'   fwd.om's projection method expects a relative-to-previous adjustment
+#'   applied to. NOT "fbar" -- this rule has no F to set.
+#' @param spr_trigger SPR below which `decision.hcr` is set to 3, so that
+#'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.1;
+#'   0 disables the limits.
+#' @param ... Passed through, unused (dispatch compatibility).
+#' @examples
+#' \dontrun{
+#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
+#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
+#' }
+#' @export
+lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
+                    b1 = 0.10, b2 = 0.3, b3 = 0.50, b4 = 0.75,
+                    dlow = -0.20, dopt = 0.00, dhi = 0.15,
+                    nyrs = 1, n1 = 2, n2 = 3, output = "catch",
+                    spr_trigger = 0.1, ...) {
+
+  FLCore::spread(args)
+
+  # trend ratio -- r_rule()'s own logic, applied to the FLQuant ind[[gear]]
+  # (flicc.sa() already unwraps LBIspr()/LBImean() from FLIndexBiomass)
+  if (is.character(gear) && !gear %in% names(ind))
+    stop("lbi.hcr(): '", gear, "' not in ind (",
+         paste(names(ind), collapse = ", "), "). Gear indicators are named ",
+         "e.g. 'LBIspr.Trawl' or 'LBImean.Trawl'.")
+  idx <- ind[[gear]]
+  r <- c(yearMeans(tail(idx, n1)) / yearMeans(head(tail(idx, n1 + n2), n2)))
+  #browser()
+  # SPR-based status rule, unchanged from spr_rule()
+  spr_cur <- c(yearMeans(tail(ind[["SPR"]], nyrs)))
+  s <- spr_rule(spr_cur, b1 = b1, b2 = b2, b3 = b3, b4 = b4,
+                dlow = dlow, dopt = dopt, dhi = dhi)
+
+
+  # apply s only when r and s agree on direction, exactly as hcr_sprlbi()
+  mult <- ifelse((r < 1 & s < 1) | (r > 1 & s > 1), s, 1)
+  #browser()
+  # iterations without a usable fit (NA indicators from flicc.sa()) keep
+  # the previous TAC: mult = 1
+  mult[!is.finite(mult)] <- 1
+
+  # decision.hcr trigger flag, read by flicc.is() the same way tacspm.is():
+  # 3 = TAC-change limits apply (SPR below spr_trigger), 1 = otherwise
+  decision <- ifelse(is.finite(spr_cur) & spr_cur < spr_trigger, 3, 1)
+
+  track(tracking, "trend.hcr", ac(ay)) <- FLQuant(c(r), dimnames = list(iter = seq_along(decision)))
+  track(tracking, "metric.hcr", ac(ay)) <- ind[["SPR"]][, ac(dy)]
+  track(tracking, "decision.hcr", ac(ay)) <-
+    FLQuant(decision, dimnames = list(iter = seq_along(decision)))
+  track(tracking, "mult.hcr", ac(ay)) <-
+    FLQuant(c(mult), dimnames = list(iter = seq_along(mult)))
+
+  #browser()
+  ctrl <- fwdControl(list(year = ay, quant = output, value = c(mult)))
+
+  list(ctrl = ctrl, tracking = tracking)
+}
+
+#' rfb-type harvest control rule for flicc.sa() output
+#'
+#' ICES category-3 style rule adapted to the indicators returned by
+#' [flicc.sa()] (`LBIspr`, `LBImean` pooled and by gear, `SPR`, `Zrel`):
+#' \deqn{A_{y+1} = A_y \, r^{\gamma} \, f \, b \, m}
+#' returned as a TAC multiplier for [flicc.is()].
+#'
+#' \describe{
+#'   \item{r}{Trend ratio of the `index` series: mean of the last `n1`
+#'     years over the mean of the preceding `n2` years (ICES 2-over-3).
+#'     `index` is any element of `ind`, e.g. `"LBIspr.Gillnet"` (default),
+#'     `"LBImean.Trawl"`, a pooled `"LBIspr"`/`"LBImean"` (if flicc.sa() was
+#'     run with `pool`), or `"SPR"`. A trend cancels a
+#'     constant scale bias, so it is the component least sensitive to
+#'     misspecified M, Linf or selectivity.}
+#'   \item{f}{Fishing-pressure component. `NULL` (default) sets f = 1 (an
+#'     rb rule). Otherwise an element of `ind` whose *level* is used, e.g.
+#'     `"LBImean"` (= 1 at F = M, the ICES-type f), `"LBIspr"` (= 1 at the
+#'     SPR target) or `"Zrel"` (used as 1/Zrel). Levels inherit the model's
+#'     scale bias.}
+#'   \item{b}{Safeguard \eqn{\min(1, SPR_y / SPR_{trigger})}. A low-biased
+#'     SPR estimate makes it more precautionary.}
+#'   \item{m}{Precautionary multiplier (ICES rfb: 0.95 for k < 0.2).}
+#' }
+#'
+#' Iterations without usable indicators (NA from flicc.sa()) keep the
+#' previous TAC (mult = 1). `decision.hcr` is 3 when b = 1, so that
+#' flicc.is() applies its stability limits (`dtacupp`, `dtaclow`) only when
+#' the safeguard is not active, as in the ICES rfb rule.
+#'
+#' @param stk,ind,args,tracking Standard mp() arguments; `ind` from flicc.sa().
+#' @param index Element of `ind` for the trend r.
+#' @param f Level component, taken in the latest year: `NULL` (f = 1, rb
+#'   rule); `"LBImean"` or `"LBImean.<gear>"` (Lmean / L_F=M, the ICES-type
+#'   f); `"Zrel"` (used as 1 / Zrel = Ztgt / Z); or `"LBIspr"` /
+#'   `"LBIspr.<gear>"`. In all cases f < 1 indicates fishing above the
+#'   reference.
+#' @param n1,n2 Recent and reference windows of the trend ratio.
+#' @param gamma Exponent on r (1 = ICES; < 1 damps the response).
+#' @param spr_trigger SPR below which b < 1.
+#' @param nspr Years of SPR averaged for b.
+#' @param m Precautionary multiplier.
+#' @param output "catch" (default) or "effort".
+#' @param ... Unused.
+#' @return List with `ctrl` (fwdControl holding the TAC multiplier) and
+#'   `tracking` (r.hcr, f.hcr, b.hcr, mult.hcr, decision.hcr).
+#' @examples
+#' \dontrun{
+#' ctrl <- mpCtrl(list(
+#'   est  = mseCtrl(method = flicc.sa, args = est_args),
+#'   hcr  = mseCtrl(method = rfb.flicc.hcr,
+#'                  args = list(index = "LBIspr.Gillnet", spr_trigger = 0.25)),
+#'   isys = mseCtrl(method = flicc.is,
+#'                  args = list(initac = initac, dtacupp = 1.2, dtaclow = 0.7))
+#' ))
+#' }
+#' @export
+rfb.flicc.hcr <- function(stk, ind, args, tracking,
+                          index = "LBIspr.Gillnet", f = NULL, n1 = 2, n2 = 3, gamma = 1,
+                          spr_trigger = 0.25, nspr = 1, m = 0.95,
+                          output = "catch", ...) {
+
+  FLCore::spread(args)
+
+  get_series <- function(nm) {
+    if (!nm %in% names(ind))
+      stop("rfb.flicc.hcr(): '", nm, "' not in ind (",
+           paste(names(ind), collapse = ", "), ")")
+    ind[[nm]]
+  }
+
+  ## r: trend ratio (n1 over n2)
+  I <- get_series(index)
+  r <- c(yearMeans(tail(I, n1)) / yearMeans(head(tail(I, n1 + n2), n2)))^gamma
+
+  ## f: optional level component
+  fv <- if (is.null(f)) rep(1, length(r)) else c(tail(get_series(f), 1))
+  if (identical(f, "Zrel")) fv <- 1 / fv              # Z above target -> f < 1
+
+  ## b: SPR safeguard
+  spr_cur <- c(yearMeans(tail(ind[["SPR"]], nspr)))
+  b <- pmin(1, spr_cur / spr_trigger)
+
+  mult <- r * fv * b * m
+  mult[!is.finite(mult)] <- 1                         # no usable fit: keep TAC
+  b[!is.finite(b)] <- 1
+
+  ## stability limits in flicc.is() only when the safeguard is inactive
+  decision <- ifelse(b >= 1, 3, 1)
+
+  its <- seq_along(mult)
+  track(tracking, "r.hcr", ac(ay))        <- FLQuant(r,        dimnames = list(iter = its))
+  track(tracking, "f.hcr", ac(ay))        <- FLQuant(fv,       dimnames = list(iter = its))
+  track(tracking, "b.hcr", ac(ay))        <- FLQuant(b,        dimnames = list(iter = its))
+  track(tracking, "mult.hcr", ac(ay))     <- FLQuant(mult,     dimnames = list(iter = its))
+  track(tracking, "decision.hcr", ac(ay)) <- FLQuant(decision, dimnames = list(iter = its))
+
+  ctrl <- fwdControl(list(year = ay, quant = output, value = c(mult)))
+  list(ctrl = ctrl, tracking = tracking)
+}
+
+
+#' mp()-compatible implementation system for lbi.hcr() and rfb.flicc.hcr
 #'
 #' Converts the TAC multiplier returned by lbi.hcr() into a TAC,
 #' \eqn{TAC_y = TAC_{y-1} \times mult}, applies optional limits where
