@@ -6,11 +6,11 @@
 \usage{
 plot_hcrspr(
   b1 = 0.1,
-  b2 = 0.3,
-  b3 = 0.5,
-  b4 = 0.8,
+  b2 = 0.35,
+  b3 = 0.45,
+  b4 = 0.6,
   blim = 0.1,
-  bthr = 0.3,
+  bthr = 0.2,
   dlow = -0.2,
   dopt = 0,
   dup = 0.15,

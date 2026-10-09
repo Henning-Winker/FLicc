@@ -7,9 +7,9 @@
 spr_rule(
   spr,
   b1 = 0.1,
-  b2 = 0.3,
-  b3 = 0.5,
-  b4 = 0.75,
+  b2 = 0.35,
+  b3 = 0.45,
+  b4 = 0.6,
   dlow = -0.2,
   dopt = 0,
   dhi = 0.15,
@@ -61,10 +61,10 @@ multiplier = 1 + change
 
 spr <- seq(0,1,0.02)
 change <- spr_rule(spr=seq(0,1,0.02),
-b1 = 0.20,
+b1 = 0.1,
 b2 = 0.35,
-b3 = 0.6,
-b4 = 0.8,
+b3 = 0.45,
+b4 = 0.6,
 dlow = -0.20,
 dopt =  0.00,
 dhi  =  0.15)

@@ -55,11 +55,11 @@
 #' @export
 plot_hcrspr <- function(
     b1 = 0.1,
-    b2 = 0.3,
-    b3 = 0.5,
-    b4 = 0.8,
+    b2 = 0.35,
+    b3 = 0.45,
+    b4 = 0.6,
     blim = 0.10,
-    bthr = 0.3,
+    bthr = 0.2,
     dlow = -0.20,
     dopt =  0.00,
     dup  =  0.15,
@@ -289,10 +289,10 @@ plot_hcrspr <- function(
 #'
 #' spr <- seq(0,1,0.02)
 #' change <- spr_rule(spr=seq(0,1,0.02),
-#' b1 = 0.20,
+#' b1 = 0.1,
 #' b2 = 0.35,
-#' b3 = 0.6,
-#' b4 = 0.8,
+#' b3 = 0.45,
+#' b4 = 0.6,
 #' dlow = -0.20,
 #' dopt =  0.00,
 #' dhi  =  0.15)
@@ -305,9 +305,9 @@ plot_hcrspr <- function(
 spr_rule <- function(
     spr,
     b1 = 0.10,
-    b2 = 0.3,
-    b3 = 0.50,
-    b4 = 0.75,
+    b2 = 0.35,
+    b3 = 0.45,
+    b4 = 0.6,
     dlow = -0.20,
     dopt =  0.00,
     dhi  =  0.15,
@@ -494,6 +494,8 @@ hcr_sprlbi <- function(fit, gear,
 }
 
 
+
+
 #' Call fiticc() inside the mp() function
 #'
 #' This function provides an interface to FLicc::fiticc() to be used inside
@@ -530,12 +532,22 @@ hcr_sprlbi <- function(fit, gear,
 #' @param m_model Natural-mortality-at-length model passed to stocklen():
 #'   one of "constant", "inverse", "Lorenzen", "Gislason".
 #' @param settings List of fiticc() model settings (pop_model, obs_model,
-#'   ngtg, ...); see ?fiticc. If \code{settings$spr_ref} is not given it is
-#'   set to \code{spr}, so each fit reports Fspr at the indicator target and
-#'   \code{LBIspr()} reuses it.
+#'   ngtg, ...); see ?fiticc.
 #' @param spr,thresh Passed to LBIspr() to compute the length-based
 #'   indicator (target SPR%, cumulative threshold defining Lref).
-#' @param ess.g Numeric scalar or vector of effective sample sizes by gear.
+#' @param ess.g Numeric scalar or vector (gear order) of effective sample
+#'   sizes passed to lfdess(); each gear-year LFD is rescaled to this total.
+#'   `NULL` keeps the sampled counts (e.g. the OEM's `ess_len`). A scalar
+#'   gives every gear the same weight regardless of how many fish were
+#'   measured.
+#' @param drop_nonconv Logical; if TRUE, non-converged fits are not used
+#'   (their indicators are NA, i.e. mult = 1 in lbi.hcr()).
+#' @param spr_max Fits with any SPR >= `spr_max` are flagged as boundary
+#'   solutions and not used; `NULL` disables the check.
+#' @param refit_sel_fun Optional alternative `sel_fun` tried for boundary
+#'   fits; the refit is kept only if it is no longer at the boundary.
+#' @param debug_dir Optional folder where the inputs of boundary fits are
+#'   saved (one .rds per assessment year) for offline diagnosis.
 #' @param n_restart,grad_tol,compile,silent,dll Passed through to fiticc().
 #' @param parallel,workers If TRUE, fit iterations in parallel via foreach/
 #'   doFuture/future::multisession. Automatically disabled (with a warning)
@@ -570,6 +582,7 @@ hcr_sprlbi <- function(fit, gear,
 #' @name flicc.sa
 #' @rdname flicc.sa
 #' @keywords classes
+#' @export
 flicc.sa <- function(stk, idx = NULL, args, tracking,
                      lhpar, sel_fun, catch_by_gear = NULL,
                      m_model = "constant",
@@ -620,10 +633,6 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
             "(mp() itself is running parallel) -- nested parallel backends are unsafe.")
     parallel <- FALSE
   }
-
-  # Fspr at the indicator target is reported by each fit, so LBIspr()
-  # reuses it instead of solving for it (see settings$spr_ref in ?fiticc)
-  if (is.null(settings$spr_ref)) settings$spr_ref <- spr
 
   gears <- names(lfd)
   it <- args$it
@@ -766,6 +775,7 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
 
   list(stk = stk, ind = ind, tracking = tracking)
 }
+
 #' mp()-compatible trend x status harvest control rule
 #'
 #' Ports hcr_sprlbi()'s own combined logic -- a recent-trend ratio on a
@@ -784,11 +794,16 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
 #' @param output "catch" (TAC, the default) or "effort" -- whichever
 #'   fwd.om's projection method expects a relative-to-previous adjustment
 #'   applied to. NOT "fbar" -- this rule has no F to set.
+#' @param spr_trigger SPR below which `decision.hcr` is set to 3, so that
+#'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.5;
+#'   0 disables the limits.
 #' @param ... Passed through, unused (dispatch compatibility).
+#' @export
 lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
                     b1 = 0.10, b2 = 0.3, b3 = 0.50, b4 = 0.75,
                     dlow = -0.20, dopt = 0.00, dhi = 0.15,
-                    nyrs = 1, n1 = 2, n2 = 3, output = "catch", ...) {
+                    nyrs = 1, n1 = 2, n2 = 3, output = "catch",
+                    spr_trigger = 0.1, ...) {
 
   FLCore::spread(args)
 
@@ -806,9 +821,13 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
   # apply s only when r and s agree on direction, exactly as hcr_sprlbi()
   mult <- ifelse((r < 1 & s < 1) | (r > 1 & s > 1), s, 1)
 
-  # decision.hcr trigger flag, read by flicc.is() the same way tacspm.is()
+  # iterations without a usable fit (NA indicators from flicc.sa()) keep
+  # the previous TAC: mult = 1
+  mult[!is.finite(mult)] <- 1
 
-  decision <- ifelse(spr_cur < 0., 3, 1)
+  # decision.hcr trigger flag, read by flicc.is() the same way tacspm.is():
+  # 3 = TAC-change limits apply (SPR below spr_trigger), 1 = otherwise
+  decision <- ifelse(is.finite(spr_cur) & spr_cur < spr_trigger, 3, 1)
 
   track(tracking, "metric.hcr", ac(ay)) <- ind[["SPR"]][, ac(dy)]
   track(tracking, "decision.hcr", ac(ay)) <-
@@ -822,27 +841,21 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = 1,
   list(ctrl = ctrl, tracking = tracking)
 }
 
+
 #' mp()-compatible implementation system for lbi.hcr()
 #'
-#' Turns the relative multiplier returned by \code{lbi.hcr()} into a TAC
-#' (or effort) advice: the previous TAC (from tracking, or \code{initac} in
-#' the first cycle) times the multiplier, with optional limits on the change
-#' and an optional split of the advice across units (areas).
+#' Converts the TAC multiplier returned by lbi.hcr() into a TAC,
+#' \eqn{TAC_y = TAC_{y-1} \times mult}, applies optional limits where
+#' `decision.hcr > 2`, and optionally splits the TAC across units (areas).
 #'
-#' @param stk The FLStock passed by \code{mp()}.
-#' @param ctrl The \code{fwdControl} returned by \code{lbi.hcr()}, holding
-#'   the multiplier.
-#' @param args,tracking \code{mp()}'s per-cycle args and tracking object.
-#' @param output "catch" (default) or "effort".
-#' @param dtaclow,dtacupp Optional lower and upper limits on the TAC change
-#'   relative to the previous TAC (e.g. 0.85, 1.15), applied to iterations
-#'   flagged by the HCR decision.
-#' @param Cmax Optional absolute maximum TAC.
-#' @param initac TAC used as the previous TAC in the first cycle (required).
-#' @param catch_area Optional vector of shares to split the TAC across units.
-#'
-#' @return A list with \code{ctrl} (a \code{fwdControl} for year
-#'   \code{ay + management_lag}) and \code{tracking} (with "tac.is").
+#' @param stk,ctrl,args,tracking Standard mp() arguments.
+#' @param output Quantity controlled, default "catch".
+#' @param dtaclow,dtacupp Lower/upper multipliers on the previous TAC.
+#' @param Cmax Maximum TAC.
+#' @param initac Previous TAC for the first cycle (ay == iy).
+#' @param catch_area Optional TAC shares by unit, named by unit or in the
+#'   order of `dimnames(stk)$unit` (excluding "combined").
+#' @return List with `ctrl` and `tracking` (TAC tracked as "tac.is").
 #' @export
 flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
                      dtaclow = NA, dtacupp = NA, Cmax = NA,
@@ -900,8 +913,9 @@ flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
                                          value = c("min", "value", "max"),
                                          iter = seq(n_its)))
     ### split catch advice into units based on smpf
-    for(i in 1:length(units)){
-      iters_array[units[i], "value", ] <- TAC * catch_area[i]
+    shares <- if (!is.null(names(catch_area))) catch_area[units] else catch_area
+    for(i in seq_along(units)){
+      iters_array[units[i], "value", ] <- TAC * shares[i]
     }
 
     ### intert into ctrl
@@ -914,4 +928,7 @@ flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
   list(ctrl = ctrl, tracking = tracking)
 }
 
-
+## flicc.is() reads mse's data.table tracking with data.table syntax
+## (metric, year, data); make the FLicc namespace data.table-aware
+.datatable.aware <- TRUE
+utils::globalVariables(c("metric", "year", "data"))
