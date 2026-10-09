@@ -14,11 +14,19 @@
 #' @param thresh cumulative threshold used to define Lref, default 0.75
 #' @param nyears number of terminal years to average
 #' @param scale_sel logical; passed to nf_flicc
+#' @param tail_cut Length bins used for the reference and observed
+#'   proportions: `NULL` (default) applies the fit's own tail cut
+#'   (`settings$tail_cut` in [fiticc()]), so the indicator uses the same
+#'   bins as the likelihood; `FALSE` uses all bins; a number is a fraction
+#'   of the input Linf (bins with lower bound `>= tail_cut * linf` are
+#'   excluded).
 #'
-#' @return *FLIndices* with *FLIndexBiomass*
+#' @return *FLIndices* with *FLIndexBiomass*. Attributes `"Lref"` (threshold
+#'   length by gear), `"LFDref"` and `"Lcut"` (first excluded length, `NA`
+#'   if no cut).
 #' @export
 LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
-                         nyears = 1, scale_sel = TRUE) {
+                         nyears = 1, scale_sel = TRUE, tail_cut = NULL) {
 
 
   gear_names <- names(fit$report$sel_gear)
@@ -58,6 +66,10 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
   Nref <- nf_flicc(fit, nyears = nyears, F = Ftgt, scale_sel = scale_sel)
   Len  <- as.numeric(dimnames(Nref)$len)
 
+  # bins retained after the tail cut (all bins if none)
+  keep <- tail_keep_flicc(fit, Len, tail_cut)
+  kept <- ac(Len[keep])
+
 
 
   vals <- numeric(length(gear))
@@ -78,7 +90,7 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
     # reference vulnerable numbers for this gear
     vref <- Nref * sg
 
-    if (sum(vref, na.rm = TRUE) <= 0) {
+    if (sum(vref[kept, ], na.rm = TRUE) <= 0) {
       vals[i] <- NA_real_
       Lref_out[i] <- NA_real_
       pref_out[i] <- NA_real_
@@ -87,8 +99,10 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
     }
 
     # define threshold length from cumulative vulnerable numbers
-    vref2 <- vref[-1]
-    Len2  <- Len[-1]
+    # (retained bins only)
+    vk    <- vref[kept, ]
+    vref2 <- vk[-1]
+    Len2  <- Len[keep][-1]
 
     cums = apply(vref2, 2:6, cumsum)
     n_thresh <- sum(vref2, na.rm = TRUE) * thresh
@@ -100,17 +114,17 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
 
 
     # expected proportion above threshold
-    pref <- sum(vref[Li,], na.rm = TRUE) / sum(vref, na.rm = TRUE)
+    pref <- sum(vref[Li,], na.rm = TRUE) / sum(vk, na.rm = TRUE)
 
     for(y in seq(yrs)){
     # observed gear-specific length composition
     obs_g <- fit$report$obslen[[g]][,y]
 
-    if (sum(obs_g, na.rm = TRUE) <= 0) {
+    if (sum(obs_g[kept, ], na.rm = TRUE) <= 0) {
       next
     }
 
-    pobs <- sum(obs_g[Li,], na.rm = TRUE) / sum(obs_g, na.rm = TRUE)
+    pobs <- sum(obs_g[Li,], na.rm = TRUE) / sum(obs_g[kept, ], na.rm = TRUE)
 
     flqs[[g]][,y] <- pobs / pref
   }
@@ -125,6 +139,7 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
  names(Lref) <- gear
  attr(out,"LFDref") <- LFDref
  attr(out,"Lref") <- Lref
+ attr(out,"Lcut") <- if (all(keep)) NA_real_ else min(Len[!keep])
 
  return(out)
 
@@ -162,6 +177,11 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
 #'   \eqn{L_c} convention; `"none"` uses all lengths (except the first bin);
 #'   or a numeric value (single, or named by gear).
 #' @param nyears,scale_sel Passed to [nf_flicc()] / [fspr_flicc()].
+#' @param tail_cut Upper length limit, as in [LBIspr()]: `NULL` (default)
+#'   applies the fit's own tail cut (`settings$tail_cut`), `FALSE` uses all
+#'   bins, a number is a fraction of the input Linf. Together with `lc`,
+#'   both the observed and the reference mean length use the bins
+#'   `Lc <= L < Lcut`.
 #'
 #' @return *FLIndices* of *FLIndexBiomass*, one per gear, with
 #'   \eqn{\bar L^{obs}/\bar L^{ref}} by year. Attributes `"Lmean_ref"`
@@ -183,7 +203,7 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
 #' }
 #' @export
 LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
-                    lc = "sel50", nyears = 1, scale_sel = TRUE) {
+                    lc = "sel50", nyears = 1, scale_sel = TRUE, tail_cut = NULL) {
 
   ref <- match.arg(ref)
 
@@ -206,6 +226,7 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
   Len <- as.numeric(dimnames(Nref)$len)
   bin <- if (length(Len) > 1) stats::median(diff(Len)) else 1
   mid <- Len + bin / 2
+  tail_keep <- tail_keep_flicc(fit, Len, tail_cut)   # upper (tail) cut
 
   flqs <- FLQuants(lapply(setNames(nm = gear), function(g) {
     FLQuant(NA_real_, dimnames = list(age = "all", year = yrs), units = "lbi")
@@ -229,7 +250,7 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
     } else {
       Len[2]                              # drop the first (pooled) bin only
     }
-    keep <- Len >= Lc
+    keep <- Len >= Lc & tail_keep
     Lc_out[g] <- Lc
 
     if (sum(vref[keep], na.rm = TRUE) <= 0) next
@@ -252,6 +273,27 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
   }))
   attr(out, "Lmean_ref") <- Lmean_ref
   attr(out, "Lc") <- Lc_out
+  attr(out, "Lcut") <- if (all(tail_keep)) NA_real_ else min(Len[!tail_keep])
   out
+}
+
+
+#' Length bins retained after a tail cut (internal)
+#'
+#' @param fit Fitted FLicc object.
+#' @param Len Lower bounds of the length bins.
+#' @param tail_cut `NULL`: the fit's own cut (`fit$tmb_data$cut_bin`);
+#'   `FALSE`: none; numeric: fraction of the input Linf.
+#' @return Logical vector, `TRUE` for retained bins.
+#' @noRd
+tail_keep_flicc <- function(fit, Len, tail_cut = NULL) {
+  if (isFALSE(tail_cut)) return(rep(TRUE, length(Len)))
+  if (is.null(tail_cut)) {
+    cb <- fit$tmb_data$cut_bin
+    if (is.null(cb) || cb < 0) return(rep(TRUE, length(Len)))
+    return(seq_along(Len) <= cb)                 # 0-based first excluded bin
+  }
+  Lcut <- as.numeric(tail_cut) * as.numeric(fit$stklen@lhpar["linf"])
+  Len < Lcut
 }
 

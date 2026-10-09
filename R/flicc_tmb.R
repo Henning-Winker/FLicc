@@ -187,12 +187,41 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     }
   }
 
+  # Tail cut: exclude length bins with lower bound >= tail_cut * Linf (input
+  # Linf, so the cut is fixed during estimation) from the composition
+  # likelihood. Observed and predicted compositions are truncated and the
+  # predicted proportions renormalised over the retained bins.
+  cut_bin <- -1L
+  if (!is.null(settings$tail_cut)) {
+    tail_cut <- as.numeric(settings$tail_cut)
+    if (length(tail_cut) != 1 || !is.finite(tail_cut) || tail_cut <= 0) {
+      stop("settings$tail_cut must be a single positive fraction of Linf, e.g. 0.9.")
+    }
+    Lcut <- tail_cut * Linf_init
+    idx  <- which(LLB >= Lcut)
+    if (length(idx) == 0) {
+      warning("settings$tail_cut * Linf = ", round(Lcut, 2),
+              " is above the largest length bin; no bins cut.")
+    } else {
+      cut_bin <- as.integer(min(idx) - 1L)    # 0-based first excluded bin
+      if (cut_bin < 2L) {
+        stop("settings$tail_cut = ", tail_cut, " would leave fewer than two ",
+             "length bins in the likelihood.")
+      }
+      if (plus_bin >= cut_bin) {
+        warning("settings$Lplus lies at or above the tail cut; plus group ignored.")
+        plus_bin <- -1L
+      }
+    }
+  }
+
   # Warn when observations fall in bins the GTG model cannot reach
   # (lower bound at or beyond the largest GTG Linf at the input values).
   if (pop_model == "gtg" && isTRUE(settings$tail_warning)) {
     maxLinf <- Linf_init * (1 + maxsd * CVL_init)
     beyond  <- LLB >= maxLinf
     if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
+    if (cut_bin >= 0) beyond <- beyond & seq_along(LLB) <= cut_bin
     n_beyond <- sum(obs[beyond, , , drop = FALSE], na.rm = TRUE)
     if (n_beyond > 0) {
       warning(sprintf(paste0(
@@ -249,6 +278,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     Mpow       = as.numeric(Mpow),
     rob_eps    = as.numeric(rob_eps),
     plus_bin   = as.integer(plus_bin),
+    cut_bin    = as.integer(cut_bin),
     # per-recruit block, off during fitting (see brp_tmb_flicc())
     brp_F       = numeric(0),
     brp_spr     = as.numeric(spr_ref) / 100,   # Fspr reported by the fit
@@ -492,6 +522,7 @@ fiticc_core <- function(lfd, stklen,
     CVL.sd = NULL,
     rob_eps = 0,
     Lplus = NULL,
+    tail_cut = NULL,
     spr_ref = 40,
     tail_warning = FALSE,
     FM_min = 0.05,
@@ -812,6 +843,19 @@ fiticc_core <- function(lfd, stklen,
 #'       bin before the likelihood (tail compression). Reduces the influence
 #'       of the binning and sampling of the largest fish. Default \code{NULL}
 #'       (off). Predicted compositions in the report stay unpooled.}
+#'
+#'     \item{\code{tail_cut}}{Optional tail cut as a fraction of the input
+#'       \eqn{L_\infty} (e.g. \code{0.9}). Length bins with lower bound
+#'       \code{>= tail_cut * linf} are excluded from the composition
+#'       likelihood: observed and predicted compositions are truncated and
+#'       the predicted proportions renormalised over the retained bins, so the
+#'       fit conditions on fish below the cut. Reduces the influence of the
+#'       largest fish, which are most sensitive to \eqn{L_\infty}, growth
+#'       variability and dome-shaped selectivity. The cut uses the input
+#'       \eqn{L_\infty} and is fixed during estimation. \code{LBIspr()} and
+#'       \code{LBImean()} apply the same cut by default. The catch likelihood
+#'       and reported predictions are not truncated. Default \code{NULL}
+#'       (off). Takes precedence over \code{Lplus} when both are set.}
 #'
 #'     \item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
 #'       The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and

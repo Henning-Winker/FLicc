@@ -342,6 +342,7 @@ nf_from_flicc <- function(fit,
   } else if (pop_model == "gtg") {
 
     td <- fit$tmb_data
+    if (is.null(td$cut_bin)) td$cut_bin <- -1L                    # fits before tail_cut
     gtg <- gtg_inputs_flicc(fit)
 
     nlen <- length(ref$Len)
@@ -592,6 +593,7 @@ flicc_refpars <- function(fit, nyears = 1, scale_sel = TRUE) {
 brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
                           FM = FALSE, spawn_time = 0, Fmax = 5) {
   td <- fit$tmb_data
+  if (!is.null(td) && is.null(td$cut_bin)) td$cut_bin <- -1L   # fits before tail_cut
   if (is.null(fit$obj) || is.null(fit$opt$par) || is.null(td$gtg_z)) return(NULL)
   k <- as.numeric(fit$stklen@lhpar["k"])
   td$brp_F       <- as.numeric(Fseq)

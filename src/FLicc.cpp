@@ -257,6 +257,7 @@ Type objective_function<Type>::operator() ()
   // Upper-tail robustness for the composition likelihood
   DATA_SCALAR(rob_eps);      // 0 = off
   DATA_INTEGER(plus_bin);    // 0-based first pooled bin; -1 = off
+  DATA_INTEGER(cut_bin);     // 0-based first excluded (tail-cut) bin; -1 = off
   // Per-recruit reference points at the estimates (evaluated only in double
   // mode, i.e. obj$report(), and only when requested; never during fitting)
   DATA_VECTOR(brp_F);        // apical F (or F/M if brp_FMscale) values
@@ -561,21 +562,32 @@ Type objective_function<Type>::operator() ()
     }
 
     // Observation likelihood
-    // Optional robustness for the upper tail (both off by default):
+    // Optional treatment of the upper tail (all off by default):
+    //  - cut_bin >= 0 excludes bins l >= cut_bin from the likelihood
+    //    (tail cut); observed and predicted compositions are both
+    //    truncated and the predicted proportions renormalised over the
+    //    retained bins, so the fit conditions on fish below the cut;
     //  - plus_bin >= 0 pools observed and predicted counts in bins
-    //    l >= plus_bin into bin plus_bin (tail compression);
+    //    l >= plus_bin into bin plus_bin (tail compression), within the
+    //    retained bins;
     //  - rob_eps > 0 mixes predicted proportions with a uniform:
     //    p = (1 - rob_eps) * p + rob_eps / nb.
-    int nb = (plus_bin >= 0 && plus_bin < nlen) ? (plus_bin + 1) : nlen;
+    int nkeep = (cut_bin > 0 && cut_bin < nlen) ? cut_bin : nlen;
+    int nb = (plus_bin >= 0 && plus_bin < nkeep) ? (plus_bin + 1) : nkeep;
 
     for(int g = 0; g < ngear; g++) {
       vector<Type> o(nb), p(nb);
       o.setZero(); p.setZero();
-      for(int l = 0; l < nlen; l++) {
+      for(int l = 0; l < nkeep; l++) {
         int k = (l < nb) ? l : (nb - 1);
         o(k) += obs(l,y,g);
         if(pred_gear(g) > Type(0)) p(k) += Cpred(l,g) / pred_gear(g);
       }
+      // renormalise over retained bins (no-op without a tail cut)
+      Type psum = p.sum();
+      if(psum > Type(0)) p = p / psum;
+      // observed total over retained bins (= obs_gear(g) without a cut)
+      Type o_tot = o.sum();
       if(rob_eps > Type(0)) {
         for(int k = 0; k < nb; k++) {
           p(k) = (Type(1) - rob_eps) * p(k) + rob_eps / Type(nb);
@@ -585,7 +597,7 @@ Type objective_function<Type>::operator() ()
       if(obs_model == 1) {
         // Negative binomial on ESS-scaled counts
         for(int k = 0; k < nb; k++) {
-          Type muk = obs_gear(g) * p(k) + Type(1e-12);
+          Type muk = o_tot * p(k) + Type(1e-12);
           if(k < nlen) mu(k,g) = muk;
           nll -= dnbinom_phi(o(k), muk, phi, 1);
         }
@@ -593,7 +605,7 @@ Type objective_function<Type>::operator() ()
       } else if(obs_model == 2) {
         // Multinomial on within-gear compositions
         // obs is already ESS-scaled by lfdess()
-        if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
+        if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
           for(int k = 0; k < nb; k++) {
             Type p_pred = p(k);
             if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
@@ -603,11 +615,12 @@ Type objective_function<Type>::operator() ()
 
       } else if(obs_model == 3) {
         // Dirichlet-multinomial on within-gear compositions
-        // Here obs_gear(g) acts as fixed ESS / precision
-        if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
-          Type alpha0 = obs_gear(g);
+        // Here the observed total over retained bins acts as fixed
+        // ESS / precision (= obs_gear(g) without a tail cut)
+        if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
+          Type alpha0 = o_tot;
           nll -= lgamma(alpha0);
-          nll += lgamma(obs_gear(g) + alpha0);
+          nll += lgamma(o_tot + alpha0);
           for(int k = 0; k < nb; k++) {
             Type p_pred = p(k);
             if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
