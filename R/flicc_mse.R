@@ -894,10 +894,17 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
 #' @param spr_trigger SPR below which `decision.hcr` is set to 3, so that
 #'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.1;
 #'   0 disables the limits.
+#' @param trend Source of the trend ratio r: `"fit"` (default) uses the last
+#'   `n1` over the preceding `n2` years of the current fit's series;
+#'   `"track"` uses the terminal-year values recorded by previous cycles
+#'   (`index.hcr` in tracking) plus the current one, which avoids the
+#'   end-of-window noise of refitted assessments. With `"track"`, `n1` and
+#'   `n2` count management cycles, and r = 1 until enough cycles exist.
 #' @param ... Passed through, unused (dispatch compatibility).
 #' @examples
 #' \dontrun{
 #' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
+#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "SPR", trend = "track"))
 #' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
 #' }
 #' @export
@@ -905,9 +912,10 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
                     b1 = 0.10, b2 = 0.3, b3 = 0.50, b4 = 0.75,
                     dlow = -0.20, dopt = 0.00, dhi = 0.15,
                     nyrs = 1, n1 = 2, n2 = 3, output = "catch",
-                    spr_trigger = 0.1, ...) {
+                    spr_trigger = 0.1, trend = c("fit", "track"), ...) {
 
   FLCore::spread(args)
+  trend <- match.arg(trend)
 
   # trend ratio -- r_rule()'s own logic, applied to the FLQuant ind[[gear]]
   # (flicc.sa() already unwraps LBIspr()/LBImean() from FLIndexBiomass)
@@ -916,7 +924,13 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
          paste(names(ind), collapse = ", "), "). Gear indicators are named ",
          "e.g. 'LBIspr.Trawl' or 'LBImean.Trawl'.")
   idx <- ind[[gear]]
-  r <- c(yearMeans(tail(idx, n1)) / yearMeans(head(tail(idx, n1 + n2), n2)))
+  cur <- c(yearMeans(tail(idx, 1)))                  # terminal-year value
+  r <- if (trend == "track") {
+    trend_track_flicc(tracking, "index.hcr", cur, ay,
+                      if (is.null(args$frq)) 1 else args$frq, n1, n2)
+  } else {
+    c(yearMeans(tail(idx, n1)) / yearMeans(head(tail(idx, n1 + n2), n2)))
+  }
   #browser()
   # SPR-based status rule, unchanged from spr_rule()
   spr_cur <- c(yearMeans(tail(ind[["SPR"]], nyrs)))
@@ -936,6 +950,7 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
   decision <- ifelse(is.finite(spr_cur) & spr_cur < spr_trigger, 3, 1)
 
   track(tracking, "trend.hcr", ac(ay)) <- FLQuant(c(r), dimnames = list(iter = seq_along(decision)))
+  track(tracking, "index.hcr", ac(ay)) <- FLQuant(cur, dimnames = list(iter = seq_along(cur)))
   track(tracking, "metric.hcr", ac(ay)) <- ind[["SPR"]][, ac(dy)]
   track(tracking, "decision.hcr", ac(ay)) <-
     FLQuant(decision, dimnames = list(iter = seq_along(decision)))
@@ -949,84 +964,41 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
 }
 
 
-#' mp()-compatible trend x status harvest control rule
+#' Trend ratio from values tracked across mp() cycles (internal)
 #'
-#' Ports hcr_sprlbi()'s own combined logic -- a recent-trend ratio on a
-#' length indicator (r_rule()'s "recent n1 years vs prior n2 years" ratio),
-#' combined with an SPR-based status check (spr_rule()), applied only when
-#' both point the same direction -- onto flicc.sa()'s own `ind` output
-#' (FLQuants: one element per gear plus "SPR"), returning a *relative*
-#' multiplicative adjustment to the previous catch/TAC rather than an
-#' absolute output level. Broadly the shape used by trend-driven empirical
-#' MPs (e.g. CCSBT's own Bali Procedure): NOT a reproduction of any
-#' particular stock's tuned gain/trigger constants -- b1-b4/dlow/dhi below
-#' are spr_rule()'s own defaults and need calibrating against this OM.
+#' Computes the n1-over-n2 trend ratio from the terminal-year indicator
+#' values stored in `tracking` by previous management cycles (metric `what`,
+#' one value per cycle and iteration) plus the current value. Unlike a ratio
+#' computed within the current fit's time series, it is not affected by
+#' end-of-window noise of a refitted assessment.
 #'
-#' @param gear Name of the `ind` element (from [flicc.sa()]) supplying the
-#'   trend ratio r: `"SPR"` (default), a gear's length indicator
-#'   `"LBIspr.<gear>"` or `"LBImean.<gear>"` (e.g. `"LBIspr.Trawl"`,
-#'   `"LBIspr.Gillnet"`), or a pooled `"LBIspr"` / `"LBImean"` (only when
-#'   flicc.sa() is run with `pool` other than "none"). Plain gear names
-#'   (e.g. "Trawl") are no longer valid. A numeric index is also accepted.
-#' @param output "catch" (TAC, the default) or "effort" -- whichever
-#'   fwd.om's projection method expects a relative-to-previous adjustment
-#'   applied to. NOT "fbar" -- this rule has no F to set.
-#' @param spr_trigger SPR below which `decision.hcr` is set to 3, so that
-#'   flicc.is() applies its `dtaclow`/`dtacupp`/`Cmax` limits. Default 0.1;
-#'   0 disables the limits.
-#' @param ... Passed through, unused (dispatch compatibility).
-#' @examples
-#' \dontrun{
-#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
-#' hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
-#' }
-#' @export
-lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
-                    b1 = 0.10, b2 = 0.3, b3 = 0.50, b4 = 0.75,
-                    dlow = -0.20, dopt = 0.00, dhi = 0.15,
-                    nyrs = 1, n1 = 2, n2 = 3, output = "catch",
-                    spr_trigger = 0.1, ...) {
-
-  FLCore::spread(args)
-
-  # trend ratio -- r_rule()'s own logic, applied to the FLQuant ind[[gear]]
-  # (flicc.sa() already unwraps LBIspr()/LBImean() from FLIndexBiomass)
-  if (is.character(gear) && !gear %in% names(ind))
-    stop("lbi.hcr(): '", gear, "' not in ind (",
-         paste(names(ind), collapse = ", "), "). Gear indicators are named ",
-         "e.g. 'LBIspr.Trawl' or 'LBImean.Trawl'.")
-  idx <- ind[[gear]]
-  r <- c(yearMeans(tail(idx, n1)) / yearMeans(head(tail(idx, n1 + n2), n2)))
-  #browser()
-  # SPR-based status rule, unchanged from spr_rule()
-  spr_cur <- c(yearMeans(tail(ind[["SPR"]], nyrs)))
-  s <- spr_rule(spr_cur, b1 = b1, b2 = b2, b3 = b3, b4 = b4,
-                dlow = dlow, dopt = dopt, dhi = dhi)
-
-
-  # apply s only when r and s agree on direction, exactly as hcr_sprlbi()
-  mult <- ifelse((r < 1 & s < 1) | (r > 1 & s > 1), s, 1)
-  #browser()
-  # iterations without a usable fit (NA indicators from flicc.sa()) keep
-  # the previous TAC: mult = 1
-  mult[!is.finite(mult)] <- 1
-
-  # decision.hcr trigger flag, read by flicc.is() the same way tacspm.is():
-  # 3 = TAC-change limits apply (SPR below spr_trigger), 1 = otherwise
-  decision <- ifelse(is.finite(spr_cur) & spr_cur < spr_trigger, 3, 1)
-
-  track(tracking, "trend.hcr", ac(ay)) <- FLQuant(c(r), dimnames = list(iter = seq_along(decision)))
-  track(tracking, "metric.hcr", ac(ay)) <- ind[["SPR"]][, ac(dy)]
-  track(tracking, "decision.hcr", ac(ay)) <-
-    FLQuant(decision, dimnames = list(iter = seq_along(decision)))
-  track(tracking, "mult.hcr", ac(ay)) <-
-    FLQuant(c(mult), dimnames = list(iter = seq_along(mult)))
-
-  #browser()
-  ctrl <- fwdControl(list(year = ay, quant = output, value = c(mult)))
-
-  list(ctrl = ctrl, tracking = tracking)
+#' @param tracking mp() tracking (data.table with metric, year, iter, data).
+#' @param what Tracked metric holding past cycles' values, e.g. "index.hcr".
+#' @param cur Current value by iteration.
+#' @param ay Current assessment year.
+#' @param frq Management frequency (years between cycles).
+#' @param n1,n2 Recent and reference windows (in cycles).
+#' @return Numeric vector of trend ratios by iteration; 1 where history is
+#'   insufficient or not finite.
+#' @noRd
+trend_track_flicc <- function(tracking, what, cur, ay, frq = 1, n1 = 2, n2 = 3) {
+  its  <- length(cur)
+  past <- rev(an(ay) - frq * seq_len(n1 + n2 - 1))          # oldest first
+  tr   <- tracking[tracking$metric == what &
+                     an(as.character(tracking$year)) %in% past, ]
+  X <- matrix(NA_real_, its, length(past))
+  for (j in seq_along(past)) {
+    d <- tr[an(as.character(tr$year)) == past[j], ]
+    if (nrow(d) > 0) X[an(as.character(d$iter)), j] <- d$data
+  }
+  X <- cbind(X, cur)
+  k <- ncol(X)
+  r <- rowMeans(X[, (k - n1 + 1):k, drop = FALSE], na.rm = TRUE) /
+       rowMeans(X[, (k - n1 - n2 + 1):(k - n1), drop = FALSE], na.rm = TRUE)
+  r[!is.finite(r)] <- 1
+  r
 }
+
 
 #' rfb-type harvest control rule for flicc.sa() output
 #'
@@ -1038,10 +1010,11 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
 #' \describe{
 #'   \item{r}{Trend ratio of the `index` series: mean of the last `n1`
 #'     years over the mean of the preceding `n2` years (ICES 2-over-3).
-#'     `index` is any element of `ind`, e.g. `"LBIspr.Gillnet"` (default),
-#'     `"LBImean.Trawl"`, a pooled `"LBIspr"`/`"LBImean"` (if flicc.sa() was
-#'     run with `pool`), or `"SPR"`. A trend cancels a
-#'     constant scale bias, so it is the component least sensitive to
+#'     `index` is any element of `ind`: `"SPR"` (default), a gear
+#'     indicator such as `"LBIspr.Gillnet"` or `"LBImean.Trawl"`, or a
+#'     pooled `"LBIspr"`/`"LBImean"` (if flicc.sa() was run with `pool`).
+#'     With `"SPR"`, r and the safeguard b come from the same fitted series.
+#'     A trend cancels a constant scale bias, so it is the component least sensitive to
 #'     misspecified M, Linf or selectivity.}
 #'   \item{f}{Fishing-pressure component. `NULL` (default) sets f = 1 (an
 #'     rb rule). Otherwise an element of `ind` whose *level* is used, e.g.
@@ -1059,7 +1032,7 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
 #' the safeguard is not active, as in the ICES rfb rule.
 #'
 #' @param stk,ind,args,tracking Standard mp() arguments; `ind` from flicc.sa().
-#' @param index Element of `ind` for the trend r.
+#' @param index Element of `ind` for the trend r; default `"SPR"`.
 #' @param f Level component, taken in the latest year: `NULL` (f = 1, rb
 #'   rule); `"LBImean"` or `"LBImean.<gear>"` (Lmean / L_F=M, the ICES-type
 #'   f); `"Zrel"` (used as 1 / Zrel = Ztgt / Z); or `"LBIspr"` /
@@ -1067,30 +1040,36 @@ lbi.hcr <- function(stk, ind, args, tracking, gear = "SPR",
 #'   reference.
 #' @param n1,n2 Recent and reference windows of the trend ratio.
 #' @param gamma Exponent on r (1 = ICES; < 1 damps the response).
+#' @param trend Source of r: `"fit"` (default, last `n1` over preceding
+#'   `n2` years of the current fit's series) or `"track"` (terminal-year
+#'   values recorded by previous cycles as `index.hcr`, plus the current
+#'   one; avoids end-of-window noise of refitted assessments; r = 1 until
+#'   enough cycles exist).
 #' @param spr_trigger SPR below which b < 1.
 #' @param nspr Years of SPR averaged for b.
 #' @param m Precautionary multiplier.
 #' @param output "catch" (default) or "effort".
 #' @param ... Unused.
 #' @return List with `ctrl` (fwdControl holding the TAC multiplier) and
-#'   `tracking` (r.hcr, f.hcr, b.hcr, mult.hcr, decision.hcr).
+#'   `tracking` (r.hcr, index.hcr, f.hcr, b.hcr, mult.hcr, decision.hcr).
 #' @examples
 #' \dontrun{
 #' ctrl <- mpCtrl(list(
 #'   est  = mseCtrl(method = flicc.sa, args = est_args),
 #'   hcr  = mseCtrl(method = rfb.flicc.hcr,
-#'                  args = list(index = "LBIspr.Gillnet", spr_trigger = 0.25)),
+#'                  args = list(index = "SPR", spr_trigger = 0.25)),
 #'   isys = mseCtrl(method = flicc.is,
 #'                  args = list(initac = initac, dtacupp = 1.2, dtaclow = 0.7))
 #' ))
 #' }
 #' @export
 rfb.flicc.hcr <- function(stk, ind, args, tracking,
-                          index = "LBIspr.Gillnet", f = NULL, n1 = 2, n2 = 3, gamma = 1,
+                          index = "SPR", f = NULL, n1 = 2, n2 = 3, gamma = 1,
                           spr_trigger = 0.25, nspr = 1, m = 0.95,
-                          output = "catch", ...) {
+                          output = "catch", trend = c("fit", "track"), ...) {
 
   FLCore::spread(args)
+  trend <- match.arg(trend)
 
   get_series <- function(nm) {
     if (!nm %in% names(ind))
@@ -1101,7 +1080,14 @@ rfb.flicc.hcr <- function(stk, ind, args, tracking,
 
   ## r: trend ratio (n1 over n2)
   I <- get_series(index)
-  r <- c(yearMeans(tail(I, n1)) / yearMeans(head(tail(I, n1 + n2), n2)))^gamma
+  cur <- c(yearMeans(tail(I, 1)))                    # terminal-year value
+  r <- if (trend == "track") {
+    trend_track_flicc(tracking, "index.hcr", cur, ay,
+                      if (is.null(args$frq)) 1 else args$frq, n1, n2)
+  } else {
+    c(yearMeans(tail(I, n1)) / yearMeans(head(tail(I, n1 + n2), n2)))
+  }
+  r <- r^gamma
 
   ## f: optional level component
   fv <- if (is.null(f)) rep(1, length(r)) else c(tail(get_series(f), 1))
@@ -1120,6 +1106,7 @@ rfb.flicc.hcr <- function(stk, ind, args, tracking,
 
   its <- seq_along(mult)
   track(tracking, "r.hcr", ac(ay))        <- FLQuant(r,        dimnames = list(iter = its))
+  track(tracking, "index.hcr", ac(ay))    <- FLQuant(cur,      dimnames = list(iter = its))
   track(tracking, "f.hcr", ac(ay))        <- FLQuant(fv,       dimnames = list(iter = its))
   track(tracking, "b.hcr", ac(ay))        <- FLQuant(b,        dimnames = list(iter = its))
   track(tracking, "mult.hcr", ac(ay))     <- FLQuant(mult,     dimnames = list(iter = its))
@@ -1140,13 +1127,19 @@ rfb.flicc.hcr <- function(stk, ind, args, tracking,
 #' @param output Quantity controlled, default "catch".
 #' @param dtaclow,dtacupp Lower/upper multipliers on the previous TAC.
 #' @param Cmax Maximum TAC.
+#' @param Cmin Optional floor for the TAC that the multiplier is applied to:
+#'   \eqn{TAC_y = \max(TAC_{y-1}, C_{min}) \times mult}. Prevents a
+#'   multiplicative rule from getting stuck near zero after a crash, since
+#'   multipliers near 1 cannot rebuild a near-zero TAC. Cuts below `Cmin`
+#'   still apply for one cycle. Default `NA` (off); e.g. a small fraction of
+#'   the historical mean catch.
 #' @param initac Previous TAC for the first cycle (ay == iy).
 #' @param catch_area Optional TAC shares by unit, named by unit or in the
 #'   order of `dimnames(stk)$unit` (excluding "combined").
 #' @return List with `ctrl` and `tracking` (TAC tracked as "tac.is").
 #' @export
 flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
-                     dtaclow = NA, dtacupp = NA, Cmax = NA,
+                     dtaclow = NA, dtacupp = NA, Cmax = NA, Cmin = NA,
                      initac = NULL,catch_area=NULL) {
 
   FLCore::spread(args)
@@ -1164,7 +1157,9 @@ flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
     prev_tac <- c(tracking[metric == "tac.is" & year == ay - frq, data])
   }
 
-  #browser()
+  # optional floor on the base TAC, so the rule can recover after a crash
+  if (!is.na(Cmin)) prev_tac <- pmax(prev_tac, Cmin)
+
   TAC <- prev_tac * mult
 
   # ID iters where the hcr's decision crossed its own trigger -- unchanged
