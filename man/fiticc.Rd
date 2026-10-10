@@ -77,8 +77,17 @@ growth formulation.}
 \\item\{\code{Mpow}\}\{Optional length-dependent mortality scaling
   exponent (GTG only). Default is 0.\}
 
-\\item\{\code{prior_sigmaF}\}\{Prior for annual fishing mortality variation
-  (mean, sd, use flag).\}
+\\item\{\code{prior_sigmaF}\}\{Random walk on log F by gear and its
+  standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
+  log(sigmaF) with \code{use = 1} switching the random walk on. With
+  \code{sd = NA} there is no prior on sigmaF.\}
+
+\\item\{\code{F_re}\}\{Logical. If \code{TRUE}, log F by year and gear are
+  random effects (state-space random walk) integrated out by the Laplace
+  approximation, so sigmaF is estimated from the marginal likelihood and
+  standard errors include the F process. If \code{FALSE} (default), log F
+  are fixed effects with a random-walk penalty, where sigmaF is mainly
+  set by its prior.\}
 
 \\item\{\code{rob_eps}\}\{Robustness of the composition likelihood to
   sparse or outlying bins. Predicted proportions become

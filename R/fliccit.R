@@ -604,7 +604,14 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_only    <- 1L
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
-  pl <- fit$obj$env$parList(fit$opt$par)
+  # full parameter set at the optimum, including random effects (F_re = TRUE)
+  rnd <- fit$obj$env$random
+  full <- fit$obj$env$last.par.best
+  pl <- if (length(rnd) && length(full) > length(fit$opt$par)) {
+    fit$obj$env$parList(full[-rnd], full)
+  } else {
+    fit$obj$env$parList(fit$opt$par)
+  }
   # parameters fixed at the estimates (log_phi left free because TMB needs
   # at least one), so almost nothing is recorded on the AD tape and report()
   # runs one double evaluation including the brp block

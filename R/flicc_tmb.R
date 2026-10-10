@@ -492,6 +492,7 @@ fiticc_core <- function(lfd, stklen,
     CVL.sd = NULL,
     rob_eps = 0,
     Lplus = NULL,
+    F_re = FALSE,
     spr_ref = 40,
     tail_warning = FALSE,
     FM_min = 0.05,
@@ -555,6 +556,13 @@ fiticc_core <- function(lfd, stklen,
   tmb_data$prior_sigmaF_mean <- as.numeric(settings$prior_sigmaF[1])
   tmb_data$prior_sigmaF_sd   <- as.numeric(settings$prior_sigmaF[2])
   tmb_data$prior_sigmaF_use  <- as.integer(settings$prior_sigmaF[3])
+  # no prior on sigmaF when its sd is NA / Inf / <= 0 (useful with F_re = TRUE)
+  if (!is.finite(tmb_data$prior_sigmaF_sd) || tmb_data$prior_sigmaF_sd <= 0) {
+    tmb_data$prior_sigmaF_sd <- 0
+  }
+  if (!is.finite(tmb_data$prior_sigmaF_mean)) {
+    tmb_data$prior_sigmaF_mean <- log(0.5)       # start value only
+  }
 
   # Soft penalty FM
   tmb_data$FM_min    <- as.numeric(settings$FM_min)
@@ -586,8 +594,21 @@ fiticc_core <- function(lfd, stklen,
     map$log_phi <- factor(NA)
   }
 
-  if (length(unique(years)) <= 1) {
+  rw_on <- length(unique(years)) > 1 && isTRUE(tmb_data$prior_sigmaF_use == 1L)
+  if (!rw_on) {
     map$log_sigmaF <- factor(NA)
+  }
+
+  # F as a state-space random walk: log_Fk integrated out by the Laplace
+  # approximation, so sigmaF is estimated from the marginal likelihood
+  random <- NULL
+  if (isTRUE(settings$F_re)) {
+    if (rw_on) {
+      random <- "log_Fk"
+    } else {
+      warning("settings$F_re = TRUE ignored: needs more than one year and ",
+              "prior_sigmaF[3] = 1 (random walk on).", call. = FALSE)
+    }
   }
 
   # CVL (log_Galpha) is fixed unless CVL.sd is given, for both pop models.
@@ -610,6 +631,7 @@ fiticc_core <- function(lfd, stklen,
                               "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
     parameters = parameters,
     map = map,
+    random = random,
     DLL = dll,
     silent = silent
   )
@@ -701,11 +723,18 @@ fiticc_core <- function(lfd, stklen,
   opt$n_restarts <- n_restart_used
   opt$restart_log <- restart_log
 
-  obj$env$last.par.best <- opt$par
+  if (is.null(random)) {
+    obj$env$last.par.best <- opt$par
+  } else {
+    # evaluate at the optimum so the random effects sit at their mode;
+    # last.par.best then holds fixed and random parameters
+    invisible(obj$fn(opt$par))
+    obj$env$last.par.best <- obj$env$last.par
+  }
 
   rep <- TMB::sdreport(obj)
   adrep <- summary(rep, "fixed")
-  report <- obj$report()
+  report <- obj$report(obj$env$last.par.best)
   par_tab <- data.frame(
     par = rownames(adrep),
     mpd = adrep[, 1],
@@ -730,6 +759,7 @@ fiticc_core <- function(lfd, stklen,
 
   fit$settings <- settings
   fit$pop_model <- settings$pop_model
+  fit$F_re <- !is.null(random)
   fit$obs_model <- settings$obs_model
   fit$start_used <- !is.null(start)
   fit$max_gradient <- opt$max_gradient
@@ -799,8 +829,17 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
 #'
-#'     \item{\code{prior_sigmaF}}{Prior for annual fishing mortality variation
-#'       (mean, sd, use flag).}
+#'     \item{\code{prior_sigmaF}}{Random walk on log F by gear and its
+#'       standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
+#'       log(sigmaF) with \code{use = 1} switching the random walk on. With
+#'       \code{sd = NA} there is no prior on sigmaF.}
+#'
+#'     \item{\code{F_re}}{Logical. If \code{TRUE}, log F by year and gear are
+#'       random effects (state-space random walk) integrated out by the Laplace
+#'       approximation, so sigmaF is estimated from the marginal likelihood and
+#'       standard errors include the F process. If \code{FALSE} (default), log F
+#'       are fixed effects with a random-walk penalty, where sigmaF is mainly
+#'       set by its prior.}
 #'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become

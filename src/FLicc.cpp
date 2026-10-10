@@ -762,7 +762,8 @@ Type objective_function<Type>::operator() ()
     REPORT(MA);
   }
 
-  // Penalty on random walk F
+  // Random walk on log F by gear: a penalty when log_Fk are fixed effects,
+  // the random-effect density when settings$F_re = TRUE (Laplace)
   if(prior_sigmaF_use == 1 && nyear > 1) {
     for(int g = 0; g < ngear; g++) {
       for(int y = 1; y < nyear; y++) {
@@ -770,7 +771,11 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
+    // optional prior on sigmaF (prior_sigmaF_sd <= 0: none, e.g. when F is a
+    // random effect and sigmaF is estimated from the marginal likelihood)
+    if(prior_sigmaF_sd > Type(0)) {
+      nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
+    }
   }
 
   // --- NORMAL PRIOR PENALTIES ---
