@@ -502,7 +502,7 @@ fiticc_core <- function(lfd, stklen,
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
 
-  if(any(settings$prior_sigmaF == FALSE)) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
+  if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
 
   # fill missing elements
   for (nm in names(default_settings)) {
