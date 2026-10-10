@@ -51,7 +51,9 @@ grid <- make_grid()
 say("GTG %d, bins %d, quadrature nodes %d", ng, nb, length(grid$node_g))
 say("dims: A %s, dT %s, reach %s, lb %d, node_j range %s", paste(dim(grid$A), collapse = "x"), paste(dim(grid$dT), collapse = "x"), paste(dim(grid$reach), collapse = "x"), length(LB), paste(range(grid$node_j), collapse = "-"))
 
-make_obj <- function(obs, pop, n_pre = 10, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
+b0 <- -max(grid$A[, 1:nb][grid$reach > 0]) - 1
+
+make_obj <- function(obs, pop, n_pre = 10, db = 0.25, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
                      est_sigF = FALSE, est_sigR = FALSE, re = character(0),
                      prior_sigF = c(log(0.3), 0.5, 0), prior_sigR = c(log(0.5), 0.5, 0),
                      par = NULL, map_all = FALSE) {
@@ -61,7 +63,8 @@ make_obj <- function(obs, pop, n_pre = 10, sel_type = 1, rmode = 0, sigF = 0.3, 
   data <- c(list(pop = as.integer(pop), obs = obs, kd = as.integer(npre + 0:(ny - 1)),
                  tq = c(0.25, 0.75), lmid = bio$lmid, mw = bio$mw, wg = gtg$w, M = M,
                  sel_type = as.integer(sel_type), rmode = as.integer(rmode),
-                 prior_sigF = prior_sigF, prior_sigR = prior_sigR), grid)
+                 prior_sigF = prior_sigF, prior_sigR = prior_sigR,
+                 db = db, b0 = b0, nbg = as.integer(ceiling((nF + 1 - b0) / max(db, 0.01)) + 2)), grid)
   if (is.null(par))
     par <- list(logF = rep(log(0.1), nF),
                 theta = if (sel_type == 1) c(mode, log(5), log(20)) else c(mode, log(5)),
@@ -81,14 +84,18 @@ obs1 <- as.matrix(read.csv(file.path(dd, "obs_Rdev_1.csv"), header = FALSE))
 ref_dyn <- as.matrix(read.csv(file.path(dd, "ref_pred_dyn.csv"), header = FALSE))
 ref_eq  <- as.matrix(read.csv(file.path(dd, "ref_pred_eq.csv"), header = FALSE))
 par <- list(logF = rp$logF, theta = th, logR = rp$logR, log_sigF = log(0.3), log_sigR = log(0.5))
-o <- make_obj(obs1, pop = 1, rmode = 1, par = par, map_all = TRUE)
+o <- make_obj(obs1, pop = 1, rmode = 1, par = par, map_all = TRUE, db = 0)
 o$fn(o$par); d_dyn <- max(abs(o$report()$pred - ref_dyn))
+ref_dyng <- as.matrix(read.csv(file.path(dd, "ref_pred_dyng.csv"), header = FALSE))
+o <- make_obj(obs1, pop = 1, rmode = 1, par = par, map_all = TRUE, db = 0.25)
+o$fn(o$par); d_dyng <- max(abs(o$report()$pred - ref_dyng))
+say("grid vs exact (TMB): %.1e", max(abs(o$report()$pred - ref_dyn)))
 k <- 10 + 1:20
 par_eq <- list(logF = rp$logF[k], theta = th, logR = rp$logR[k], log_sigF = log(0.3), log_sigR = log(0.5))
 o <- make_obj(obs1, pop = 0, rmode = 0, par = par_eq, map_all = TRUE)
 o$fn(o$par); d_eq <- max(abs(o$report()$pred - ref_eq))
-ref_ok <- d_dyn < 1e-8 && d_eq < 1e-8
-say("REFERENCE TEST: max |TMB - Python|  dyn %.2e   eq %.2e   -> %s", d_dyn, d_eq, if (ref_ok) "PASS" else "FAIL")
+ref_ok <- d_dyn < 1e-8 && d_eq < 1e-8 && d_dyng < 1e-8
+say("REFERENCE TEST: max |TMB - Python|  dyn exact %.2e   dyn grid %.2e   eq %.2e   -> %s", d_dyn, d_dyng, d_eq, if (ref_ok) "PASS" else "FAIL")
 
 # ---- 2. fits -------------------------------------------------------------------
 lohi <- function(o, nF, rmode) {
@@ -127,8 +134,9 @@ for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
   tru <- read.csv(file.path(dd, sprintf("truth_%s_%d.csv", scen, seed)))
   for (nm in names(specs)) {
     f <- fit1(obs, specs[[nm]])
-    say("%-6s seed %d %-14s conv %-5s %6.1f s  nll %s  sig %s", scen, seed, nm, f$conv, f$secs,
-        format(round(f$nll, 1)), paste(round(f$sig, 3), collapse = "/"))
+    say("%-6s seed %d %-14s conv %-5s %6.1f s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs,
+        if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
+        if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg, 1, 60))
     tim[[length(tim) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)
     if (!is.null(f$spr))
       res[[length(res) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, year = tru$year,
@@ -163,7 +171,7 @@ pysec <- aggregate(secs ~ model, unique(read.csv(file.path(dd, "py_fits.csv"))[,
 tmbsec <- aggregate(secs ~ model, tim, median)
 
 md <- c("# gtg.dyn TMB trial", "",
-        sprintf("Reference test (TMB vs Python, same inputs): dyn %.1e, eq %.1e -> **%s**", d_dyn, d_eq,
+        sprintf("Reference test (TMB vs Python, same inputs): dyn exact %.1e, dyn grid %.1e, eq %.1e -> **%s**", d_dyn, d_dyng, d_eq,
                 if (ref_ok) "PASS" else "FAIL"), "",
         "## Median fit time (s)", "", "| model | TMB | Python |", "|---|---|---|",
         sprintf("| %s | %.1f | %s |", tmbsec$model, tmbsec$secs,

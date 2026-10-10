@@ -54,6 +54,9 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR(node_j);
   DATA_VECTOR(node_tau);
   DATA_VECTOR(node_w);
+  DATA_SCALAR(db);                // birth-time grid step (<= 0: exact, no grid)
+  DATA_SCALAR(b0);                // first grid point (H constant below)
+  DATA_INTEGER(nbg);              // number of grid points
   DATA_SCALAR(M);
   DATA_INTEGER(sel_type);         // 0 logistic, 1 dome (double normal)
   DATA_INTEGER(rmode);            // 0 constant R, 1 iid, 2 random walk
@@ -114,6 +117,26 @@ Type objective_function<Type>::operator() ()
     return N;
   };
 
+  // cumulative fishing exposure H(g, m, j) on reaching boundary j for a cohort
+  // born at grid time b0 + m db (running sum over bins; computed once)
+  double dbd = asDouble(db), b0d = asDouble(b0);
+  bool use_grid = (pop == 1) && (dbd > 0);
+  array<Type> H(use_grid ? ng : 1, use_grid ? nbg : 1, nb + 1);
+  if (use_grid) {
+    for (int g = 0; g < ng; g++) for (int m = 0; m < nbg; m++) {
+      double b = b0d + dbd * m;
+      H(g, m, 0) = 0;
+      Type cprev = cfun(b, cumF, F, nF);
+      for (int i = 0; i < nb; i++) {
+        double Ai1 = asDouble(A(g, i + 1));
+        if (Ai1 > 1e9) { for (int ii = i + 1; ii <= nb; ii++) H(g, m, ii) = H(g, m, i); break; }
+        Type cnext = cfun(b + Ai1, cumF, F, nF);
+        H(g, m, i + 1) = H(g, m, i) + sel(i) * (cnext - cprev);
+        cprev = cnext;
+      }
+    }
+  }
+
   // dynamic numbers (summed over GTG) at time t
   auto dynN = [&](double t) {
     vector<Type> N(nb); N.setZero();
@@ -123,11 +146,20 @@ Type objective_function<Type>::operator() ()
       double tau = asDouble(node_tau(n)), Aj = asDouble(A(g, j));
       double s = t - tau, b = s - Aj;
       Type E = M * Aj;
-      Type cprev = cfun(b, cumF, F, nF);
-      for (int i = 0; i < j; i++) {
-        Type cnext = cfun(b + asDouble(A(g, i + 1)), cumF, F, nF);
-        E += sel(i) * (cnext - cprev);
-        cprev = cnext;
+      if (use_grid) {
+        double u = (b - b0d) / dbd;
+        int m = (int) std::floor(u);
+        if (m < 0) m = 0;
+        if (m > nbg - 2) m = nbg - 2;
+        double fr = u - m; if (fr < 0) fr = 0; if (fr > 1) fr = 1;
+        E += (1.0 - fr) * H(g, m, j) + fr * H(g, m + 1, j);
+      } else {
+        Type cprev = cfun(b, cumF, F, nF);
+        for (int i = 0; i < j; i++) {
+          Type cnext = cfun(b + asDouble(A(g, i + 1)), cumF, F, nF);
+          E += sel(i) * (cnext - cprev);
+          cprev = cnext;
+        }
       }
       Type within = M * tau + sel(j) * (cft - cfun(s, cumF, F, nF));
       Type R = (rmode == 0) ? Type(1) : exp(logrfun(b, logR, nF));
