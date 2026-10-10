@@ -75,6 +75,7 @@ make_obj <- function(obs, pop, n_pre = 10, db = 0.25, sel_type = 1, rmode = 0, s
   if (!est_sigF) map$log_sigF <- factor(NA)
   if (!est_sigR || rmode == 0) map$log_sigR <- factor(NA)
   if (rmode == 0) map$logR <- factor(rep(NA, nF))
+  if (rmode == 2) map$logR <- factor(c(NA, 1:(nF - 1)))   # level of R not identified by proportions: anchor
   if (map_all) map <- lapply(par[names(par) != "logF"], function(p) factor(rep(NA, length(p))))  # TMB needs >= 1 free parameter
   MakeADFun(data, par, map = map, random = if (length(re)) re else NULL,
             DLL = "gtgdyn", silent = TRUE)
@@ -102,7 +103,7 @@ say("REFERENCE TEST: max |TMB - Python|  dyn exact %.2e   dyn grid %.2e   eq %.2
 # ---- 2. fits -------------------------------------------------------------------
 lohi <- function(o, nF, rmode) {
   nm <- names(o$par)
-  lo <- ifelse(nm == "logF", log(1e-4), ifelse(nm == "logR", -3, -Inf))
+  lo <- ifelse(nm == "logF", log(1e-4), ifelse(nm == "logR", -3, ifelse(nm == "log_sigR", log(0.01), -Inf)))
   hi <- ifelse(nm == "logF", log(3), ifelse(nm == "logR", 3, Inf))
   th <- which(nm == "theta"); lo[th] <- c(10, log(0.5), log(0.5)); hi[th] <- c(60, log(40), log(200))
   list(lo = lo, hi = hi)
@@ -143,25 +144,29 @@ mk_start <- function(prev) function(spec) {
   list(logF = lf, theta = prev$theta, logR = if (length(prev$logR) == nF_new) prev$logR else rep(0, nF_new),
        log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR))
 }
-res <- list(); tim <- list()
-for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
-  obs <- as.matrix(read.csv(file.path(dd, sprintf("obs_%s_%d.csv", scen, seed)), header = FALSE))
-  tru <- read.csv(file.path(dd, sprintf("truth_%s_%d.csv", scen, seed)))
-  done <- list()
-  for (nm in names(specs)) {
-    prev <- done[[start_from[[nm]] %||% ""]]
-    f <- fit1(obs, specs[[nm]], start = if (!is.null(prev$pl)) mk_start(prev$pl))
-    done[[nm]] <- f
-    say("%-6s seed %d %-14s conv %-5s %6.1f s  it %s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs, format(f$iter %||% NA),
-        if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
-        if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg, 1, 60))
-    tim[[length(tim) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)
-    write.csv(do.call(rbind, tim), file.path(out, "tmb_times.csv"), row.names = FALSE)
-    if (!is.null(f$spr))
-      res[[length(res) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, year = tru$year,
-                                           spr = f$spr, ssb_rel = f$ssb_rel, spr_true = tru$spr, bb0 = tru$bb0)
+res <- list(); tim <- list(); done_all <- list()
+run_pass <- function(models) {
+  for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
+    obs <<- as.matrix(read.csv(file.path(dd, sprintf("obs_%s_%d.csv", scen, seed)), header = FALSE))
+    tru <- read.csv(file.path(dd, sprintf("truth_%s_%d.csv", scen, seed)))
+    key <- paste(scen, seed); done <- done_all[[key]] %||% list()
+    for (nm in models) {
+      prev <- done[[start_from[[nm]] %||% ""]]
+      f <- fit1(obs, specs[[nm]], start = if (!is.null(prev$pl)) mk_start(prev$pl),
+                limit = if (length(specs[[nm]]$re)) 600 else 300)
+      done[[nm]] <- f
+      say("%-6s seed %d %-14s conv %-5s %6.1f s  it %s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs, format(f$iter %||% NA),
+          if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
+          if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg %||% "", 1, 60))
+      tim[[length(tim) + 1]] <<- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)
+      if (!is.null(f$spr))
+        res[[length(res) + 1]] <<- data.frame(scen = scen, seed = seed, model = nm, year = tru$year,
+                                              spr = f$spr, ssb_rel = f$ssb_rel, spr_true = tru$spr, bb0 = tru$bb0)
+    }
+    done_all[[key]] <<- done
   }
 }
+write_summary <- function(stage) {
 res <- do.call(rbind, res); tim <- do.call(rbind, tim)
 write.csv(res, file.path(out, "tmb_fits.csv"), row.names = FALSE)
 write.csv(tim, file.path(out, "tmb_times.csv"), row.names = FALSE)
@@ -189,7 +194,7 @@ agree <- aggregate(cbind(maxdiff = abs(spr_tmb - spr_py)) ~ model + scen, cmp, m
 pysec <- aggregate(secs ~ model, unique(read.csv(file.path(dd, "py_fits.csv"))[, c("scen", "seed", "model", "secs")]), median)
 tmbsec <- aggregate(secs ~ model, tim, median)
 
-md <- c("# gtg.dyn TMB trial", "",
+md <- c("# gtg.dyn TMB trial", "", paste("Stage:", stage), "",
         sprintf("Reference test (TMB vs Python, same inputs): dyn exact %.1e, dyn grid %.1e, eq %.1e -> **%s**", d_dyn, d_dyng, d_eq,
                 if (ref_ok) "PASS" else "FAIL"), "",
         "## Median fit time (s)", "", "| model | TMB | Python |", "|---|---|---|",
@@ -204,6 +209,11 @@ md <- c("# gtg.dyn TMB trial", "",
         sprintf("| %s | %s | %.3f |", agree$model, agree$scen, agree$maxdiff), "",
         sprintf("Convergence: %d of %d fits", sum(tim$conv), nrow(tim)))
 writeLines(md, file.path(out, "summary.md"))
-close(log_con)
 cat(md, sep = "\n")
+}
+run_pass(c("eq_dome", "dyn_dome", "dyn_dome_Rdev", "dyn_dome_Rrw"))
+write_summary("penalised")
+run_pass(c("dyn_Rdev_RE", "dyn_FR_RE"))
+write_summary("all")
+close(log_con)
 if (!ref_ok) quit(status = 1)
