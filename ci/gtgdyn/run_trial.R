@@ -70,7 +70,7 @@ make_obj <- function(obs, pop, n_pre = 10, sel_type = 1, rmode = 0, sigF = 0.3, 
   if (!est_sigF) map$log_sigF <- factor(NA)
   if (!est_sigR || rmode == 0) map$log_sigR <- factor(NA)
   if (rmode == 0) map$logR <- factor(rep(NA, nF))
-  if (map_all) map <- lapply(par, function(p) factor(rep(NA, length(p))))
+  if (map_all) map <- lapply(par[names(par) != "logF"], function(p) factor(rep(NA, length(p))))  # TMB needs >= 1 free parameter
   MakeADFun(data, par, map = map, random = if (length(re)) re else NULL,
             DLL = "gtgdyn", silent = TRUE)
 }
