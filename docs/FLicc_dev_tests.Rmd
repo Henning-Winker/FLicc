@@ -1,0 +1,339 @@
+---
+title: "FLicc 1.0.10 development branch: new features and tests before merging"
+author: "Henning Winker (FAO-NFI)"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    self_contained: true
+    math_method: mathml
+    toc: true
+    toc_float: true
+    number_sections: true
+    fig_width: 7
+    fig_height: 4.5
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.align = "center",
+                      message = FALSE, warning = FALSE)
+```
+
+# What this document covers
+
+This document tests the branch `dev-merge`, which combines the two development
+branches before they go into `main`:
+
+| Branch | Features |
+|---|---|
+| `dev-tailcut` | `settings$tail_cut`: upper length bins excluded from the likelihood; `LBIspr()` and `LBImean()` use the same cut; MSE fixes (`trend = "track"` in the HCRs, `Cmin` in `flicc.is()`, `lfdess()` guard) |
+| `dev-frw` | state-space random walk on F (`settings$F_re`), fixed `sigmaF`, `sigmaF_flicc()`, `fiticc(se = FALSE)`; CI workflow |
+
+Every test records a pass/fail result; the table at the end lists them all, and
+the last chunk stops if any failed. To run it yourself, install the branch and
+knit this file:
+
+```{r install, eval = FALSE}
+remotes::install_github("henning-winker/FLicc", ref = "dev-merge")
+# or, in a local clone: git switch dev-merge; devtools::install()
+rmarkdown::render("docs/FLicc_dev_tests.Rmd")
+```
+
+```{r data}
+library(FLicc)
+packageVersion("FLicc")
+
+data("alfonsino")
+lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), unit = "cm", midL = FALSE)
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
+               a = 0.004721956 / 1000, b = 3.146168)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+sel_fun <- c("dsnormal", "logistic")
+cbg     <- c(0.7, 0.3)
+base    <- list(CVL = 0.1, prior_sigmaF = c(log(0.5), 0.3, 1))
+
+# fit with the base settings plus any extra settings
+fitf <- function(..., se = TRUE) fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                                        settings = modifyList(base, list(...)), se = se)
+lastspr <- function(fit) round(tail(c(fit$report$spr), 1), 4)
+
+# record checks without stopping the document
+checks <- data.frame(section = character(), check = character(), pass = logical())
+check <- function(section, label, ok) {
+  ok <- isTRUE(ok)
+  checks[nrow(checks) + 1, ] <<- list(section, label, ok)
+  cat(if (ok) "PASS" else "FAIL", "-", label, "\n")
+  invisible(ok)
+}
+```
+
+# Default results are unchanged
+
+Without the new settings, fits must reproduce `main`. Reference values from
+`main` (FLicc 1.0.9, same data and settings):
+
+```{r regression}
+ref_main <- data.frame(obs_model = c("mn", "dm", "nb"),
+                       nll  = c(35786.5477, 35702.3207, 2081.7373),
+                       spr  = c(0.2527, 0.2722, 0.2562))
+fit_def <- lapply(setNames(ref_main$obs_model, ref_main$obs_model), function(om) fitf(obs_model = om))
+ref_main$nll_branch <- sapply(fit_def, function(f) round(f$opt$objective, 4))
+ref_main$spr_branch <- sapply(fit_def, lastspr)
+ref_main
+for (i in seq_len(nrow(ref_main)))
+  check("Defaults", paste("default", ref_main$obs_model[i], "fit matches main"),
+        abs(ref_main$nll_branch[i] - ref_main$nll[i]) / ref_main$nll[i] < 1e-7 &&
+          abs(ref_main$spr_branch[i] - ref_main$spr[i]) < 1e-3)
+check("Defaults", "no tail cut by default", fit_def$mn$tmb_data$cut_bin == -1)
+check("Defaults", "F is not a random effect by default", !isTRUE(fit_def$mn$F_re))
+```
+
+# Tail cut (`settings$tail_cut`)
+
+## What it does
+
+`tail_cut = x` excludes length bins with lower bound $\geq x \cdot L_\infty$
+(input $L_\infty$, fixed during estimation) from the composition likelihood.
+Observed and predicted compositions are truncated and the predicted proportions
+renormalised over the retained bins, so the comparison is conditional on
+$L < x \cdot L_\infty$. Unlike `Lplus`, which pools the largest fish into one bin,
+the cut removes their influence completely. SPR and reference points are still
+calculated over all lengths from the fitted model.
+
+```{r tailcut-fits}
+cuts <- c(none = NA, x1.0 = 1.0, x0.9 = 0.9)
+tc <- do.call(rbind, lapply(c("mn", "dm", "nb"), function(om) {
+  do.call(rbind, lapply(names(cuts), function(nm) {
+    f <- if (is.na(cuts[nm])) fitf(obs_model = om) else fitf(obs_model = om, tail_cut = cuts[[nm]])
+    cb <- f$tmb_data$cut_bin
+    data.frame(obs_model = om, cut = nm, cut_bin = cb,
+               Lcut = if (cb >= 0) f$tmb_data$LLB[cb + 1] else NA,
+               conv = f$opt$convergence, SPR_last = lastspr(f),
+               Fspr40 = round(fspr_flicc(f), 4))
+  }))
+}))
+tc
+LLB <- fit_def$mn$tmb_data$LLB
+check("Tail cut", "cut at 0.9 Linf starts at the first bin with lower bound >= 0.9 * 55.7",
+      all(tc$Lcut[tc$cut == "x0.9"] == min(LLB[LLB >= 0.9 * 55.7])))
+check("Tail cut", "all observation models fit with a cut", all(is.finite(tc$SPR_last)))
+```
+
+```{r tailcut-plot, fig.height = 4}
+f_none <- fitf(obs_model = "dm")
+f_cut  <- fitf(obs_model = "dm", tail_cut = 0.9)
+plot_spr(list(no_cut = f_none, cut_0.9 = f_cut))
+```
+
+```{r tailcut-len, fig.height = 5}
+plot_len(f_cut)   # predicted compositions are shown over all lengths
+```
+
+## Interaction with `Lplus`
+
+A plus group at or above the cut has no effect and is ignored with a warning:
+
+```{r tailcut-lplus}
+w <- tryCatch(fitf(obs_model = "dm", tail_cut = 0.9, Lplus = 54),
+              warning = function(w) conditionMessage(w))
+w
+check("Tail cut", "Lplus above the cut gives a warning", is.character(w))
+f_both <- fitf(obs_model = "dm", tail_cut = 1.0, Lplus = 45)
+check("Tail cut", "Lplus below the cut works together with it", is.finite(lastspr(f_both)))
+```
+
+## Indicators follow the fit's cut
+
+`LBIspr()` and `LBImean()` read the cut from the fit, so observed and reference
+distributions use the same bins. `tail_cut = FALSE` uses all bins, a number
+overrides the fit's cut.
+
+```{r tailcut-lbi}
+l_fit  <- LBIspr(f_cut)
+l_all  <- LBIspr(f_cut, tail_cut = FALSE)
+m_fit  <- LBImean(f_cut)
+c(Lcut_LBIspr = attr(l_fit, "Lcut"), Lcut_LBImean = attr(m_fit, "Lcut"),
+  Lcut_all = attr(l_all, "Lcut"))
+attr(l_fit, "Lref")
+check("Tail cut", "LBIspr uses the fit's cut", attr(l_fit, "Lcut") == f_cut$tmb_data$LLB[f_cut$tmb_data$cut_bin + 1])
+check("Tail cut", "LBImean uses the fit's cut", attr(m_fit, "Lcut") == attr(l_fit, "Lcut"))
+check("Tail cut", "tail_cut = FALSE uses all bins", is.na(attr(l_all, "Lcut")))
+check("Tail cut", "reference lengths lie below the cut", all(attr(l_fit, "Lref") < attr(l_fit, "Lcut")))
+round(rbind(cut = c(index(l_fit[[1]])), all_bins = c(index(l_all[[1]]))), 3)
+```
+
+# Random walk on F as random effects (`settings$F_re`)
+
+## Why
+
+By default, log F by year and gear are fixed effects with a random-walk penalty,
+estimated jointly with its standard deviation $\sigma_F$. Each step adds
+$-\log\sigma_F - (\Delta \log F)^2 / (2\sigma_F^2)$ to the log-likelihood, so the
+optimiser can smooth F and shrink $\sigma_F$ without limit; only the prior on
+$\sigma_F$ stops it collapsing to zero. The year-to-year pattern in F and SPR is
+then set largely by that prior.
+
+With `F_re = TRUE`, log F are random effects integrated out by the Laplace
+approximation, so $\sigma_F$ is estimated from the marginal likelihood and
+standard errors include the F process. Without a user prior, a weak prior is
+used by default: `prior_sigmaF = c(log(0.3), 0.5, 1)`.
+
+```{r fre-fits}
+f_pen   <- fitf(obs_model = "dm")                                   # penalised (default)
+f_re    <- fitf(obs_model = "dm", F_re = TRUE)                      # prior from base
+f_redef <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", F_re = TRUE))  # weak default prior
+f_reno  <- fitf(obs_model = "dm", F_re = TRUE, prior_sigmaF = c(log(0.5), NA, 1))  # no prior
+
+summ <- function(f) c(nll = round(f$opt$objective, 2), conv = f$opt$convergence,
+                      pdHess = isTRUE(f$rep$pdHess), sigmaF = round(sigmaF_flicc(f), 3),
+                      SPR_last = lastspr(f))
+rbind(penalised = summ(f_pen), F_re_prior_0.5 = summ(f_re),
+      F_re_default_prior = summ(f_redef), F_re_no_prior = summ(f_reno))
+
+check("F_re", "F_re fit is flagged and uses random effects", isTRUE(f_re$F_re))
+check("F_re", "F_re fits converge with a positive definite Hessian",
+      f_re$opt$convergence == 0 && isTRUE(f_re$rep$pdHess))
+check("F_re", "weak default prior used when none is given",
+      isTRUE(all.equal(c(f_redef$tmb_data$prior_sigmaF_mean, f_redef$tmb_data$prior_sigmaF_sd), c(log(0.3), 0.5))))
+check("F_re", "prior_sigmaF with NA sd means no prior", f_reno$tmb_data$prior_sigmaF_sd == 0)
+```
+
+Note: the negative log-likelihoods of penalised and random-effects fits are not
+comparable (joint vs marginal likelihood).
+
+```{r fre-plot, fig.height = 4}
+plot_spr(list(penalised = f_pen, F_re = f_re, F_re_default_prior = f_redef))
+```
+
+## Uncertainty includes the F process
+
+```{r fre-se}
+se_last <- function(f) { s <- summary(f$rep, "report"); tail(s[rownames(s) == "log_spr_y", 2], 1) }
+round(c(penalised = se_last(f_pen), F_re = se_last(f_re)), 4)
+check("F_re", "SE of log SPR is larger with F as random effects", se_last(f_re) > se_last(f_pen))
+```
+
+## Fast route: estimate $\sigma_F$ once, then fix it
+
+Fitting with random effects takes several times longer. For repeated fits (e.g.
+inside an MSE), estimate $\sigma_F$ once with `F_re = TRUE` and fix it with
+`settings$sigmaF`; the SPR series closely reproduces the random-effects fit at
+the speed of the default.
+
+```{r sigmaF-fixed}
+sig <- sigmaF_flicc(f_re)
+f_fix <- fitf(obs_model = "dm", sigmaF = sig)
+round(rbind(F_re = c(f_re$report$spr), sigmaF_fixed = c(f_fix$report$spr)), 3)
+dmax <- max(abs(c(f_fix$report$spr) - c(f_re$report$spr)))
+dmax
+check("sigmaF", "sigmaF_flicc() returns the estimate", is.finite(sig) && sig > 0)
+check("sigmaF", "fixed sigmaF is not estimated", !"log_sigmaF" %in% names(f_fix$opt$par))
+check("sigmaF", "sigmaF_flicc() returns the fixed value", abs(sigmaF_flicc(f_fix) - sig) < 1e-12)
+check("sigmaF", "fixed sigmaF reproduces the F_re SPR series (max diff < 0.01)", dmax < 0.01)
+```
+
+## Skipping standard errors (`se = FALSE`)
+
+```{r se-false}
+f_nose <- fitf(obs_model = "dm", sigmaF = sig, se = FALSE)
+check("se = FALSE", "no sdreport", is.null(f_nose$rep))
+check("se = FALSE", "same estimates as with sdreport",
+      max(abs(c(f_nose$report$spr) - c(f_fix$report$spr))) < 1e-8)
+check("se = FALSE", "downstream functions run",
+      is.finite(fspr_flicc(f_nose)) && length(LBIspr(f_nose)) == 2)
+```
+
+## Timing
+
+```{r timing}
+tm <- function(...) system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, ...))[["elapsed"]]
+s_dm <- modifyList(base, list(obs_model = "dm"))
+round(c(penalised          = tm(settings = s_dm),
+        F_re               = tm(settings = modifyList(s_dm, list(F_re = TRUE))),
+        sigmaF_fixed       = tm(settings = modifyList(s_dm, list(sigmaF = sig))),
+        sigmaF_fixed_no_se = tm(settings = modifyList(s_dm, list(sigmaF = sig)), se = FALSE)), 2)
+```
+
+# New features together and downstream functions
+
+```{r combined}
+f_all <- fitf(obs_model = "dm", tail_cut = 0.9, F_re = TRUE)
+summ(f_all)
+check("Combined", "tail cut and F_re fit together", f_all$opt$convergence == 0)
+
+b <- brp_tmb_flicc(f_all, spr = c(40, 20))
+check("Combined", "Fspr from the fit and brp_tmb_flicc() agree", abs(fspr_flicc(f_all, spr = 40) - b$Fspr[1]) < 1e-8)
+options(FLicc.brp_tmb = FALSE); f40_R <- fspr_flicc(f_all, spr = 40); options(FLicc.brp_tmb = TRUE)
+check("Combined", "TMB and R reference points agree (rel. diff < 1e-3)", abs(b$Fspr[1] / f40_R - 1) < 1e-3)
+
+ok <- function(expr) !inherits(try(expr, silent = TRUE), "try-error")
+check("Combined", "LBIspr()", ok(LBIspr(f_all)))
+check("Combined", "LBImean()", ok(LBImean(f_all)))
+check("Combined", "flicc2FLStockR(s = 0.75)", ok(flicc2FLStockR(f_all, rel = TRUE, s = 0.75)))
+check("Combined", "eqstklen()", ok(eqstklen(f_all, s = 0.75)))
+check("Combined", "flicc_convergence()", ok(flicc_convergence(f_all)))
+check("Combined", "restart from start = fit$opt$par",
+      ok(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                settings = modifyList(base, list(obs_model = "dm", tail_cut = 0.9, F_re = TRUE)),
+                start = f_all$opt$par)))
+```
+
+```{r combined-plot, fig.height = 5.5}
+plot_LBAdvice(flicc2FLStockR(f_all, rel = TRUE, s = 0.75))
+```
+
+# MSE functions
+
+From `dev-tailcut`. These need the operating model and run inside `mse::mp()`,
+so they are shown here but not run; please run the MP smoke test
+(`FLicc_lfd_mp_test.Rmd`) with a short horizon before merging.
+
+* `flicc.sa()`: pass `tail_cut`, `F_re` or `sigmaF` through `settings`; `se = FALSE`
+  through `...`.
+* `lbi.hcr()` and `rfb.flicc.hcr()`: `trend = "track"` computes the trend ratio from
+  the terminal-year values of previous cycles (tracked as `index.hcr`) instead of the
+  current fit's series; default `"fit"` keeps the previous behaviour.
+  `rfb.flicc.hcr()` now defaults to `index = "SPR"`.
+* `flicc.is()`: `Cmin`, a floor on the TAC the multiplier is applied to, so a
+  multiplicative rule cannot get stuck near zero.
+
+```{r mse-setup, eval = FALSE}
+sig <- sigmaF_flicc(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                           settings = list(F_re = TRUE, tail_cut = 0.9)))
+ctrl <- mpCtrl(list(
+  est  = mseCtrl(method = flicc.sa,
+                 args = list(lhpar = lhpar, sel_fun = sel_fun,
+                             settings = list(pop_model = "gtg", obs_model = "dm",
+                                             tail_cut = 0.9, sigmaF = sig),
+                             se = FALSE)),
+  hcr  = mseCtrl(method = rfb.flicc.hcr, args = list(index = "SPR", trend = "track")),
+  isys = mseCtrl(method = flicc.is, args = list(initac = initac, Cmin = 0.1 * initac))))
+```
+
+`lfdess()` no longer returns `NaN` for empty gear-years:
+
+```{r lfdess}
+x <- lfd; x[[1]][, 1] <- 0
+check("MSE", "lfdess() with an empty gear-year gives no NaN",
+      !any(is.nan(unlist(lapply(lfdess(x, 100), c)))))
+```
+
+# Continuous integration
+
+Every push to a branch named `dev-*` or `ci-*` runs `.github/workflows/flicc-ci.yml`:
+it builds the branch and `main`, runs `test_dev.R` and the scripts in `ci/tests/`,
+compares default fits with `main`, renders changed `.Rmd` files, and publishes the
+results to the branch `ci-out/<branch>` (`summary.md`, logs, html). See
+`ci/README.md`.
+
+# Summary of checks
+
+```{r summary}
+knitr::kable(checks, row.names = FALSE)
+cat(sum(checks$pass), "of", nrow(checks), "checks passed\n")
+```
+
+```{r stop-if-failed}
+stopifnot("some checks failed - see the table above" = all(checks$pass))
+```
