@@ -90,4 +90,15 @@ tt <- c(penalised          = tm(settings = base),
         sigmaF_fixed       = tm(settings = c(base, list(sigmaF = sig))),
         sigmaF_fixed_se_FALSE = tm(settings = c(base, list(sigmaF = sig)), se = FALSE))
 print(round(tt, 2))
+
+## 10. weak default prior with F_re and the sigmaF_flicc() helper
+fd <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3),
+             settings = list(CVL = 0.1, obs_model = "dm", F_re = TRUE))
+stopifnot(isTRUE(all.equal(fd$tmb_data$prior_sigmaF_sd, 0.5)),
+          isTRUE(all.equal(fd$tmb_data$prior_sigmaF_mean, log(0.3))))
+sd_def <- sigmaF_flicc(fd)
+cat(sprintf("F_re with default weak prior: sigmaF = %.3f\n", sd_def))
+stopifnot(is.finite(sd_def), sd_def > 0.01)
+stopifnot(abs(sigmaF_flicc(f3) - sig) < 1e-12)          # fixed value is returned
+stopifnot(abs(sigmaF_flicc(f1) - sig) < 1e-12)          # estimated value
 cat("\nF_re tests passed.\n")

@@ -88,7 +88,8 @@ growth formulation.}
   approximation, so sigmaF is estimated from the marginal likelihood and
   standard errors include the F process. If \code{FALSE} (default), log F
   are fixed effects with a random-walk penalty, where sigmaF is mainly
-  set by its prior.\}
+  set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
+  supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.\}
 
 \\item\{\code{sigmaF}\}\{Optional fixed value of sigmaF (random-walk SD of
   log F). Fits are then as fast as the penalised default. A practical

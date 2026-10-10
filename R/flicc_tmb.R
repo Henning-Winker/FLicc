@@ -506,6 +506,13 @@ fiticc_core <- function(lfd, stklen,
 
   if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
 
+  # F as random effects: weak default prior on sigmaF (median 0.3, sd 0.5 on
+  # the log scale), so sigmaF cannot collapse to 0 when the length data carry
+  # little year-to-year information. A user-supplied prior_sigmaF is kept.
+  if (isTRUE(settings$F_re) && is.null(settings$prior_sigmaF)) {
+    settings$prior_sigmaF <- c(log(0.3), 0.5, 1)
+  }
+
   # fill missing elements
   for (nm in names(default_settings)) {
     if (is.null(settings[[nm]])) {
@@ -854,7 +861,8 @@ fiticc_core <- function(lfd, stklen,
 #'       approximation, so sigmaF is estimated from the marginal likelihood and
 #'       standard errors include the F process. If \code{FALSE} (default), log F
 #'       are fixed effects with a random-walk penalty, where sigmaF is mainly
-#'       set by its prior.}
+#'       set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
+#'       supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.}
 #'
 #'     \item{\code{sigmaF}}{Optional fixed value of sigmaF (random-walk SD of
 #'       log F). Fits are then as fast as the penalised default. A practical
@@ -1507,3 +1515,31 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
   out
 }
 
+#' Random-walk standard deviation of log F from an FLicc fit
+#'
+#' Returns sigmaF, the standard deviation of the random walk on log F, as
+#' estimated (or fixed) in a fit. Typical use: estimate it once with
+#' \code{settings$F_re = TRUE}, then fix it in repeated fits (e.g. in an MSE)
+#' with \code{settings$sigmaF = sigmaF_flicc(fit)}.
+#'
+#' @param fit A fitted \code{"flicc_tmb_fit"} object.
+#' @return Numeric scalar sigmaF, or \code{NA} if the fit has no random walk on F.
+#' @examples
+#' \dontrun{
+#' fit_re <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+#'                  settings = list(F_re = TRUE))
+#' sig <- sigmaF_flicc(fit_re)
+#' fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+#'               settings = list(sigmaF = sig))
+#' }
+#' @export
+sigmaF_flicc <- function(fit) {
+  if (!is.null(fit$par) && "log_sigmaF" %in% fit$par$par) {
+    return(exp(fit$par$mpd[fit$par$par == "log_sigmaF"][1]))
+  }
+  if (!is.null(fit$settings$sigmaF)) return(as.numeric(fit$settings$sigmaF))
+  pl <- tryCatch(fit$obj$env$parList(par = fit$obj$env$last.par.best), error = function(e) NULL)
+  if (!is.null(pl) && isTRUE(fit$tmb_data$prior_sigmaF_use == 1L) &&
+      length(unique(fit$tmb_data$year_names)) > 1) return(exp(pl$log_sigmaF))
+  NA_real_
+}
