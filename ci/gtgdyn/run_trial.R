@@ -116,12 +116,16 @@ fit1 <- function(obs, spec, start = NULL, limit = 900) {
   b <- lohi(o)
   opt <- try(nlminb(o$par, o$fn, o$gr, lower = b$lo, upper = b$hi,
                     control = list(eval.max = 2000, iter.max = 1000)), silent = TRUE)
+  # restart from the solution if the iteration limit was hit (ill-conditioned ridges)
+  for (r in 1:2) if (!inherits(opt, "try-error") && opt$convergence != 0)
+    opt <- try(nlminb(opt$par, o$fn, o$gr, lower = b$lo, upper = b$hi,
+                      control = list(eval.max = 2000, iter.max = 1000)), silent = TRUE)
   secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))
   if (inherits(opt, "try-error")) return(list(conv = FALSE, secs = secs, msg = as.character(opt)))
   if (length(spec$re)) o$fn(opt$par)
   rep <- o$report(o$env$last.par.best)
   pl <- o$env$parList(par = o$env$last.par.best)
-  list(pl = pl, iter = opt$iterations, conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
+  list(pl = pl, iter = opt$iterations, theta = pl$theta, conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
        ssb_rel = rep$ssb_rel, sel = rep$sel, F = rep$F, msg = opt$message,
        sig = exp(o$env$last.par.best[c("log_sigF", "log_sigR")]))
 }
@@ -145,8 +149,8 @@ mk_start <- function(prev) function(spec) {
        log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR))
 }
 res <- list(); tim <- list(); done_all <- list()
-run_pass <- function(models) {
-  for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
+run_pass <- function(models, seeds = 1:4) {
+  for (scen in c("noRdev", "Rdev")) for (seed in seeds) {
     obs <<- as.matrix(read.csv(file.path(dd, sprintf("obs_%s_%d.csv", scen, seed)), header = FALSE))
     tru <- read.csv(file.path(dd, sprintf("truth_%s_%d.csv", scen, seed)))
     key <- paste(scen, seed); done <- done_all[[key]] %||% list()
@@ -157,7 +161,9 @@ run_pass <- function(models) {
       done[[nm]] <- f
       say("%-6s seed %d %-14s conv %-5s %6.1f s  it %s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs, format(f$iter %||% NA),
           if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
-          if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg %||% "", 1, 60))
+          if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg %||% "", 1, 40))
+      if (!is.null(f$theta)) say("        sel peak %.1f sdl %.1f sdr %.1f | F last 3: %s", f$theta[1], exp(f$theta[2]), exp(f$theta[3]),
+                                 paste(round(tail(f$F, 3), 3), collapse = " "))
       tim[[length(tim) + 1]] <<- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)
       if (!is.null(f$spr))
         res[[length(res) + 1]] <<- data.frame(scen = scen, seed = seed, model = nm, year = tru$year,
@@ -213,7 +219,9 @@ cat(md, sep = "\n")
 }
 run_pass(c("eq_dome", "dyn_dome", "dyn_dome_Rdev", "dyn_dome_Rrw"))
 write_summary("penalised")
-run_pass(c("dyn_Rdev_RE", "dyn_FR_RE"))
+run_pass("dyn_Rdev_RE")
+write_summary("penalised + R random effects")
+run_pass("dyn_FR_RE", seeds = 1)
 write_summary("all")
 close(log_con)
 if (!ref_ok) quit(status = 1)
