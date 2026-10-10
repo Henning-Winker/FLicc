@@ -8,6 +8,7 @@ here <- if (length(args) > 0) args[1] else "ci/gtgdyn"
 out  <- if (length(args) > 1) args[2] else "out_gtgdyn"
 dir.create(out, showWarnings = FALSE, recursive = TRUE)
 suppressPackageStartupMessages(library(TMB))
+`%||%` <- function(a, b) if (is.null(a)) b else a
 dd <- file.path(here, "data")
 log_con <- file(file.path(out, "trial.log"), open = "wt")
 say <- function(...) { msg <- sprintf(...); cat(msg, "\n"); cat(msg, "\n", file = log_con); flush(log_con) }
@@ -16,9 +17,10 @@ say <- function(...) { msg <- sprintf(...); cat(msg, "\n"); cat(msg, "\n", file 
 cpp <- file.path(out, "gtgdyn.cpp")
 file.copy(file.path(here, "gtgdyn.cpp"), cpp, overwrite = TRUE)
 t0 <- Sys.time()
-TMB::compile(cpp, flags = "-O2")
+fw <- Sys.getenv("TMB_FRAMEWORK", "TMBad")
+TMB::compile(cpp, flags = "-O2", framework = fw)
 dyn.load(TMB::dynlib(file.path(out, "gtgdyn")))
-say("compiled in %.0f s", as.numeric(difftime(Sys.time(), t0, units = "secs")))
+say("framework %s, compiled in %.0f s", fw, as.numeric(difftime(Sys.time(), t0, units = "secs")))
 
 # ---- biology / grid (exported from the Python prototype) ----------------------
 bio <- read.csv(file.path(dd, "bio.csv")); LB <- read.csv(file.path(dd, "lb.csv"))$lb
@@ -105,9 +107,10 @@ lohi <- function(o, nF, rmode) {
   th <- which(nm == "theta"); lo[th] <- c(10, log(0.5), log(0.5)); hi[th] <- c(60, log(40), log(200))
   list(lo = lo, hi = hi)
 }
-fit1 <- function(obs, spec, limit = 900) {
+fit1 <- function(obs, spec, start = NULL, limit = 900) {
   t0 <- Sys.time()
   setTimeLimit(elapsed = limit, transient = TRUE); on.exit(setTimeLimit(elapsed = Inf))
+  if (!is.null(start)) spec$par <- start(spec)
   o <- do.call(make_obj, c(list(obs = obs), spec))
   b <- lohi(o)
   opt <- try(nlminb(o$par, o$fn, o$gr, lower = b$lo, upper = b$hi,
@@ -116,7 +119,8 @@ fit1 <- function(obs, spec, limit = 900) {
   if (inherits(opt, "try-error")) return(list(conv = FALSE, secs = secs, msg = as.character(opt)))
   if (length(spec$re)) o$fn(opt$par)
   rep <- o$report(o$env$last.par.best)
-  list(conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
+  pl <- o$env$parList(par = o$env$last.par.best)
+  list(pl = pl, iter = opt$iterations, conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
        ssb_rel = rep$ssb_rel, sel = rep$sel, F = rep$F, msg = opt$message,
        sig = exp(o$env$last.par.best[c("log_sigF", "log_sigR")]))
 }
@@ -129,13 +133,26 @@ specs <- list(
   dyn_FR_RE     = list(pop = 1, rmode = 1, sigR = 0.5, est_sigR = TRUE, est_sigF = TRUE,
                        prior_sigF = c(log(0.3), 0.5, 1), re = c("logF", "logR"))
 )
+# starting values: dyn from the equilibrium fit (pre-data years at the first F),
+# recruitment variants from dyn_dome, random-effects variants from their penalised twin
+start_from <- list(dyn_dome = "eq_dome", dyn_dome_Rdev = "dyn_dome", dyn_dome_Rrw = "dyn_dome",
+                   dyn_Rdev_RE = "dyn_dome_Rdev", dyn_FR_RE = "dyn_dome_Rdev")
+mk_start <- function(prev) function(spec) {
+  lf <- prev$logF; nF_new <- nrow(obs) + if (spec$pop == 1) 10 else 0
+  if (length(lf) < nF_new) lf <- c(rep(lf[1], nF_new - length(lf)), lf)
+  list(logF = lf, theta = prev$theta, logR = if (length(prev$logR) == nF_new) prev$logR else rep(0, nF_new),
+       log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR))
+}
 res <- list(); tim <- list()
 for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
   obs <- as.matrix(read.csv(file.path(dd, sprintf("obs_%s_%d.csv", scen, seed)), header = FALSE))
   tru <- read.csv(file.path(dd, sprintf("truth_%s_%d.csv", scen, seed)))
+  done <- list()
   for (nm in names(specs)) {
-    f <- fit1(obs, specs[[nm]])
-    say("%-6s seed %d %-14s conv %-5s %6.1f s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs,
+    prev <- done[[start_from[[nm]] %||% ""]]
+    f <- fit1(obs, specs[[nm]], start = if (!is.null(prev$pl)) mk_start(prev$pl))
+    done[[nm]] <- f
+    say("%-6s seed %d %-14s conv %-5s %6.1f s  it %s  nll %s  sig %s  %s", scen, seed, nm, f$conv, f$secs, format(f$iter %||% NA),
         if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
         if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg, 1, 60))
     tim[[length(tim) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)

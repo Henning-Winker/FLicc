@@ -89,7 +89,11 @@ Type objective_function<Type>::operator() ()
     if (sel_type == 0) {
       sel(j) = Type(1) / (Type(1) + exp(-log(Type(19)) * (lmid(j) - theta(0)) / exp(theta(1))));
     } else {
+#ifdef TMBAD_FRAMEWORK
+      Type sd = TMBad::CondExpLt(Type(lmid(j)), theta(0), exp(theta(1)), exp(theta(2)));
+#else
       Type sd = CppAD::CondExpLt(Type(lmid(j)), theta(0), exp(theta(1)), exp(theta(2)));
+#endif
       Type z = (lmid(j) - theta(0)) / sd;
       sel(j) = exp(Type(-0.5) * z * z);
     }
