@@ -90,6 +90,7 @@ export(flicc2FLStockR)
 
 # --- Indicators ---
 export(LBIspr)
+export(LBImean)
 
 # --- Plotting ---
 export(plot_lfd)
