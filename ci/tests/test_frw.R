@@ -63,4 +63,31 @@ w <- tryCatch(fiticc(window(lfd, start = 2024, end = 2024), window(stklen, start
                      sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3),
                      settings = list(F_re = TRUE)), warning = function(w) conditionMessage(w))
 print(w)
+
+## 7. two-step: sigmaF estimated once with F_re, then fixed (fast)
+sig <- exp(f1$par$mpd[f1$par$par == "log_sigmaF"])
+f3 <- fitf(obs_model = "dm", prior_sigmaF = c(log(0.5), 0.3, 1), sigmaF = sig)
+stopifnot(!"log_sigmaF" %in% names(f3$opt$par))
+d3 <- max(abs(c(f3$report$spr) - c(f1$report$spr)))
+cat(sprintf("sigmaF fixed at %.3f: max |SPR - SPR(F_re)| = %.4f\n", sig, d3))
+stopifnot(d3 < 0.01)
+
+## 8. se = FALSE skips sdreport; downstream still works
+fse <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3),
+              settings = list(CVL = 0.1, obs_model = "dm", sigmaF = sig), se = FALSE)
+stopifnot(is.null(fse$rep), max(abs(c(fse$report$spr) - c(f3$report$spr))) < 1e-8)
+invisible(LBIspr(fse)); invisible(fspr_flicc(fse)); invisible(flicc2FLStockR(fse))
+print(tryCatch(need_refit_flicc(fse), error = function(e) conditionMessage(e)))
+
+## 9. timing (dm)
+tm <- function(...) system.time(fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"),
+  catch_by_gear = c(0.7, 0.3), ...))[["elapsed"]]
+base <- list(CVL = 0.1, obs_model = "dm", prior_sigmaF = c(log(0.5), 0.3, 1))
+tt <- c(penalised          = tm(settings = base),
+        penalised_se_FALSE = tm(settings = base, se = FALSE),
+        F_re               = tm(settings = c(base, list(F_re = TRUE))),
+        F_re_se_FALSE      = tm(settings = c(base, list(F_re = TRUE)), se = FALSE),
+        sigmaF_fixed       = tm(settings = c(base, list(sigmaF = sig))),
+        sigmaF_fixed_se_FALSE = tm(settings = c(base, list(sigmaF = sig)), se = FALSE))
+print(round(tt, 2))
 cat("\nF_re tests passed.\n")

@@ -21,7 +21,8 @@ fiticc_core(
   n_restart = 3,
   grad_tol = 0.001,
   control = list(),
-  FLRreport = FALSE
+  FLRreport = FALSE,
+  se = TRUE
 )
 }
 \arguments{
@@ -63,6 +64,8 @@ free parameter vector after applying any TMB parameter mapping.}
 
 \item{FLRreport}{Logical; if \code{TRUE}, convert reported outputs using
 \code{as_FLQuants()}.}
+
+\item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped.}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} with optimizer results, sdreport

@@ -25,7 +25,8 @@ fiticc(
   refit_GL = 100,
   n_restart = 3,
   grad_tol = 0.001,
-  control = list()
+  control = list(),
+  se = TRUE
 )
 }
 \arguments{
@@ -89,6 +90,12 @@ growth formulation.}
   are fixed effects with a random-walk penalty, where sigmaF is mainly
   set by its prior.\}
 
+\\item\{\code{sigmaF}\}\{Optional fixed value of sigmaF (random-walk SD of
+  log F). Fits are then as fast as the penalised default. A practical
+  use is to estimate sigmaF once with \code{F_re = TRUE} on the full
+  data, then fix it for repeated fits (e.g. in an MSE); the yearly
+  estimates closely match the full random-effects fit.\}
+
 \\item\{\code{rob_eps}\}\{Robustness of the composition likelihood to
   sparse or outlying bins. Predicted proportions become
   \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
@@ -137,6 +144,10 @@ automatic restarts and by the optional safe-fit check. Default is
 
 \item{control}{Optional list of control arguments passed to \code{nlminb()}.
 Values supplied here override the FLicc defaults.}
+
+\item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
+standard errors or Hessian check, but faster (useful in an MSE).
+Default \code{TRUE}.}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} containing:

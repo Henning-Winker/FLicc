@@ -470,7 +470,8 @@ fiticc_core <- function(lfd, stklen,
                      n_restart = 3,
                      grad_tol = 1e-3,
                      control = list(),
-                     FLRreport=FALSE ) {
+                     FLRreport=FALSE,
+                     se = TRUE) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -493,6 +494,7 @@ fiticc_core <- function(lfd, stklen,
     rob_eps = 0,
     Lplus = NULL,
     F_re = FALSE,
+    sigmaF = NULL,
     spr_ref = 40,
     tail_warning = FALSE,
     FM_min = 0.05,
@@ -601,6 +603,13 @@ fiticc_core <- function(lfd, stklen,
 
   # F as a state-space random walk: log_Fk integrated out by the Laplace
   # approximation, so sigmaF is estimated from the marginal likelihood
+  # sigmaF fixed at a given value (e.g. estimated once with F_re = TRUE)
+  if (!is.null(settings$sigmaF) && rw_on) {
+    parameters$log_sigmaF <- log(as.numeric(settings$sigmaF))
+    map$log_sigmaF <- factor(NA)
+    tmb_data$prior_sigmaF_sd <- 0
+  }
+
   random <- NULL
   if (isTRUE(settings$F_re)) {
     if (rw_on) {
@@ -732,8 +741,14 @@ fiticc_core <- function(lfd, stklen,
     obj$env$last.par.best <- obj$env$last.par
   }
 
-  rep <- TMB::sdreport(obj)
-  adrep <- summary(rep, "fixed")
+  if (isTRUE(se)) {
+    rep <- TMB::sdreport(obj)
+    adrep <- summary(rep, "fixed")
+  } else {
+    # no standard errors requested (e.g. inside an MSE): skip sdreport
+    rep <- NULL
+    adrep <- cbind(Estimate = opt$par, `Std. Error` = NA_real_)
+  }
   report <- obj$report(obj$env$last.par.best)
   par_tab <- data.frame(
     par = rownames(adrep),
@@ -841,6 +856,12 @@ fiticc_core <- function(lfd, stklen,
 #'       are fixed effects with a random-walk penalty, where sigmaF is mainly
 #'       set by its prior.}
 #'
+#'     \item{\code{sigmaF}}{Optional fixed value of sigmaF (random-walk SD of
+#'       log F). Fits are then as fast as the penalised default. A practical
+#'       use is to estimate sigmaF once with \code{F_re = TRUE} on the full
+#'       data, then fix it for repeated fits (e.g. in an MSE); the yearly
+#'       estimates closely match the full random-effects fit.}
+#'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become
 #'       \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
@@ -878,6 +899,9 @@ fiticc_core <- function(lfd, stklen,
 #'   \code{1e-3}.
 #' @param control Optional list of control arguments passed to \code{nlminb()}.
 #'   Values supplied here override the FLicc defaults.
+#' @param se Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
+#'   standard errors or Hessian check, but faster (useful in an MSE).
+#'   Default \code{TRUE}.
 #' @param by_year Logical. If \code{TRUE}, the model is fitted independently
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
@@ -963,7 +987,8 @@ fiticc <- function(lfd, stklen,
                    refit_GL = 100,
                    n_restart = 3,
                    grad_tol = 1e-3,
-                   control = list()) {
+                   control = list(),
+                   se = TRUE) {
 
 
      if(by_year){
@@ -998,6 +1023,7 @@ fiticc <- function(lfd, stklen,
          dll = dll,
          sel_fixed = sel_fixed,
          n_restart = n_restart,
+         se = se,
          grad_tol = grad_tol,
          control = control,
          FLRreport = TRUE
@@ -1040,6 +1066,7 @@ fiticc <- function(lfd, stklen,
     sel_fixed = sel_fixed,
     start = start,
     n_restart = n_restart,
+    se = se,
     grad_tol = grad_tol,
     control = control,
     FLRreport = FLRreport
@@ -1070,6 +1097,7 @@ fiticc <- function(lfd, stklen,
         sel_fixed = sel_fixed,
         start = fit1$opt$par,
         n_restart = n_restart,
+        se = se,
         grad_tol = grad_tol,
         control = control,
         FLRreport = FLRreport
