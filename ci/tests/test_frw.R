@@ -8,7 +8,8 @@ fitf <- function(...) fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), c
                              settings = c(list(CVL = 0.1), list(...)))
 summ <- function(f) c(nll = round(f$opt$objective, 2), conv = f$opt$convergence,
                       maxgrad = signif(f$opt$max_gradient, 2), pdHess = f$rep$pdHess,
-                      sigmaF = round(c(f$report$pars["sigmaF"], exp(f$opt$par["log_sigmaF"]))[1], 3),
+                      sigmaF = round(exp(f$par$mpd[f$par$par == "log_sigmaF"][1]), 3),
+                      sigmaF_se_log = round(f$par$se[f$par$par == "log_sigmaF"][1], 3),
                       SPR_last = round(tail(c(f$report$spr), 1), 4))
 
 ## 1. penalised (default) vs random effects, three observation models
