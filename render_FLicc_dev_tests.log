@@ -1,0 +1,54 @@
+
+
+processing file: FLicc_dev_tests.Rmd
+1/46                 
+2/46 [setup]         
+3/46                 
+4/46 [install]       
+5/46                 
+6/46 [data]          
+7/46                 
+8/46 [regression]    
+9/46                 
+10/46 [tailcut-fits]  
+11/46                 
+12/46 [tailcut-plot]  
+13/46                 
+14/46 [tailcut-len]   
+15/46                 
+16/46 [tailcut-lplus] 
+17/46                 
+18/46 [tailcut-lbi]   
+19/46                 
+20/46 [fre-fits]      
+21/46                 
+22/46 [fre-plot]      
+23/46                 
+24/46 [fre-se]        
+25/46                 
+26/46 [fre-ci]        
+27/46                 
+28/46 [fre-ci-ribbon] 
+29/46                 
+30/46 [sigmaF-fixed]  
+31/46                 
+32/46 [se-false]      
+33/46                 
+34/46 [timing]        
+35/46                 
+36/46 [combined]      
+37/46                 
+38/46 [combined-plot] 
+39/46                 
+40/46 [mse-setup]     
+41/46                 
+42/46 [lfdess]        
+43/46                 
+44/46 [summary]       
+45/46                 
+46/46 [stop-if-failed]
+output file: FLicc_dev_tests.knit.md
+
+/opt/hostedtoolcache/pandoc/3.8.3/x64/pandoc +RTS -K512m -RTS FLicc_dev_tests.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /home/runner/work/FLicc/FLicc/out/html/FLicc_dev_tests.html --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /home/runner/work/_temp/Library/rmarkdown/rmd/h/default.html --syntax-highlighting none --variable highlightjs=1 --number-sections --variable theme=bootstrap --mathml --include-in-header /tmp/RtmpXZmofb/rmarkdown-str15ab7068021d.html 
+
+Output created: out/html/FLicc_dev_tests.html
