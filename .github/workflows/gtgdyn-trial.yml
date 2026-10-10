@@ -35,10 +35,11 @@ jobs:
       - name: Install TMB
         run: Rscript -e 'if (!requireNamespace("TMB", quietly = TRUE)) install.packages(c("TMB","RcppEigen"))'
       - name: Run trial (results pushed to ci-out/gtgdyn-trial every 3 min)
+        shell: bash {0}
         run: |
           mkdir -p out pub
           publish() {
-            rm -rf pub/* && cp out/*.log out/*.csv out/*.md out/*.txt pub/ 2>/dev/null
+            rm -rf pub/* && for f in out/*.log out/*.csv out/*.md out/*.txt; do [ -f "$f" ] && cp "$f" pub/; done
             echo "$1" > pub/state.txt
             ( cd pub && rm -rf .git && git init -q && git checkout -q -b ci-out/gtgdyn-trial &&
               git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com &&
