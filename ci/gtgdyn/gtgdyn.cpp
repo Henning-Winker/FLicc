@@ -108,12 +108,12 @@ Type objective_function<Type>::operator() ()
     Type cft = cfun(t, cumF, F, nF);
     for (int n = 0; n < nn; n++) {
       int g = node_g(n), j = node_j(n);
-      double tau = node_tau(n), Aj = A(g, j);
+      double tau = asDouble(node_tau(n)), Aj = asDouble(A(g, j));
       double s = t - tau, b = s - Aj;
       Type E = M * Aj;
       Type cprev = cfun(b, cumF, F, nF);
       for (int i = 0; i < j; i++) {
-        Type cnext = cfun(b + A(g, i + 1), cumF, F, nF);
+        Type cnext = cfun(b + asDouble(A(g, i + 1)), cumF, F, nF);
         E += sel(i) * (cnext - cprev);
         cprev = cnext;
       }
@@ -132,7 +132,7 @@ Type objective_function<Type>::operator() ()
       N = eqN(F(kd(y)));
     } else {
       N.setZero();
-      for (int q = 0; q < nq; q++) N += dynN(kd(y) + tq(q));
+      for (int q = 0; q < nq; q++) N += dynN(kd(y) + asDouble(tq(q)));
       N /= Type(nq);
     }
     vector<Type> C = N * sel * F(kd(y));
