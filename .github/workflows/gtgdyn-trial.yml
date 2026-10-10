@@ -34,17 +34,18 @@ jobs:
           key: rlib-gtgdyn-${{ runner.os }}-v1
       - name: Install TMB
         run: Rscript -e 'if (!requireNamespace("TMB", quietly = TRUE)) install.packages(c("TMB","RcppEigen"))'
-      - name: Run trial
+      - name: Run trial (results pushed to ci-out/gtgdyn-trial every 3 min)
         run: |
-          mkdir -p out
-          set -o pipefail
-          Rscript ci/gtgdyn/run_trial.R ci/gtgdyn out 2>&1 | tee out/console.log; echo "status=$?" > out/status.txt
-      - name: Publish results to ci-out/gtgdyn-trial
-        if: always()
-        run: |
-          cd out
-          rm -f *.o *.so gtgdyn.cpp
-          git init -q && git checkout -q -b ci-out/gtgdyn-trial
-          git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com
-          git add -A && git commit -qm "gtgdyn trial @ ${GITHUB_SHA::7}"
-          git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-trial
+          mkdir -p out pub
+          publish() {
+            rm -rf pub/* && cp out/*.log out/*.csv out/*.md out/*.txt pub/ 2>/dev/null
+            echo "$1" > pub/state.txt
+            ( cd pub && rm -rf .git && git init -q && git checkout -q -b ci-out/gtgdyn-trial &&
+              git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com &&
+              git add -A && git commit -qm "gtgdyn trial @ ${GITHUB_SHA::7} ($1)" &&
+              git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-trial )
+          }
+          ( Rscript ci/gtgdyn/run_trial.R ci/gtgdyn out > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
+          pid=$!
+          while kill -0 $pid 2>/dev/null; do sleep 180; publish running; done
+          publish finished

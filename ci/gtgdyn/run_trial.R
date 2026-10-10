@@ -10,7 +10,7 @@ dir.create(out, showWarnings = FALSE, recursive = TRUE)
 suppressPackageStartupMessages(library(TMB))
 dd <- file.path(here, "data")
 log_con <- file(file.path(out, "trial.log"), open = "wt")
-say <- function(...) { msg <- sprintf(...); cat(msg, "\n"); cat(msg, "\n", file = log_con) }
+say <- function(...) { msg <- sprintf(...); cat(msg, "\n"); cat(msg, "\n", file = log_con); flush(log_con) }
 
 # ---- compile -----------------------------------------------------------------
 cpp <- file.path(out, "gtgdyn.cpp")
@@ -105,8 +105,9 @@ lohi <- function(o, nF, rmode) {
   th <- which(nm == "theta"); lo[th] <- c(10, log(0.5), log(0.5)); hi[th] <- c(60, log(40), log(200))
   list(lo = lo, hi = hi)
 }
-fit1 <- function(obs, spec) {
+fit1 <- function(obs, spec, limit = 900) {
   t0 <- Sys.time()
+  setTimeLimit(elapsed = limit, transient = TRUE); on.exit(setTimeLimit(elapsed = Inf))
   o <- do.call(make_obj, c(list(obs = obs), spec))
   b <- lohi(o)
   opt <- try(nlminb(o$par, o$fn, o$gr, lower = b$lo, upper = b$hi,
@@ -138,6 +139,7 @@ for (scen in c("noRdev", "Rdev")) for (seed in 1:4) {
         if (is.numeric(f$nll)) format(round(f$nll, 1)) else "NA",
         if (is.numeric(f$sig)) paste(round(f$sig, 3), collapse = "/") else "NA", substr(f$msg, 1, 60))
     tim[[length(tim) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, secs = f$secs, conv = f$conv)
+    write.csv(do.call(rbind, tim), file.path(out, "tmb_times.csv"), row.names = FALSE)
     if (!is.null(f$spr))
       res[[length(res) + 1]] <- data.frame(scen = scen, seed = seed, model = nm, year = tru$year,
                                            spr = f$spr, ssb_rel = f$ssb_rel, spr_true = tru$spr, bb0 = tru$bb0)
