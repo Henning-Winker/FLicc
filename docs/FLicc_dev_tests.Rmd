@@ -273,7 +273,7 @@ check("Combined", "LBImean()", ok(LBImean(f_all)))
 check("Combined", "flicc2FLStockR(s = 0.75)", ok(flicc2FLStockR(f_all, rel = TRUE, s = 0.75)))
 check("Combined", "eqstklen()", ok(eqstklen(f_all, s = 0.75)))
 check("Combined", "flicc_convergence()", ok(flicc_convergence(f_all)))
-check("Combined", "restart from start = fit$opt$par",
+check("Combined", "restart from the previous estimates (start argument)",
       ok(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                 settings = modifyList(base, list(obs_model = "dm", tail_cut = 0.9, F_re = TRUE)),
                 start = f_all$opt$par)))
