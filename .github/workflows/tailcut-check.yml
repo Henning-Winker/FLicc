@@ -1,0 +1,43 @@
+name: tailcut-check
+on:
+  push:
+    branches: [ci-tailcut]
+permissions:
+  contents: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: new
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: base
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Deps
+        run: |
+          Rscript -e 'install.packages(c("remotes","TMB","RcppEigen","statmod","doFuture","progressr","scales","ggplot2"))'
+          Rscript -e 'remotes::install_github(c("flr/FLCore","flr/ggplotFL"), upgrade = "never")'
+      - name: Build both
+        run: |
+          set -o pipefail
+          mkdir -p lib_base lib_new
+          rm -f base/src/*.o base/src/*.so base/src/*.dll new/src/*.o new/src/*.so new/src/*.dll
+          { R CMD INSTALL --library=lib_base base && R CMD INSTALL --library=lib_new new; } 2>&1 | tee build.log
+      - name: Run
+        run: |
+          set -o pipefail
+          { Rscript new/.github/regress/check_tailcut.R lib_base base.rds && Rscript new/.github/regress/check_tailcut.R lib_new new.rds && Rscript new/.github/regress/compare_tailcut.R; } 2>&1 | tee check.log
+      - name: Publish
+        if: always()
+        run: |
+          mkdir out && cp *.log out/ 2>/dev/null || true
+          cd out && git init -q && git checkout -q -b ci-results
+          git config user.name ci && git config user.email ci@users.noreply.github.com
+          git add -A && git commit -qm "log" && git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-results
