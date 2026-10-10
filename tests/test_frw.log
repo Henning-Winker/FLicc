@@ -1,0 +1,227 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 13:06:49 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> fitf <- function(...) fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = c(0.7, 0.3), settings = c(list(CVL = 0.1), 
++     list(...)))
+
+> summ <- function(f) c(nll = round(f$opt$objective, 
++     2), conv = f$opt$convergence, maxgrad = signif(f$opt$max_gradient, 
++     2), pdHess = f$rep$pdHess, sigmaF = round(exp(f$par$mpd[f$par$par == 
++     "log_sigmaF"][1]), 3), sigmaF_se_log = round(f$par$se[f$par$par == 
++     "log_sigmaF"][1] .... [TRUNCATED] 
+
+> res <- list()
+
+> for (om in c("mn", "dm", "nb")) {
++     t0 <- system.time(f0 <- fitf(obs_model = om, prior_sigmaF = c(log(0.5), 
++         0.3, 1)))[["elapsed"]]
++     t1 <- system.time(f1 <- fitf(obs_model = om, prior_sigmaF = c(log(0.5), 
++         0.3, 1), F_re = TRUE))[["elapsed"]]
++     t2 <- system.time(f2  .... [TRUNCATED] 
+                nll conv maxgrad pdHess sigmaF sigmaF_se_log SPR_last  secs
+penalised  35786.55    0   0.018      1  0.170         0.320   0.2527 0.578
+RE_prior   35832.96    0   0.020      1  0.240         0.236   0.2485 4.054
+RE_noprior 35824.30    0   0.013      1  0.065         0.327   0.2645 3.794
+                nll conv maxgrad pdHess sigmaF sigmaF_se_log SPR_last  secs
+penalised  35702.32    0  0.0150      1  0.104         0.296   0.2722 0.716
+RE_prior   35748.80    0  0.0034      1  0.191         0.255   0.2676 4.753
+RE_noprior 35731.79    0  0.0004      1  0.000        88.512   0.2537 4.177
+               nll conv maxgrad pdHess sigmaF sigmaF_se_log SPR_last  secs
+penalised  2081.74    1  0.0130      1  0.113         0.333   0.2562 0.629
+RE_prior   2128.53    0  0.0031      1  0.208         0.261   0.2502 3.807
+RE_noprior 2112.71    0  0.0012      1  0.000       284.876   0.2387 4.573
+
+> print(round(rbind(penalised = c(res$dm$pen$report$spr), 
++     RE = c(res$dm$re$report$spr), RE_noprior = c(res$dm$re_noprior$report$spr)), 
++     3))
+            [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10] [,11]
+penalised  0.189 0.194 0.217 0.228 0.253 0.262 0.269 0.280 0.282 0.268 0.282
+RE         0.180 0.179 0.221 0.225 0.265 0.270 0.272 0.293 0.295 0.254 0.294
+RE_noprior 0.254 0.254 0.254 0.254 0.254 0.254 0.254 0.254 0.254 0.254 0.254
+           [,12]
+penalised  0.272
+RE         0.268
+RE_noprior 0.254
+
+> se_last <- function(f) {
++     s <- summary(f$rep, "report")
++     tail(s[rownames(s) == "log_spr_y", 2], 1)
++ }
+
+> round(c(penalised = se_last(res$dm$pen), RE = se_last(res$dm$re)), 
++     4)
+penalised.log_spr_y        RE.log_spr_y 
+             0.1022              0.1232 
+
+> f1 <- res$dm$re
+
+> r <- f1$obj$report(f1$obj$env$last.par.best)
+
+> stopifnot(max(abs(r$spr_y - c(f1$report$spr))) < 1e-10)
+
+> b <- brp_tmb_flicc(f1, spr = c(40, 20))
+
+> stopifnot(abs(fspr_flicc(f1, spr = 40) - b$Fspr[1]) < 
++     1e-08)
+
+> options(FLicc.brp_tmb = FALSE)
+
+> f40_old <- fspr_flicc(f1, spr = 40)
+
+> options(FLicc.brp_tmb = TRUE)
+
+> c(Fspr40_tmb = b$Fspr[1], Fspr40_R = f40_old)
+Fspr40_tmb   Fspr40_R 
+0.08032247 0.08033872 
+
+> stopifnot(abs(b$Fspr[1]/f40_old - 1) < 0.001)
+
+> invisible(LBIspr(f1))
+
+> invisible(flicc2FLStockR(f1, rel = TRUE, s = 0.75))
+
+> invisible(eqstklen(f1, s = 0.75))
+
+> invisible(selpars_flicc(f1))
+
+> print(flicc_convergence(f1))
+                             check            value passed
+2           Gradient is acceptable         0.003351   TRUE
+3     Hessian is positive definite             TRUE   TRUE
+4        Standard errors available 6 / 6 parameters   TRUE
+5 Hessian eigenvalues are positive            15.32   TRUE
+                                           interpretation
+2                 The fit is close to a stationary point.
+3                    The model curvature is well behaved.
+4      Uncertainty could be estimated for all parameters.
+5 No flat or negative curvature directions were detected.
+
+> print(LLflicc(f1)[[1]])
+[1] -35748.8
+
+> f1b <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, 
++     obs_model = "dm", prior_sigmaF = c(log(0.5), 0.3, 1), F_re = TRUE), 
++     start = f1$opt$par)
+
+> stopifnot(abs(f1b$opt$objective - f1$opt$objective) < 
++     1e-04)
+
+> fg <- fitf(pop_model = "gamma", obs_model = "nb", 
++     prior_sigmaF = c(log(0.5), NA, 1), F_re = TRUE)
+
+> print(summ(fg))
+          nll          conv       maxgrad        pdHess        sigmaF 
+    2115.9600        0.0000        0.0010        1.0000        0.0000 
+sigmaF_se_log      SPR_last 
+     295.7120        0.2311 
+
+> w <- tryCatch(fiticc(window(lfd, start = 2024, end = 2024), 
++     window(stklen, start = 2024, end = 2024), sel_fun = c("dsnormal", 
++         "logistic"), catch_by_gear = c(0.7, 0.3), settings = list(F_re = TRUE)), 
++     warning = function(w) conditionMessage(w))
+
+> print(w)
+[1] "settings$F_re = TRUE ignored: needs more than one year and prior_sigmaF[3] = 1 (random walk on)."
+
+> sig <- exp(f1$par$mpd[f1$par$par == "log_sigmaF"])
+
+> f3 <- fitf(obs_model = "dm", prior_sigmaF = c(log(0.5), 
++     0.3, 1), sigmaF = sig)
+
+> stopifnot(!"log_sigmaF" %in% names(f3$opt$par))
+
+> d3 <- max(abs(c(f3$report$spr) - c(f1$report$spr)))
+
+> cat(sprintf("sigmaF fixed at %.3f: max |SPR - SPR(F_re)| = %.4f\n", 
++     sig, d3))
+sigmaF fixed at 0.191: max |SPR - SPR(F_re)| = 0.0016
+
+> stopifnot(d3 < 0.01)
+
+> fse <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, 
++     obs_model = "dm", sigmaF = sig), se = FALSE)
+
+> stopifnot(is.null(fse$rep), max(abs(c(fse$report$spr) - 
++     c(f3$report$spr))) < 1e-08)
+
+> invisible(LBIspr(fse))
+
+> invisible(fspr_flicc(fse))
+
+> invisible(flicc2FLStockR(fse))
+
+> print(tryCatch(need_refit_flicc(fse), error = function(e) conditionMessage(e)))
+[1] FALSE
+
+> tm <- function(...) system.time(fiticc(lfd, stklen, 
++     sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 
++         0.3), ...))[["elapsed"]]
+
+> base <- list(CVL = 0.1, obs_model = "dm", prior_sigmaF = c(log(0.5), 
++     0.3, 1))
+
+> tt <- c(penalised = tm(settings = base), penalised_se_FALSE = tm(settings = base, 
++     se = FALSE), F_re = tm(settings = c(base, list(F_re = TRUE))), 
++     F_re_se_FALSE = tm(settings = c(base, list(F_re = TRUE)), 
++         se = FALSE), sigmaF_fixed = tm(settings = c(base, list(sigmaF = sig))) .... [TRUNCATED] 
+
+> print(round(tt, 2))
+            penalised    penalised_se_FALSE                  F_re 
+                 0.71                  0.60                  4.68 
+        F_re_se_FALSE          sigmaF_fixed sigmaF_fixed_se_FALSE 
+                 4.11                  0.61                  0.50 
+
+> fd <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, 
++     obs_model = "dm", F_re = TRUE))
+
+> stopifnot(isTRUE(all.equal(fd$tmb_data$prior_sigmaF_sd, 
++     0.5)), isTRUE(all.equal(fd$tmb_data$prior_sigmaF_mean, log(0.3))))
+
+> sd_def <- sigmaF_flicc(fd)
+
+> cat(sprintf("F_re with default weak prior: sigmaF = %.3f\n", 
++     sd_def))
+F_re with default weak prior: sigmaF = 0.076
+
+> stopifnot(is.finite(sd_def), sd_def > 0.01)
+
+> stopifnot(abs(sigmaF_flicc(f3) - sig) < 1e-12)
+
+> stopifnot(abs(sigmaF_flicc(f1) - sig) < 1e-12)
+
+> cat("\nF_re tests passed.\n")
+
+F_re tests passed.
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

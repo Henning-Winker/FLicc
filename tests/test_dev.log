@@ -1,0 +1,249 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 13:06:49 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sel_fun <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> base <- list(prior_sigmaF = c(log(0.5), 0.3, 1), CVL = 0.1)
+
+> fitf <- function(...) fiticc(lfd, stklen, sel_fun = sel_fun, 
++     catch_by_gear = cbg, settings = c(base, list(...)))
+
+> lastspr <- function(fit) round(tail(c(fit$report$spr), 
++     1), 4)
+
+> fit.fix <- fitf()
+
+> fit.est <- fitf(linf.sd = 0.1, Mk.sd = 0.2, CVL.sd = 0.2)
+
+> rbind(fixed = c(Linf = c(fit.fix$report$lhpar["linf"]), 
++     Mk = c(fit.fix$report$lhpar["Mk"]), CVL = c(fit.fix$report$pars["CVL"]), 
++     SPR = lastspr(fit.fix)), estimated = c(Linf = c(fit.est$report$lhpar["linf"]), 
++     Mk = c(fit.est$report$lhpar["Mk"]), CVL = c(fit.est$report$pars["CVL" .... [TRUNCATED] 
+              Linf       Mk        CVL    SPR
+fixed     55.70000 2.025000 0.10000000 0.2527
+estimated 53.95375 1.327149 0.09150396 0.1199
+
+> z <- seq(-2, 2, length.out = 13)
+
+> stopifnot(isTRUE(all.equal(fit.est$report$gtgLinfs, 
++     c(fit.est$report$lhpar["linf"]) * (1 + c(fit.est$report$pars["CVL"]) * 
++         z))))
+
+> stopifnot(abs(lastspr(fit.est) - lastspr(fit.fix)) > 
++     1e-04)
+
+> stopifnot(names(dimnames(fit.fix$report$N))[1] == 
++     "len")
+
+> fit.wide <- fitf(maxsd = 3, ngtg = 19)
+
+> fit.ng30 <- fitf(maxsd = 3, ngtg = 30)
+
+> c(default_maxsd2_ngtg13 = lastspr(fit.fix), maxsd3_ngtg19 = lastspr(fit.wide), 
++     maxsd3_ngtg30 = lastspr(fit.ng30))
+default_maxsd2_ngtg13         maxsd3_ngtg19         maxsd3_ngtg30 
+               0.2527                0.2458                0.2459 
+
+> cv_gtg <- function(fit) {
++     L <- fit$report$gtgLinfs
++     w <- fit$report$recP
++     sqrt(sum(w * (L - sum(w * L))^2))/sum(w * L)
++ }
+
+> round(c(maxsd2 = cv_gtg(fit.fix), maxsd3 = cv_gtg(fit.wide)), 
++     3)
+maxsd2 maxsd3 
+ 0.091  0.099 
+
+> w <- NULL
+
+> fit.nowarn <- fitf(maxsd = 0.5, ngtg = 7)
+
+> fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, 
++     ngtg = 7, tail_warning = TRUE), warning = function(x) {
++     w <<- c(w, conditionMessage(x))
++     invokeRestart("muffleWarning")
++ })
+
+> print(w[grepl("largest GTG Linf", w)])
+[1] "1 observed fish (0.0% of the total) lie in length bins at or above the largest GTG Linf (58.5 = Linf * (1 + maxsd * CVL)); the model gives them near-zero probability, which can drive CVL and status estimates. Consider a larger maxsd, settings$Lplus or settings$rob_eps."
+
+> stopifnot(any(grepl("largest GTG Linf", w)))
+
+> fit.r0 <- fitf(obs_model = "dm", rob_eps = 0)
+
+> fit.r001 <- fitf(obs_model = "dm", rob_eps = 0.001)
+
+> fit.r01 <- fitf(obs_model = "dm", rob_eps = 0.01)
+
+> fit.plus <- fitf(obs_model = "dm", Lplus = 50)
+
+> fit.both <- fitf(obs_model = "dm", Lplus = 50, rob_eps = 0.001)
+
+> fit.dm <- fitf(obs_model = "dm")
+
+> rob <- list(dm = fit.dm, rob0 = fit.r0, rob0.001 = fit.r001, 
++     rob0.01 = fit.r01, plus50 = fit.plus, plus50_rob0.001 = fit.both)
+
+> data.frame(nll = sapply(rob, function(f) round(f$opt$objective, 
++     2)), SPR = sapply(rob, lastspr), Fspr40 = sapply(rob, function(f) round(fspr_flicc(f), 
++     4)))
+                     nll    SPR Fspr40
+dm              35702.32 0.2722 0.0806
+rob0            35702.32 0.2722 0.0806
+rob0.001        35692.01 0.2731 0.0831
+rob0.01         35695.78 0.2692 0.0853
+plus50          35591.74 0.2636 0.0795
+plus50_rob0.001 35577.50 0.2658 0.0825
+
+> stopifnot(abs(fit.r0$opt$objective - fit.dm$opt$objective) < 
++     1e-06)
+
+> plot_spr(rob)
+
+> plot_len(fit.both)
+
+> fit.nb <- fitf(obs_model = "nb", Lplus = 50, rob_eps = 0.001)
+
+> fit.mn <- fitf(obs_model = "mn", Lplus = 50, rob_eps = 0.001)
+
+> c(nb = lastspr(fit.nb), mn = lastspr(fit.mn))
+    nb     mn 
+0.2607 0.2566 
+
+> s <- 0.75
+
+> sprbrel_flicc(c(1, 0.5, 0.25), s = s)
+[1] 40.00000 24.16667 16.25000
+
+> spr2brel(c(0.4, 0.2, 0.16, 0.1), s = s)
+[1] 1.00000000 0.36842105 0.24210526 0.05263158
+
+> stopifnot(isTRUE(all.equal(spr2brel(sprbrel_flicc(0.25, 
++     s = s)/100, s = s), 0.25)))
+
+> fbrel_flicc(fit.fix, brel = 0.25, s = s)
+[1] 0.1782183
+
+> fspr_flicc(fit.fix, spr = 10)
+[1] 0.2387722
+
+> spr2brel(fit.fix$report$spr, s = s)
+An object of class "FLQuant"
+, , unit = unique, season = all, area = unique
+
+     year
+quant 2013  2014  2015  2016  2017  2018  2019  2020  2021  2022  2023  2024 
+  all 0.260 0.246 0.391 0.366 0.524 0.552 0.552 0.638 0.675 0.500 0.649 0.535
+
+units:  spr 
+
+> stk.spr <- flicc2FLStockR(fit.fix, rel = TRUE)
+
+> stk.b <- flicc2FLStockR(fit.fix, rel = TRUE, s = s)
+
+> rbind(SPR_scale = tail(c(stk.spr@stock), 3), B_scale = tail(c(stk.b@stock), 
++     3))
+               [,1]      [,2]      [,3]
+SPR_scale 0.6043541 0.7222604 0.6317509
+B_scale   0.5002367 0.6491711 0.5348432
+
+> stk.b@refpts
+An object of class "FLPar"
+params
+Fspr Bspr  Bpa Blim 
+1.00 1.00 0.50 0.25 
+units:  NA 
+
+> plot_LBAdvice(stk.b)
+
+> stopifnot(isTRUE(all.equal(c(stk.b@stock), c(spr2brel(c(fit.fix$report$spr), 
++     s = s)))))
+
+> fit.sp <- fitf(spr_ref = c(40, 20, 10))
+
+> fit.sp$report$Fspr
+   Fspr40    Fspr20    Fspr10 
+0.0809766 0.1541305 0.2387722 
+
+> system.time(f40 <- fspr_flicc(fit.sp, spr = 40))
+   user  system elapsed 
+      0       0       0 
+
+> system.time(f30 <- fspr_flicc(fit.sp, spr = 30))
+   user  system elapsed 
+  0.005   0.000   0.005 
+
+> b <- brp_tmb_flicc(fit.sp, Fseq = c(0, 0.05, 0.1), 
++     spr = c(40, 30))
+
+> b$Fspr
+[1] 0.0809766 0.1100251
+
+> b$SBPR/b$SBPR0
+[1] 1.0000000 0.5554179 0.3306471
+
+> timeit <- function() c(fspr40 = system.time(a1 <<- fspr_flicc(fit.sp, 
++     spr = 40))[["elapsed"]], prbrp = system.time(a2 <<- prbrp_flicc(fit.sp))[["elapsed"]], 
++     eqstk = system.time(a3 <<- eqstklen(fit.sp, s = s))[["elapsed"]], 
++     LBIspr = system.time(a4 <<- LBIspr(fit.sp))[["elapsed" .... [TRUNCATED] 
+
+> options(FLicc.brp_tmb = FALSE)
+
+> t.old <- timeit()
+
+> old <- list(a1, c(a2$SBPR), c(a3@refpts))
+
+> options(FLicc.brp_tmb = TRUE)
+
+> t.new <- timeit()
+
+> new <- list(a1, c(a2$SBPR), c(a3@refpts))
+
+> rbind(old = t.old, new = t.new, speedup = round(t.old/pmax(t.new, 
++     0.001)))
+         fspr40   prbrp  eqstk LBIspr  stkR
+old       0.973   3.641  5.008  1.020 1.057
+new       0.000   0.024  0.142  0.069 0.126
+speedup 973.000 152.000 35.000 15.000 8.000
+
+> reldiff <- function(a, b) max(abs(a - b)/pmax(abs(b), 
++     1e-12), na.rm = TRUE)
+
+> stopifnot(reldiff(new[[1]], old[[1]]) < 0.001, reldiff(new[[2]], 
++     old[[2]]) < 1e-08, reldiff(new[[3]], old[[3]]) < 0.001)
+
+> cat("\nAll dev-lbsrp tests passed.\n")
+
+All dev-lbsrp tests passed.
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
