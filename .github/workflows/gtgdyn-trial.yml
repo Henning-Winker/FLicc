@@ -1,0 +1,50 @@
+# gtg.dyn TMB trial: reference test against the Python prototype and fits to the
+# simulated rebuild datasets. Runs on pushes to dev-gtgdyn that touch ci/gtgdyn,
+# publishes results to the branch ci-out/gtgdyn-trial.
+name: gtgdyn-trial
+
+on:
+  push:
+    branches: ['dev-gtgdyn']
+    paths: ['ci/gtgdyn/**', '.github/workflows/gtgdyn-trial.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gtgdyn-trial
+  cancel-in-progress: true
+
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-gtgdyn-${{ runner.os }}-v1
+      - name: Install TMB
+        run: Rscript -e 'if (!requireNamespace("TMB", quietly = TRUE)) install.packages(c("TMB","RcppEigen"))'
+      - name: Run trial
+        run: |
+          mkdir -p out
+          set -o pipefail
+          Rscript ci/gtgdyn/run_trial.R ci/gtgdyn out 2>&1 | tee out/console.log; echo "status=$?" > out/status.txt
+      - name: Publish results to ci-out/gtgdyn-trial
+        if: always()
+        run: |
+          cd out
+          rm -f *.o *.so gtgdyn.cpp
+          git init -q && git checkout -q -b ci-out/gtgdyn-trial
+          git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com
+          git add -A && git commit -qm "gtgdyn trial @ ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-trial
