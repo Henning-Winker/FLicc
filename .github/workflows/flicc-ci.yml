@@ -1,0 +1,99 @@
+# FLicc CI: build, tests, regression against main, Rmd rendering.
+# Runs on every push to a branch named dev-* or ci-* (and manually from the
+# Actions tab). Results are published to the branch ci-results/<branch>
+# (summary.md, logs, rendered html), so they can be read with plain git.
+name: flicc-ci
+
+on:
+  push:
+    branches: ['dev-**', 'ci-**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: flicc-ci-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      BRANCH: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: new
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: base
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-${{ runner.os }}-${{ hashFiles('new/DESCRIPTION') }}-v1
+          restore-keys: rlib-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: |
+          Rscript -e 'pk <- c("remotes","TMB","RcppEigen","statmod","doFuture","progressr","scales","ggplot2","rmarkdown","knitr","foreach","future");
+                      miss <- pk[!pk %in% rownames(installed.packages())]; if (length(miss)) install.packages(miss)'
+          Rscript -e 'for (p in c("FLCore","ggplotFL")) if (!requireNamespace(p, quietly = TRUE)) remotes::install_github(paste0("flr/", p), upgrade = "never")'
+
+      - name: Build main and branch
+        run: |
+          mkdir -p lib_base lib_new out
+          rm -f base/src/*.o base/src/*.so base/src/*.dll new/src/*.o new/src/*.so new/src/*.dll
+          status=0
+          R CMD INSTALL --library=lib_new new > out/build.log 2>&1 || status=1
+          echo "build=$status" >> out/status.txt
+          R CMD INSTALL --library=lib_base base > out/build_main.log 2>&1 || echo "build_main=1" >> out/status.txt
+
+      - name: Tests
+        if: always()
+        run: Rscript new/ci/run_tests.R new lib_new out || true
+
+      - name: Regression against main
+        if: always()
+        run: Rscript new/ci/compare_main.R new lib_base lib_new out || true
+
+      - name: Render changed Rmd files
+        if: always()
+        run: |
+          cd new
+          files=$(git diff --name-only origin/main...HEAD -- '*.Rmd' | grep -v '^ci/' || true)
+          cd ..
+          for f in $files; do
+            [ -f "new/$f" ] || continue
+            if R_LIBS="$PWD/lib_new:$R_LIBS_USER" Rscript -e "rmarkdown::render('new/$f', output_dir = 'out/html')" > "out/render_$(basename $f .Rmd).log" 2>&1; then
+              echo "render:$f=0" >> out/status.txt
+            else
+              echo "render:$f=1" >> out/status.txt
+            fi
+          done
+
+      - name: Summary
+        if: always()
+        run: Rscript new/ci/summary.R out "$BRANCH" "$GITHUB_SHA"
+
+      - name: Publish results to ci-results/<branch>
+        if: always()
+        run: |
+          cd out
+          git init -q && git checkout -q -b "ci-results/$BRANCH"
+          git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com
+          git add -A && git commit -qm "CI results for $BRANCH @ ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" "ci-results/$BRANCH"
+
+      - name: Fail if anything failed
+        if: always()
+        run: "! grep -q '=1$' out/status.txt"
