@@ -22,6 +22,7 @@ Type cfun(double t, const vector<Type> &cumF, const vector<Type> &F, int nF) {
   if (t < 0.0) return F(0) * t;
   if (t >= nF) return cumF(nF) + F(nF - 1) * (t - nF);
   int k = (int) std::floor(t);
+  if (k < 0 || k >= nF) Rf_error("cfun index %d (t = %f, nF = %d)", k, t, nF);
   return cumF(k) + F(k) * (t - k);
 }
 
@@ -31,6 +32,7 @@ Type logrfun(double b, const vector<Type> &logR, int nF) {
   if (u <= 0.0) return logR(0);
   if (u >= nF - 1) return logR(nF - 1);
   int k = (int) std::floor(u);
+  if (k < 0 || k + 1 >= nF) Rf_error("logrfun index %d (b = %f)", k, b);
   double fr = u - k;
   return (1.0 - fr) * logR(k) + fr * logR(k + 1);
 }
@@ -66,6 +68,16 @@ Type objective_function<Type>::operator() ()
 
   int nF = logF.size(), ny = obs.rows(), nb = obs.cols(), ng = wg.size();
   int nn = node_g.size(), nq = tq.size();
+  if (isDouble<Type>::value) {
+    if (kd.size() != ny) Rf_error("kd size %d != ny %d", (int) kd.size(), ny);
+    if (lmid.size() != nb || mw.size() != nb) Rf_error("lmid/mw size != nb %d", nb);
+    if (A.rows() != ng || A.cols() != nb + 1) Rf_error("A dims %d x %d, expected %d x %d", (int) A.rows(), (int) A.cols(), ng, nb + 1);
+    if (dT.rows() != ng || dT.cols() != nb || reach.rows() != ng || reach.cols() != nb) Rf_error("dT/reach dims");
+    if (logR.size() != nF) Rf_error("logR size %d != nF %d", (int) logR.size(), nF);
+    for (int y = 0; y < ny; y++) if (kd(y) < 0 || kd(y) >= nF) Rf_error("kd(%d) = %d out of range", y, kd(y));
+    for (int n = 0; n < nn; n++) if (node_g(n) < 0 || node_g(n) >= ng || node_j(n) < 0 || node_j(n) >= nb) Rf_error("node %d out of range", n);
+    if (sel_type == 1 && theta.size() < 3) Rf_error("theta size %d", (int) theta.size());
+  }
   Type nll = 0;
 
   // selectivity

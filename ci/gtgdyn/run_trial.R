@@ -49,6 +49,7 @@ make_grid <- function(Tcap = 40, h = 2) {
 }
 grid <- make_grid()
 say("GTG %d, bins %d, quadrature nodes %d", ng, nb, length(grid$node_g))
+say("dims: A %s, dT %s, reach %s, lb %d, node_j range %s", paste(dim(grid$A), collapse = "x"), paste(dim(grid$dT), collapse = "x"), paste(dim(grid$reach), collapse = "x"), length(LB), paste(range(grid$node_j), collapse = "-"))
 
 make_obj <- function(obs, pop, n_pre = 10, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
                      est_sigF = FALSE, est_sigR = FALSE, re = character(0),
@@ -56,6 +57,7 @@ make_obj <- function(obs, pop, n_pre = 10, sel_type = 1, rmode = 0, sigF = 0.3, 
                      par = NULL, map_all = FALSE) {
   ny <- nrow(obs); npre <- if (pop == 1) n_pre else 0; nF <- ny + npre
   mode <- bio$lmid[which.max(colSums(obs))]
+  storage.mode(obs) <- "double"
   data <- c(list(pop = as.integer(pop), obs = obs, kd = as.integer(npre + 0:(ny - 1)),
                  tq = c(0.25, 0.75), lmid = bio$lmid, mw = bio$mw, wg = gtg$w, M = M,
                  sel_type = as.integer(sel_type), rmode = as.integer(rmode),
