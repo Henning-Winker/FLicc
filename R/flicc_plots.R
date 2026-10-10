@@ -19,6 +19,14 @@
 #' @param ref_levels Numeric vector of SPR reference levels.
 #' @param ref_colours Character vector of colours for the SPR reference lines.
 #' @param ref_linetype Line type for the SPR reference lines.
+#' @param ci Logical. If `TRUE`, add confidence intervals for SPR from the
+#'   standard errors of log SPR (`TMB::sdreport()`), back-transformed:
+#'   `exp(log(SPR) +/- z * SE)`. Needs fitted objects with standard errors
+#'   (not `se = FALSE`); ignored with a warning otherwise. With
+#'   `settings$F_re = TRUE` the intervals include the uncertainty of the
+#'   random walk on F.
+#' @param ci_level Confidence level of the intervals. Default 0.95.
+#' @param ci_type `"bars"` (error bars, default) or `"ribbon"` (shaded band).
 #'
 #' @details
 #' Reference lines can be toggled on or off using `reflines`. Their levels and
@@ -38,6 +46,8 @@
 #'
 #' fit <- fiticc(lfd_alfonsino,stklen_alfonsino,sel_fun=c("dsnormal","logistic"),catch_by_gear = c(0.7,0.3))
 #' plot_spr(fit)
+#' plot_spr(fit, ci = TRUE)                       # 95% error bars
+#' plot_spr(list(a = fit, b = fit2), ci = TRUE, ci_type = "ribbon")
 #' plot_spr(fit, reflines = FALSE)
 #' plot_spr(fit, ref_levels = c(0.7, 0.4, 0.2))
 #' }
@@ -54,9 +64,33 @@ plot_spr <- function(fit,
                      reflines = TRUE,
                      ref_levels = c(0.4, 0.2, 0.1),
                      ref_colours = c("darkgreen", "orange", "red"),
-                     ref_linetype = 2) {
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
 
+  ci_type <- match.arg(ci_type)
 
+  # confidence intervals from the SEs of log SPR (fits only)
+  ci_df <- NULL
+  if (isTRUE(ci)) {
+    fits <- if (inherits(fit, "flicc_tmb_fit")) list(fit) else
+      if (is.list(fit) && length(fit) && all(vapply(fit, inherits, logical(1), "flicc_tmb_fit"))) fit else NULL
+    if (is.null(fits)) {
+      warning("ci = TRUE needs fitted objects; intervals are not drawn.", call. = FALSE)
+    } else {
+      nms <- if (!is.null(names(fits))) names(fits) else paste0("run", seq_along(fits))
+      ci_df <- do.call(rbind, lapply(seq_along(fits), function(i) {
+        x <- spr_ci_flicc(fits[[i]], level = ci_level)
+        if (is.null(x)) return(NULL)
+        x$qname <- nms[i]
+        x
+      }))
+      if (is.null(ci_df))
+        warning("No standard errors in the fit(s) (fitted with se = FALSE?); ",
+                "intervals are not drawn.", call. = FALSE)
+    }
+  }
 
   if (inherits(fit, "FLQuants")){
     if(is.null(names(fit))) names <- paste0("run",1:length(fit))
@@ -94,14 +128,32 @@ plot_spr <- function(fit,
   df$year_num <- as.numeric(as.character(df$year))
 
   if (is.null(ymax)) {
-    ymax <- max(df$data, ref_levels, 0.6, na.rm = TRUE)
+    ymax <- max(df$data, ref_levels, 0.6, if (!is.null(ci_df)) ci_df$upr, na.rm = TRUE)
   }
+  multi <- !inherits(res, "FLQuant")
+  pd <- ggplot2::position_dodge(width = if (multi && !is.null(ci_df) && ci_type == "bars") 0.35 else 0)
 
   if (is.null(title)) {
     title <- "Spawning potential ratio"
   }
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = year_num, y = data))
+  if (!is.null(ci_df)) {
+    ci_df$year_num <- as.numeric(ci_df$year)
+    if (ci_type == "ribbon") {
+      p <- p + if (multi)
+        ggplot2::geom_ribbon(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr, fill = qname),
+                             inherit.aes = FALSE, alpha = 0.2, show.legend = FALSE) else
+        ggplot2::geom_ribbon(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr),
+                             inherit.aes = FALSE, alpha = 0.2, fill = line_colour)
+    } else {
+      p <- p + if (multi)
+        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr, colour = qname),
+                               inherit.aes = FALSE, width = 0.25, position = pd, show.legend = FALSE) else
+        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr),
+                               inherit.aes = FALSE, width = 0.25, colour = line_colour)
+    }
+  }
   if(inherits(res, "FLQuant")){
    p <- p+ ggplot2::geom_line(
       colour = line_colour,
@@ -114,11 +166,11 @@ plot_spr <- function(fit,
   } else {
     p <- p+ ggplot2::geom_line(
       aes(colour = qname),
-      linewidth = linewidth
+      linewidth = linewidth, position = pd
     ) +
       ggplot2::geom_point(
         aes(colour = qname),
-        size = point_size
+        size = point_size, position = pd
       )
    }
   p <- p+ ggplot2::scale_x_continuous(breaks = yr_breaks) +
@@ -2143,4 +2195,27 @@ plot_LBIp <- function(fit,
     )
 
   p
+}
+
+#' Confidence intervals for SPR from an FLicc fit
+#'
+#' Intervals for SPR by year from the standard errors of log SPR reported by
+#' `TMB::sdreport()`: `exp(log(SPR) +/- z * SE)`.
+#'
+#' @param fit A fitted `flicc_tmb_fit` object (fitted with `se = TRUE`).
+#' @param level Confidence level. Default 0.95.
+#' @return A data frame with `year`, `spr`, `se_log`, `lwr`, `upr`, or `NULL`
+#'   if the fit has no standard errors.
+#' @export
+spr_ci_flicc <- function(fit, level = 0.95) {
+  if (is.null(fit$rep)) return(NULL)
+  s <- summary(fit$rep, "report")
+  s <- s[rownames(s) == "log_spr_y", , drop = FALSE]
+  if (!nrow(s)) return(NULL)
+  z <- stats::qnorm(1 - (1 - level) / 2)
+  yrs <- if (!is.null(fit$tmb_data$year_names)) fit$tmb_data$year_names else
+    dimnames(fit$report$spr)$year
+  data.frame(year = as.character(yrs), spr = exp(s[, 1]), se_log = s[, 2],
+             lwr = exp(s[, 1] - z * s[, 2]), upr = exp(s[, 1] + z * s[, 2]),
+             row.names = NULL)
 }

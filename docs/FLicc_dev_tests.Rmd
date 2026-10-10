@@ -214,6 +214,23 @@ round(c(penalised = se_last(f_pen), F_re = se_last(f_re)), 4)
 check("F_re", "SE of log SPR is larger with F as random effects", se_last(f_re) > se_last(f_pen))
 ```
 
+`plot_spr(..., ci = TRUE)` adds 95% intervals, `exp(log(SPR) ± 1.96 SE)`, from the
+same standard errors (`spr_ci_flicc()` returns them as a table):
+
+```{r fre-ci, fig.height = 4.5}
+plot_spr(list(penalised = f_pen, F_re = f_re), ci = TRUE)
+```
+
+```{r fre-ci-ribbon, fig.height = 4.5}
+plot_spr(f_re, ci = TRUE, ci_type = "ribbon", title = "F_re: SPR with 95% interval")
+ci_re <- spr_ci_flicc(f_re)
+tail(ci_re, 3)
+check("F_re", "spr_ci_flicc() intervals contain the estimates",
+      all(ci_re$lwr < c(f_re$report$spr) & c(f_re$report$spr) < ci_re$upr))
+check("F_re", "spr_ci_flicc() returns NULL without standard errors",
+      is.null(spr_ci_flicc(fitf(obs_model = "dm", se = FALSE))))
+```
+
 ## Fast route: estimate $\sigma_F$ once, then fix it
 
 Fitting with random effects takes several times longer. For repeated fits (e.g.

@@ -95,6 +95,7 @@ export(LBImean)
 # --- Plotting ---
 export(plot_lfd)
 export(plot_spr)
+export(spr_ci_flicc)
 export(plot_len)
 export(plot_LBIspr)
 export(plot_eqcurves)
