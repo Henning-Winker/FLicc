@@ -27,8 +27,12 @@ bio <- read.csv(file.path(dd, "bio.csv")); LB <- read.csv(file.path(dd, "lb.csv"
 gtg <- read.csv(file.path(dd, "gtg.csv"))
 K <- 0.08; M <- 0.162; nb <- nrow(bio); ng <- nrow(gtg)
 
-make_grid <- function(Tcap = 40, h = 2) {
-  A <- dT <- NULL
+gtg_set <- function(n, maxsd, Linf = 55.662, CVL = 0.1) {
+  z <- seq(-maxsd, maxsd, length.out = n); w <- dnorm(z)
+  data.frame(linf = Linf * (1 + CVL * z), w = w / sum(w))
+}
+make_grid <- function(Tcap = 40, h = 2, gtg = get("gtg", envir = globalenv())) {
+  ng <- nrow(gtg)
   A <- t(sapply(gtg$linf, function(li) { r <- 1 - LB / li; ifelse(r > 0, -log(pmax(r, 1e-300)) / K, Inf) }))
   reach <- matrix(0L, ng, nb); dT <- matrix(0, ng, nb)
   for (g in 1:ng) for (j in 1:nb) {
@@ -49,13 +53,20 @@ make_grid <- function(Tcap = 40, h = 2) {
   list(A = Afin, dT = dT, reach = reach, node_g = as.integer(ng_), node_j = as.integer(nj_),
        node_tau = tau_, node_w = w_)
 }
+# model configuration (speed settings); base = settings of the Python trial
+make_cfg <- function(ngtg = 19, maxsd = 3, nq = 2, db = 0.25, h = 2, n_pre = 10) {
+  g <- if (ngtg == 19 && maxsd == 3) gtg else gtg_set(ngtg, maxsd)
+  gr <- make_grid(h = h, gtg = g)
+  list(gtg = g, grid = gr, tq = (seq_len(nq) - 0.5) / nq, db = db, n_pre = n_pre,
+       b0 = -max(gr$A[, 1:nb][gr$reach > 0]) - 1)
+}
 grid <- make_grid()
 say("GTG %d, bins %d, quadrature nodes %d", ng, nb, length(grid$node_g))
 say("dims: A %s, dT %s, reach %s, lb %d, node_j range %s", paste(dim(grid$A), collapse = "x"), paste(dim(grid$dT), collapse = "x"), paste(dim(grid$reach), collapse = "x"), length(LB), paste(range(grid$node_j), collapse = "-"))
 
-b0 <- -max(grid$A[, 1:nb][grid$reach > 0]) - 1
+cfg0 <- make_cfg()
 
-make_obj <- function(obs, pop, n_pre = 10, db = 0.25, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
+make_obj <- function(obs, pop, cfg = cfg0, n_pre = cfg$n_pre, db = cfg$db, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
                      est_sigF = FALSE, est_sigR = FALSE, re = character(0),
                      prior_sigF = c(log(0.3), 0.5, 0), prior_sigR = c(log(0.5), 0.5, 0),
                      par = NULL, map_all = FALSE) {
@@ -63,10 +74,10 @@ make_obj <- function(obs, pop, n_pre = 10, db = 0.25, sel_type = 1, rmode = 0, s
   mode <- bio$lmid[which.max(colSums(obs))]
   storage.mode(obs) <- "double"
   data <- c(list(pop = as.integer(pop), obs = obs, kd = as.integer(npre + 0:(ny - 1)),
-                 tq = c(0.25, 0.75), lmid = bio$lmid, mw = bio$mw, wg = gtg$w, M = M,
+                 tq = cfg$tq, lmid = bio$lmid, mw = bio$mw, wg = cfg$gtg$w, M = M,
                  sel_type = as.integer(sel_type), rmode = as.integer(rmode),
                  prior_sigF = prior_sigF, prior_sigR = prior_sigR,
-                 db = db, b0 = b0, nbg = as.integer(ceiling((nF + 1 - b0) / max(db, 0.01)) + 2)), grid)
+                 db = db, b0 = cfg$b0, nbg = as.integer(ceiling((nF + 1 - cfg$b0) / max(db, 0.01)) + 2)), cfg$grid)
   if (is.null(par))
     par <- list(logF = rep(log(0.1), nF),
                 theta = if (sel_type == 1) c(mode, log(5), log(20)) else c(mode, log(5)),
@@ -99,6 +110,9 @@ o <- make_obj(obs1, pop = 0, rmode = 0, par = par_eq, map_all = TRUE)
 o$fn(o$par); d_eq <- max(abs(o$report()$pred - ref_eq))
 ref_ok <- d_dyn < 1e-8 && d_eq < 1e-8 && d_dyng < 1e-8
 say("REFERENCE TEST: max |TMB - Python|  dyn exact %.2e   dyn grid %.2e   eq %.2e   -> %s", d_dyn, d_dyng, d_eq, if (ref_ok) "PASS" else "FAIL")
+
+mode <- if (file.exists(file.path(here, "mode.txt"))) trimws(readLines(file.path(here, "mode.txt"))[1]) else "trial"
+say("mode: %s", mode)
 
 # ---- 2. fits -------------------------------------------------------------------
 lohi <- function(o, nF, rmode) {
@@ -143,11 +157,14 @@ specs <- list(
 start_from <- list(dyn_dome = "eq_dome", dyn_dome_Rdev = "dyn_dome", dyn_dome_Rrw = "dyn_dome",
                    dyn_Rdev_RE = "dyn_dome_Rdev", dyn_FR_RE = "dyn_dome_Rdev")
 mk_start <- function(prev) function(spec) {
-  lf <- prev$logF; nF_new <- nrow(obs) + if (spec$pop == 1) 10 else 0
+  lf <- prev$logF; nF_new <- nrow(obs) + if (spec$pop == 1) (spec$cfg$n_pre %||% 10) else 0
+  if (length(lf) > nF_new) lf <- tail(lf, nF_new)
   if (length(lf) < nF_new) lf <- c(rep(lf[1], nF_new - length(lf)), lf)
   list(logF = lf, theta = prev$theta, logR = if (length(prev$logR) == nF_new) prev$logR else rep(0, nF_new),
        log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR))
 }
+if (mode == "speed") { source(file.path(here, "speed_grid.R")); close(log_con); quit(status = 0) }
+
 res <- list(); tim <- list(); done_all <- list()
 run_pass <- function(models, seeds = 1:4) {
   for (scen in c("noRdev", "Rdev")) for (seed in seeds) {
