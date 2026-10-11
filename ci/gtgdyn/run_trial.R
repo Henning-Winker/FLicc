@@ -69,7 +69,7 @@ cfg0 <- make_cfg()
 make_obj <- function(obs, pop, cfg = cfg0, n_pre = cfg$n_pre, db = cfg$db, sel_type = 1, rmode = 0, sigF = 0.3, sigR = 0.5,
                      est_sigF = FALSE, est_sigR = FALSE, re = character(0),
                      prior_sigF = c(log(0.3), 0.5, 0), prior_sigR = c(log(0.5), 0.5, 0),
-                     par = NULL, map_all = FALSE) {
+                     par = NULL, map_all = FALSE, cobs = NULL, catch_cv = 0.05) {
   ny <- nrow(obs); npre <- if (pop == 1) n_pre else 0; nF <- ny + npre
   mode <- bio$lmid[which.max(colSums(obs))]
   storage.mode(obs) <- "double"
@@ -77,12 +77,15 @@ make_obj <- function(obs, pop, cfg = cfg0, n_pre = cfg$n_pre, db = cfg$db, sel_t
                  tq = cfg$tq, lmid = bio$lmid, mw = bio$mw, wg = cfg$gtg$w, M = M,
                  sel_type = as.integer(sel_type), rmode = as.integer(rmode),
                  prior_sigF = prior_sigF, prior_sigR = prior_sigR,
+                 cobs = if (is.null(cobs)) rep(-1, nF) else cobs, wt = 3.24e-05 * bio$lmid^2.932, catch_cv = catch_cv,
                  db = db, b0 = cfg$b0, nbg = as.integer(ceiling((nF + 1 - cfg$b0) / max(db, 0.01)) + 2)), cfg$grid)
   if (is.null(par))
     par <- list(logF = rep(log(0.1), nF),
                 theta = if (sel_type == 1) c(mode, log(5), log(20)) else c(mode, log(5)),
                 logR = rep(0, nF), log_sigF = log(sigF), log_sigR = log(sigR))
+  if (is.null(par$logR0)) par$logR0 <- 0
   map <- list()
+  if (is.null(cobs) || pop == 0) map$logR0 <- factor(NA)
   if (!est_sigF) map$log_sigF <- factor(NA)
   if (!est_sigR || rmode == 0) map$log_sigR <- factor(NA)
   if (rmode == 0) map$logR <- factor(rep(NA, nF))
@@ -127,6 +130,11 @@ fit1 <- function(obs, spec, start = NULL, limit = 900) {
   setTimeLimit(elapsed = limit, transient = TRUE); on.exit(setTimeLimit(elapsed = Inf))
   if (!is.null(start)) spec$par <- start(spec)
   o <- do.call(make_obj, c(list(obs = obs), spec))
+  if (!is.null(spec$cobs)) {                     # start R0 so that predicted catch matches on average
+    cp <- o$report()$catch_pred; ok <- spec$cobs > 0 & cp > 0
+    spec$par <- o$env$parList(); spec$par$logR0 <- log(mean(spec$cobs[ok]) / mean(cp[ok]))
+    o <- do.call(make_obj, c(list(obs = obs), spec))
+  }
   b <- lohi(o)
   opt <- try(nlminb(o$par, o$fn, o$gr, lower = b$lo, upper = b$hi,
                     control = list(eval.max = 2000, iter.max = 1000)), silent = TRUE)
@@ -139,7 +147,7 @@ fit1 <- function(obs, spec, start = NULL, limit = 900) {
   if (length(spec$re)) o$fn(opt$par)
   rep <- o$report(o$env$last.par.best)
   pl <- o$env$parList(par = o$env$last.par.best)
-  list(pl = pl, iter = opt$iterations, theta = pl$theta, conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
+  list(pl = pl, iter = opt$iterations, theta = pl$theta, R0 = exp(pl$logR0), conv = opt$convergence == 0, nll = opt$objective, secs = secs, spr = rep$spr,
        ssb_rel = rep$ssb_rel, sel = rep$sel, F = rep$F, msg = opt$message,
        sig = exp(o$env$last.par.best[c("log_sigF", "log_sigR")]))
 }
@@ -161,9 +169,11 @@ mk_start <- function(prev) function(spec) {
   if (length(lf) > nF_new) lf <- tail(lf, nF_new)
   if (length(lf) < nF_new) lf <- c(rep(lf[1], nF_new - length(lf)), lf)
   list(logF = lf, theta = prev$theta, logR = if (length(prev$logR) == nF_new) prev$logR else rep(0, nF_new),
-       log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR))
+       log_sigF = log(if (is.null(spec$sigF)) 0.3 else spec$sigF), log_sigR = log(if (is.null(spec$sigR)) 0.5 else spec$sigR),
+       logR0 = prev$logR0 %||% 0)
 }
 if (mode == "speed") { source(file.path(here, "speed_grid.R")); close(log_con); quit(status = 0) }
+if (mode == "catch") { source(file.path(here, "catch_trial.R")); close(log_con); quit(status = 0) }
 
 res <- list(); tim <- list(); done_all <- list()
 run_pass <- function(models, seeds = 1:4) {

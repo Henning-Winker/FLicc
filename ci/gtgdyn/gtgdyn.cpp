@@ -62,12 +62,16 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(rmode);            // 0 constant R, 1 iid, 2 random walk
   DATA_VECTOR(prior_sigF);        // mu (log), sd, on
   DATA_VECTOR(prior_sigR);
+  DATA_VECTOR(cobs);              // catch weight by model year (<= 0: missing); dyn only
+  DATA_VECTOR(wt);                // weight at bin mid
+  DATA_SCALAR(catch_cv);          // lognormal sd of catch
 
   PARAMETER_VECTOR(logF);         // nF
   PARAMETER_VECTOR(theta);        // selectivity
   PARAMETER_VECTOR(logR);         // nF (mapped off if rmode 0)
   PARAMETER(log_sigF);
   PARAMETER(log_sigR);
+  PARAMETER(logR0);               // mean recruitment scale (catch only)
 
   int nF = logF.size(), ny = obs.rows(), nb = obs.cols(), ng = wg.size();
   int nn = node_g.size(), nq = tq.size();
@@ -172,24 +176,38 @@ Type objective_function<Type>::operator() ()
     return N;
   };
 
-  // predicted catch proportions
+  // predicted catch at length (per unit recruitment) for data years and catch years
+  vector<int> drow(nF); drow.fill(-1);
+  for (int y = 0; y < ny; y++) drow(kd(y)) = y;
+  bool use_catch = (pop == 1) && (cobs.maxCoeff() > 0);
   matrix<Type> pred(ny, nb);
-  for (int y = 0; y < ny; y++) {
+  vector<Type> catch_pred(nF); catch_pred.setZero();
+  for (int k = 0; k < nF; k++) {
+    bool has_c = use_catch && (cobs(k) > 0);
+    if (drow(k) < 0 && !has_c) continue;
     vector<Type> N(nb);
     if (pop == 0) {
-      N = eqN(F(kd(y)));
+      N = eqN(F(k));
     } else {
       N.setZero();
-      for (int q = 0; q < nq; q++) N += dynN(kd(y) + asDouble(tq(q)));
+      for (int q = 0; q < nq; q++) N += dynN(k + asDouble(tq(q)));
       N /= Type(nq);
     }
-    vector<Type> C = N * sel * F(kd(y));
-    Type tot = C.sum();
-    for (int j = 0; j < nb; j++) {
-      pred(y, j) = C(j) / tot;
-      nll -= obs(y, j) * log(pred(y, j) + Type(1e-12));
+    vector<Type> C = N * sel * F(k);
+    if (drow(k) >= 0) {
+      int y = drow(k);
+      Type tot = C.sum();
+      for (int j = 0; j < nb; j++) {
+        pred(y, j) = C(j) / tot;
+        nll -= obs(y, j) * log(pred(y, j) + Type(1e-12));
+      }
+    }
+    if (has_c) {
+      catch_pred(k) = exp(logR0) * (C * wt).sum();
+      nll -= dnorm(log(cobs(k)), log(catch_pred(k)), catch_cv, true);
     }
   }
+  REPORT(catch_pred);
 
   // random walk on log F
   Type sigF = exp(log_sigF);
