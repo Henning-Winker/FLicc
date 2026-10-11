@@ -1,0 +1,54 @@
+framework TMBad, compiled in 82 s 
+GTG 19, bins 34, quadrature nodes 2208 
+dims: A 19x35, dT 19x34, reach 19x34, lb 35, node_j range 0-33 
+grid vs exact (TMB): 1.3e-04 
+REFERENCE TEST: max |TMB - Python|  dyn exact 2.66e-12   dyn grid 3.06e-12   eq 2.54e-12   -> PASS 
+mode: catch 
+noRdev seed 1 eq         conv TRUE    0.3 s  R0 1.00  sigR NA  F final est/true 0.251 / 0.188 
+noRdev seed 1 no_catch   conv TRUE    4.7 s  R0 1.00  sigR NA  F final est/true 0.258 / 0.188 
+noRdev seed 1 c_exact    conv TRUE   19.1 s  R0 0.69  sigR NA  F final est/true 0.232 / 0.188 
+noRdev seed 1 c_cv10     conv TRUE    7.2 s  R0 0.68  sigR NA  F final est/true 0.235 / 0.188 
+noRdev seed 1 c_under    conv TRUE    7.9 s  R0 0.54  sigR NA  F final est/true 0.235 / 0.188 
+noRdev seed 1 c_cv10_RE  conv TRUE  174.8 s  R0 0.71  sigR 0.07  F final est/true 0.209 / 0.188 
+noRdev seed 2 eq         conv TRUE    0.6 s  R0 1.00  sigR NA  F final est/true 0.241 / 0.168 
+noRdev seed 2 no_catch   conv TRUE    2.9 s  R0 1.00  sigR NA  F final est/true 0.289 / 0.168 
+noRdev seed 2 c_exact    conv TRUE   15.6 s  R0 0.64  sigR NA  F final est/true 0.251 / 0.168 
+noRdev seed 2 c_cv10     conv TRUE   11.8 s  R0 0.65  sigR NA  F final est/true 0.245 / 0.168 
+noRdev seed 2 c_under    conv TRUE   10.6 s  R0 0.52  sigR NA  F final est/true 0.245 / 0.168 
+noRdev seed 2 c_cv10_RE  conv FALSE 562.8 s  R0 0.72  sigR 0.11  F final est/true 0.183 / 0.168 
+noRdev seed 3 eq         conv TRUE    5.4 s  R0 1.00  sigR NA  F final est/true 0.173 / 0.157 
+noRdev seed 3 no_catch   conv TRUE    4.8 s  R0 1.00  sigR NA  F final est/true 0.142 / 0.157 
+noRdev seed 3 c_exact    conv TRUE   21.3 s  R0 0.72  sigR NA  F final est/true 0.154 / 0.157 
+noRdev seed 3 c_cv10     conv FALSE  67.5 s  R0 0.70  sigR NA  F final est/true 0.181 / 0.157 
+noRdev seed 3 c_under    conv TRUE   27.5 s  R0 0.58  sigR NA  F final est/true 0.172 / 0.157 
+noRdev seed 3 c_cv10_RE  conv TRUE  161.3 s  R0 0.74  sigR 0.01  F final est/true 0.180 / 0.157 
+noRdev seed 4 eq         conv TRUE    0.8 s  R0 1.00  sigR NA  F final est/true 0.207 / 0.147 
+noRdev seed 4 no_catch   conv TRUE    1.9 s  R0 1.00  sigR NA  F final est/true 0.137 / 0.147 
+noRdev seed 4 c_exact    conv TRUE   12.9 s  R0 0.75  sigR NA  F final est/true 0.130 / 0.147 
+noRdev seed 4 c_cv10     conv TRUE   15.8 s  R0 0.71  sigR NA  F final est/true 0.156 / 0.147 
+noRdev seed 4 c_under    conv TRUE   21.1 s  R0 0.57  sigR NA  F final est/true 0.156 / 0.147 
+noRdev seed 4 c_cv10_RE  conv TRUE  135.4 s  R0 0.71  sigR 0.11  F final est/true 0.172 / 0.147 
+Rdev   seed 1 eq         conv TRUE    1.2 s  R0 1.00  sigR NA  F final est/true 0.223 / 0.188 
+Rdev   seed 1 no_catch   conv TRUE   11.2 s  R0 1.00  sigR NA  F final est/true 0.313 / 0.188 
+Rdev   seed 1 c_exact    conv TRUE    7.6 s  R0 0.60  sigR NA  F final est/true 0.189 / 0.188 
+Rdev   seed 1 c_cv10     conv TRUE    9.1 s  R0 0.57  sigR NA  F final est/true 0.195 / 0.188 
+Rdev   seed 1 c_under    conv TRUE    7.2 s  R0 0.46  sigR NA  F final est/true 0.195 / 0.188 
+Rdev   seed 1 c_cv10_RE  conv TRUE   96.5 s  R0 0.55  sigR 0.52  F final est/true 0.195 / 0.188 
+Rdev   seed 2 eq         conv TRUE    3.1 s  R0 1.00  sigR NA  F final est/true 0.170 / 0.168 
+Rdev   seed 2 no_catch   conv TRUE    2.7 s  R0 1.00  sigR NA  F final est/true 0.216 / 0.168 
+Rdev   seed 2 c_exact    conv TRUE   10.5 s  R0 0.77  sigR NA  F final est/true 0.141 / 0.168 
+Rdev   seed 2 c_cv10     conv TRUE    6.0 s  R0 0.75  sigR NA  F final est/true 0.135 / 0.168 
+Rdev   seed 2 c_under    conv TRUE    6.0 s  R0 0.60  sigR NA  F final est/true 0.135 / 0.168 
+Rdev   seed 2 c_cv10_RE  conv TRUE   72.4 s  R0 0.73  sigR 0.54  F final est/true 0.133 / 0.168 
+Rdev   seed 3 eq         conv TRUE    0.8 s  R0 1.00  sigR NA  F final est/true 0.205 / 0.157 
+Rdev   seed 3 no_catch   conv TRUE    2.6 s  R0 1.00  sigR NA  F final est/true 0.165 / 0.157 
+Rdev   seed 3 c_exact    conv TRUE   11.9 s  R0 0.80  sigR NA  F final est/true 0.126 / 0.157 
+Rdev   seed 3 c_cv10     conv TRUE    5.7 s  R0 0.82  sigR NA  F final est/true 0.156 / 0.157 
+Rdev   seed 3 c_under    conv TRUE    6.9 s  R0 0.65  sigR NA  F final est/true 0.156 / 0.157 
+Rdev   seed 3 c_cv10_RE  conv TRUE   57.8 s  R0 0.80  sigR 0.34  F final est/true 0.154 / 0.157 
+Rdev   seed 4 eq         conv TRUE    0.4 s  R0 1.00  sigR NA  F final est/true 0.184 / 0.147 
+Rdev   seed 4 no_catch   conv TRUE    3.2 s  R0 1.00  sigR NA  F final est/true 0.213 / 0.147 
+Rdev   seed 4 c_exact    conv TRUE   21.6 s  R0 0.52  sigR NA  F final est/true 0.167 / 0.147 
+Rdev   seed 4 c_cv10     conv TRUE   43.0 s  R0 0.52  sigR NA  F final est/true 0.175 / 0.147 
+Rdev   seed 4 c_under    conv TRUE   48.1 s  R0 0.41  sigR NA  F final est/true 0.175 / 0.147 
+Rdev   seed 4 c_cv10_RE  conv TRUE   81.0 s  R0 0.51  sigR 0.44  F final est/true 0.171 / 0.147 
