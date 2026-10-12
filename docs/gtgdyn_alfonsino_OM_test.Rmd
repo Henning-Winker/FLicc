@@ -1,0 +1,263 @@
+---
+title: "gtg.dyn on the alfonsino operating model"
+author: "Henning Winker"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: true
+    math_method: mathml
+params:
+  rdata: "../rdata/mseinp_len.rdata"
+  helpers: "FLRef_gear_helpers.R"
+  iters: !r 1:10
+  re_iters: !r 1:3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+```
+
+# Purpose
+
+Basic tests of the dynamic length-based model, `pop_model = "gtg.dyn"`, on
+the splendid alfonsino operating model (OM) built in
+`MSE_OM_Alfonsino_tune_v2.Rmd`. For each OM iteration, the simulated
+two-gear length compositions (`r 13` years) are fitted with
+
+| label | model | recruitment | role |
+|:--|:--|:--|:--|
+| `gtg` | equilibrium GTG (current FLicc) | – | reference |
+| `dyn_fixR` | gtg.dyn | deviations, penalised, \(\sigma_R\) fixed at the OM value | fast (MSE) route |
+| `dyn_reR` | gtg.dyn | deviations as random effects, \(\sigma_R\) estimated | default (slower) |
+
+and compared with the OM truth.
+
+**Status measure.** FLicc reports SPR at the year's F (equilibrium
+spawning biomass per recruit at that F, relative to unfished). The
+like-for-like OM truth is the same quantity computed from the OM's
+F-at-age, M, maturity and weight-at-age. gtg.dyn keeps this status
+measure; what changes is how the length compositions are explained (by the
+history of F and recruitment rather than by an equilibrium at each year's
+F).
+
+**Requirements.** FLicc from the `dev-gtgdyn` branch:
+`remotes::install_github("henning-winker/FLicc", ref = "dev-gtgdyn")`
+(compiles the TMB template), and the OM inputs saved at the end of the OM
+notebook (`params$rdata`). `FLRef_gear_helpers.R` is used to compute the
+realised catch shares by gear, as in the OM notebook.
+
+```{r packages}
+library(FLCore)
+library(FLicc)
+library(ggplot2)
+packageVersion("FLicc")
+if (!exists("dyn_inputs_flicc", envir = asNamespace("FLicc")))
+  stop("gtg.dyn is not in this FLicc build: install the dev-gtgdyn branch")
+```
+
+# OM inputs
+
+```{r load-om}
+load(params$rdata)
+its <- intersect(params$iters, seq_len(dims(om_hist)$iter))
+lfd_years
+sel_fun
+flicc_settings
+```
+
+Catch shares by gear over the LFD window (realised, as in the OM notebook),
+or the nominal `f_mult` if the helpers are not available.
+
+```{r catch-shares}
+if (file.exists(params$helpers)) {
+  suppressWarnings(source(params$helpers))
+  catch_n <- catch_n_gear(om_hist, om_gears, years = dimnames(lfd_all[[1]])$year)
+  cbg <- catch_by_gear(catch_n, om_hist, years = lfd_years)
+} else {
+  fm <- vapply(om_gears, `[[`, numeric(1), "f_mult")
+  cbg <- matrix(fm / sum(fm), nrow = dims(om_hist)$iter, ncol = length(fm), byrow = TRUE,
+                dimnames = list(NULL, names(fm)))
+}
+round(cbg[its[1], ], 3)
+```
+
+# OM truth: SPR at the year's F
+
+\[
+\mathrm{SPR}_y=\frac{\sum_a \ell_a(F_y)\,m_a w_a}{\sum_a \ell_a(0)\,m_a w_a},
+\qquad \ell_{a+1}=\ell_a e^{-(M_a+F_{a,y})},
+\]
+
+with a plus group at the oldest age.
+
+```{r truth}
+spr_om <- function(om, years) {
+  na <- dims(om)$age
+  pr <- function(Fa, Ma, MWa) {
+    z <- Fa + Ma
+    n <- exp(-c(0, cumsum(z[-na])))
+    n[na] <- n[na] / (1 - exp(-z[na]))
+    sum(n * MWa)
+  }
+  out <- expand.grid(year = as.numeric(years), iter = seq_len(dims(om)$iter))
+  out$spr <- mapply(function(y, i) {
+    y <- as.character(y)
+    Fa <- c(iter(harvest(om)[, y], i)); Ma <- c(iter(m(om)[, y], i))
+    MWa <- c(iter(mat(om)[, y] * stock.wt(om)[, y], i))
+    pr(Fa, Ma, MWa) / pr(0 * Fa, Ma, MWa)
+  }, out$year, out$iter)
+  out
+}
+truth <- spr_om(om_hist, lfd_years)
+truth <- truth[truth$iter %in% its, ]
+```
+
+# Fits
+
+```{r settings}
+sig_R <- if (exists("sigR")) sigR else 0.5
+base <- flicc_settings
+models <- list(
+  gtg      = base,
+  dyn_fixR = modifyList(base, list(pop_model = "gtg.dyn", sigmaR = sig_R, R_re = FALSE)),
+  dyn_reR  = modifyList(base, list(pop_model = "gtg.dyn"))
+)
+str(models$dyn_fixR)
+```
+
+```{r fit, results = "hide"}
+fit_one <- function(i, set) {
+  lfd_i <- FLQuants(lapply(lfd_all, iter, i))
+  stk_i <- stocklen(lfd_i, stklen_pars)
+  t0 <- Sys.time()
+  f <- tryCatch(fiticc(lfd_i, stk_i, sel_fun = sel_fun, catch_by_gear = cbg[i, ],
+                       settings = set, se = FALSE),
+                error = function(e) { message("iter ", i, ": ", conditionMessage(e)); NULL })
+  list(fit = f, secs = as.numeric(difftime(Sys.time(), t0, units = "secs")))
+}
+fits <- list()
+for (nm in names(models)) {
+  run_its <- if (nm == "dyn_reR") intersect(its, params$re_iters) else its
+  fits[[nm]] <- setNames(lapply(run_its, fit_one, set = models[[nm]]), run_its)
+}
+```
+
+```{r collect}
+est <- do.call(rbind, lapply(names(fits), function(nm) do.call(rbind, lapply(names(fits[[nm]]), function(i) {
+  f <- fits[[nm]][[i]]$fit
+  if (is.null(f)) return(NULL)
+  data.frame(model = nm, iter = as.integer(i), year = as.numeric(lfd_years),
+             spr = c(f$report$spr), conv = f$opt$convergence, secs = fits[[nm]][[i]]$secs)
+}))))
+d <- merge(est, truth, by = c("iter", "year"), suffixes = c("", "_true"))
+d$rel_err <- (d$spr - d$spr_true) / d$spr_true
+```
+
+## Run time and convergence
+
+```{r timing}
+tt <- unique(d[, c("model", "iter", "secs", "conv")])
+knitr::kable(do.call(rbind, lapply(split(tt, tt$model), function(x)
+  data.frame(model = x$model[1], fits = nrow(x), converged = sum(x$conv == 0),
+             median_s = round(median(x$secs), 1), max_s = round(max(x$secs), 1))))[names(models), ],
+  row.names = FALSE)
+```
+
+# Results
+
+## One iteration
+
+```{r plot-iter1, fig.height=4.5, fig.width=8, fig.cap="SPR at the year's F for the first iteration: OM truth and estimates."}
+i1 <- its[1]
+p1 <- rbind(transform(truth[truth$iter == i1, c("year", "spr")], model = "OM truth"),
+            d[d$iter == i1, c("year", "spr", "model")])
+ggplot(p1, aes(year, spr, colour = model, linewidth = model == "OM truth")) +
+  geom_line() + scale_linewidth_manual(values = c(`TRUE` = 1.4, `FALSE` = 0.8), guide = "none") +
+  labs(x = "Year", y = "SPR", colour = NULL) + theme_bw() + theme(legend.position = "bottom")
+```
+
+```{r plot-rec, fig.height=4, fig.width=8, fig.cap="Recruitment, first iteration: OM recruitment relative to its mean over the plotted years, and the gtg.dyn recruitment multipliers (pre-data years included)."}
+f1 <- fits$dyn_fixR[[as.character(i1)]]$fit
+if (!is.null(f1)) {
+  rd <- as.data.frame(f1$report$rec_dev)[, c("year", "data")]
+  yrs_r <- as.character(rd$year)
+  rom <- c(iter(rec(om_hist)[, yrs_r], i1)); rom <- rom / mean(rom)
+  pr <- rbind(data.frame(year = rd$year, value = rd$data, series = "gtg.dyn (fixed sigmaR)"),
+              data.frame(year = rd$year, value = rom, series = "OM (relative to mean)"))
+  ggplot(pr, aes(year, value, colour = series)) + geom_line() + geom_point(size = 1) +
+    geom_vline(xintercept = min(as.numeric(lfd_years)) - 0.5, linetype = 3) +
+    labs(x = "Year (recruitment year)", y = "Relative recruitment", colour = NULL) +
+    theme_bw() + theme(legend.position = "bottom")
+}
+```
+
+Note that gtg.dyn's recruitment is the rate at which fish enter the first
+length bin, so its timing is the year fish reach the smallest length class,
+not the OM's age-0 recruitment year.
+
+```{r plot-lfd-fit, fig.height=4.5, fig.width=9, fig.cap="Observed and predicted length composition in the last data year, first iteration, by gear."}
+lfd_1 <- FLQuants(lapply(lfd_all, iter, i1))
+ny <- length(lfd_years)
+pl <- do.call(rbind, lapply(c("gtg", "dyn_fixR"), function(nm) {
+  f <- fits[[nm]][[as.character(i1)]]$fit
+  if (is.null(f)) return(NULL)
+  r <- f$obj$report(f$obj$env$last.par.best)
+  do.call(rbind, lapply(seq_along(lfd_1), function(g) {
+    o <- c(lfd_1[[g]][, ac(tail(lfd_years, 1))])
+    data.frame(gear = names(lfd_1)[g], len = as.numeric(dimnames(lfd_1[[g]])$len),
+               obs = o / sum(o), pred = r$plen[, ny, g], model = nm)
+  }))
+}))
+ggplot(pl, aes(len)) + geom_col(aes(y = obs), data = pl[pl$model == "gtg", ], fill = "grey80") +
+  geom_line(aes(y = pred, colour = model), linewidth = 0.8) + facet_wrap(~gear, scales = "free_y") +
+  labs(x = "Length (cm)", y = "Proportion", colour = NULL) + theme_bw() + theme(legend.position = "bottom")
+```
+
+## All iterations
+
+```{r plot-relerr, fig.height=4.5, fig.width=8, fig.cap="Relative error in SPR by year, (estimate - truth) / truth: median over iterations (line) and 25-75% range (ribbon)."}
+q <- do.call(rbind, lapply(split(d, list(d$model, d$year), drop = TRUE), function(x)
+  data.frame(model = x$model[1], year = x$year[1], med = median(x$rel_err),
+             lo = quantile(x$rel_err, 0.25), hi = quantile(x$rel_err, 0.75))))
+ggplot(q, aes(year, med, colour = model, fill = model)) +
+  geom_hline(yintercept = 0, colour = "grey40") +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.15, colour = NA) + geom_line(linewidth = 0.9) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(x = "Year", y = "Relative error in SPR", colour = NULL, fill = NULL) +
+  theme_bw() + theme(legend.position = "bottom")
+```
+
+```{r table-relerr}
+yr <- as.numeric(lfd_years)
+periods <- list(all = range(yr), first_half = c(min(yr), yr[floor(length(yr) / 2)]),
+                last_3 = c(max(yr) - 2, max(yr)))
+tab <- do.call(rbind, lapply(split(d, d$model), function(x) {
+  data.frame(model = x$model[1], iterations = length(unique(x$iter)),
+             t(sapply(periods, function(p) {
+               e <- x$rel_err[x$year >= p[1] & x$year <= p[2]]
+               sprintf("%+.0f%% (%.0f%%)", 100 * median(e), 100 * sqrt(mean(e^2)))
+             })))
+}))
+knitr::kable(tab[intersect(names(models), tab$model), ], row.names = FALSE,
+             caption = "Relative error in SPR: median (RMSE) over iterations and years.")
+```
+
+```{r table-sigmaR}
+sR <- sapply(fits$dyn_reR, function(x) if (is.null(x$fit)) NA else x$fit$report$sigmaR)
+if (length(sR)) knitr::kable(data.frame(iter = names(sR), sigmaR = round(sR, 3)),
+                             caption = paste0("Estimated sigmaR (random effects); OM sigmaR = ", sig_R, "."))
+```
+
+# Notes
+
+- `dyn_fixR` is the route for an MSE: penalised recruitment deviations
+  with \(\sigma_R\) fixed (estimated once with `dyn_reR` or taken from the
+  OM), `se = FALSE`, and warm starts across years (to come in `flicc.sa()`).
+- gtg.dyn requires fixed growth (`linf.sd`, `CVL.sd` must be `NULL`).
+- Numerical settings (`dyn_nq`, `dyn_db`, `dyn_h`) are at the fast
+  defaults; in the trial they changed SPR by ≤ 0.003 relative to the
+  accurate settings.
+- The OM's length-at-age has a fixed CV (no persistent growth groups),
+  whereas gtg.dyn, like gtg, assumes persistent growth-type groups.
