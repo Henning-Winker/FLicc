@@ -59,6 +59,7 @@ om_structure <- function(persist = FALSE, continuous = FALSE, lh = om_lh) {
   })
   Fsel <- sweep(s_cell, 2, f_mult / scale_g, "*")   # F_cell,gear = Fbar * Fsel[, gear]
   list(cells = cells, lb = lb, P = P, cond = cond, Fsel = Fsel, ages = ages, lh = lh,
+       Fap = f_mult / scale_g,                    # gear apical F = Fbar * Fap (length selectivity max 1)
        gears = names(sel_len), nsub = nsub, ng = length(linf_g))
 }
 

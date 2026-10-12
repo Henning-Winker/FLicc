@@ -52,7 +52,9 @@ jobs:
               git add -A && git commit -qm "gtgdyn OM trial @ ${GITHUB_SHA::7} ($1)" &&
               git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-om )
           }
-          ( Rscript ci/gtgdyn_om/run_om_trial.R ci/gtgdyn_om out 8 > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
+          mode=$(cat ci/gtgdyn_om/mode.txt 2>/dev/null || echo trial)
+          if [ "$mode" = "check" ]; then script=check_truth.R; else script=run_om_trial.R; fi
+          ( Rscript ci/gtgdyn_om/$script ci/gtgdyn_om out 8 > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
           pid=$!
           while kill -0 $pid 2>/dev/null; do sleep 180; publish running; done
           publish finished
