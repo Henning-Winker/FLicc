@@ -83,7 +83,11 @@ om_fmsy <- function(st) {
   ypr <- function(F) { N <- om_eq(st, F); Fc <- F * rowSums(st$Fsel); Z <- st$lh$M + Fc
     sum(N * Fc / Z * (1 - exp(-Z)) * st$cells$wt) }
   req <- function(F) { sb <- om_sbpr(st, F); max((4 * h * sb - sb0 * (1 - h)) / ((5 * h - 1) * sb), 0) }
-  optimize(function(F) -ypr(F) * req(F), c(0.01, 2))$minimum
+  # grid first: the objective is flat (0) beyond the crash F, which can trap
+  # a bounded line search
+  obj <- function(F) ypr(F) * req(F)
+  fg <- seq(0.005, 1, by = 0.005); i <- which.max(sapply(fg, obj))
+  optimize(function(F) -obj(F), c(fg[max(i - 1, 1)], fg[min(i + 1, length(fg))]))$minimum
 }
 
 om_fhist <- function(ny, Fmsy, shape = "fudc", fhi = 3, flo = 1.5, f0 = 0.2,
