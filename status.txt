@@ -1,0 +1,7 @@
+build=0
+test:test_dev.R=0
+test:test_frw.R=0
+test:test_gtgdyn.R=0
+compare_main=0
+render:docs/FLicc_dev_tests.Rmd=0
+render:docs/gtgdyn_alfonsino_OM_test.Rmd=0

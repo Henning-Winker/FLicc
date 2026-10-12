@@ -1,0 +1,360 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 18:50:28 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> here <- tryCatch(dirname(sys.frame(1)$ofile), error = function(e) "ci/tests")
+
+> ddir <- normalizePath(file.path(here, "..", "gtgdyn", 
++     "data"))
+
+> rep_at <- function(td, pl) {
++     td <- td[setdiff(names(td), c("gear_names", "year_names", 
++         "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))]
++     map <- lapply(pl, function(x) factor(rep(NA, length(x))))
++     map$log_phi <- NULL
++     obj <- TMB::MakeADFun(td, pl, map = map, DLL  .... [TRUNCATED] 
+
+> add_rw <- function(td) {
++     td$prior_sigmaF_mean <- log(0.3)
++     td$prior_sigmaF_sd <- 0
++     td$prior_sigmaF_use <- 1
++     td$FM_min <- 0.05
++     td$FM_max <- 4
++     td$FMpen_sd <- 0
++     td
++ }
+
+> obs <- as.matrix(read.csv(file.path(ddir, "obs_Rdev_1.csv"), 
++     header = FALSE))
+
+> rp <- read.csv(file.path(ddir, "ref_par.csv"))
+
+> th <- read.csv(file.path(ddir, "ref_sel.csv"))$theta
+
+> ref <- as.matrix(read.csv(file.path(ddir, "ref_pred_dyng.csv"), 
++     header = FALSE))
+
+> lens <- seq(0, 66, by = 2)
+
+> yrs <- 2005:2024
+
+> lfd1 <- FLQuants(G1 = FLQuant(t(obs), dimnames = list(len = lens, 
++     year = yrs)))
+
+> k <- 0.08
+
+> linf <- 55.662
+
+> lhp <- FLPar(linf = linf, k = k, M = 0.162, L50 = linf * 
++     (1 - exp(-k * 6)), a = 3.24e-05, b = 2.932)
+
+> stk1 <- stocklen(lfd1, lhp, m_model = "constant")
+
+> set_ref <- list(CVL = 0.1, pop_model = "gtg.dyn", 
++     obs_model = "mn", ngtg = 19, maxsd = 3, dyn_npre = 10, dyn_nq = 2, 
++     dyn_db = 0.25, dyn_h = 2, dyn_Tcap = 40, dyn_rec = "iid", 
++     GL = 30)
+
+> cbg1 <- FLQuants(G1 = quantSums(lfd1[[1]]) * 0 + 1)
+
+> td <- add_rw(FLicc:::data_tmb_flicc(lfd1, stk1, sel_fun = "dsnormal", 
++     catch_by_gear = cbg1, settings = set_ref))
+
+> pl <- FLicc:::init_tmb_flicc(td)
+
+> pl$Sm <- c(log(th[1]/linf), th[2] - log(linf), th[3] - 
++     log(linf))
+
+> pl$log_Fk[] <- rp$logF[11:30] - log(k)
+
+> pl$log_Fpre[] <- rp$logF[1:10] - log(k)
+
+> pl$log_Rdev <- rp$logR
+
+> r1 <- rep_at(td, pl)
+
+> d_ref <- max(abs(t(r1$plen[, , 1]) - ref))
+
+> cat(sprintf("REFERENCE: max |FLicc gtg.dyn - prototype| = %.2e\n", 
++     d_ref))
+REFERENCE: max |FLicc gtg.dyn - prototype| = 3.06e-12
+
+> stopifnot(d_ref < 1e-08)
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> cbg <- c(0.7, 0.3)
+
+> fitf <- function(...) fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cbg, settings = c(list(CVL = 0.1, 
++     obs_model = "dm"), list(...)))
+
+> t_gtg <- system.time(fg <- fitf(pop_model = "gtg"))[["elapsed"]]
+
+> cbgq <- FLQuants(Map(function(x, y) {
++     q <- quantSums(x)
++     q[] <- y
++     q
++ }, lfd, cbg))
+
+> for (h in c(1, 4)) {
++     tdd <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, c("dsnormal", 
++         "logistic"), cbgq, settings = list(CVL = 0.1, GL = 30, 
++         pop_model = "gtg.dyn", dyn_h = h)))
++     tdg <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, c("dsnormal", 
++         "logistic"),  .... [TRUNCATED] 
+CONSTANT F (dyn_h = 1): max |gtg.dyn - gtg| in predicted proportions = 6.1e-09 (peak 0.112); SPR identical: TRUE
+CONSTANT F (dyn_h = 4): max |gtg.dyn - gtg| in predicted proportions = 4.7e-08 (peak 0.112); SPR identical: TRUE
+
+> summ <- function(f, secs) c(secs = round(secs, 1), 
++     nll = round(f$opt$objective, 2), conv = f$opt$convergence, 
++     maxgrad = signif(f$opt$max_gradient, 2), sigmaR = if (!is.null(f$report$sigmaR)) round(f$report$sigmaR, 
++         3) else NA, SPR_last = round(tail(c(f$report$spr), 1), 
++   .... [TRUNCATED] 
+
+> runs <- list(gtg = list(pop_model = "gtg"), dyn_default = list(pop_model = "gtg.dyn"), 
++     dyn_sigR_fixed = list(pop_model = "gtg.dyn", sigmaR = 0.5, 
++         R_re = FALSE), dyn_constR = list(pop_model = "gtg.dyn", 
++         dyn_rec = "none"), dyn_Rrw = list(pop_model = "gtg.dyn", 
++         .... [TRUNCATED] 
+
+> fits <- list()
+
+> tab <- NULL
+
+> for (nm in names(runs)) {
++     t0 <- system.time(f <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++         "logistic"), catch_by_gear = cbg, settings = c(list(CVL = 0.1, 
++         obs_model = "dm"), runs[[nm]]), se = nm != "dyn_noSE"))[["elapsed"]]
++     fits[[nm]] <- f
++     tab <- rbind(tab, .... [TRUNCATED] 
+
+> print(as.data.frame(tab), row.names = FALSE)
+          model secs      nll conv maxgrad sigmaR SPR_last
+            gtg  0.3 35702.32    0  0.0088   <NA>    0.272
+    dyn_default 16.5  35659.5    0  0.0047  0.231    0.126
+ dyn_sigR_fixed  2.5 35642.22    0  0.0078    0.5    0.175
+     dyn_constR  1.9 35670.22    0    0.08    0.5    0.065
+        dyn_Rrw  2.4 35627.55    0  0.0074    0.2    0.121
+       dyn_noSE  1.6 35642.22    0  0.0078    0.5    0.175
+
+> stopifnot(all(as.numeric(tab[, "conv"]) == 0))
+
+> fd <- fits$dyn_default
+
+> cat("\nSPR by year:\n")
+
+SPR by year:
+
+> print(round(rbind(gtg = c(fits$gtg$report$spr), gtg.dyn = c(fd$report$spr), 
++     dyn_sigR_fixed = c(fits$dyn_sigR_fixed$report$spr), dyn_constR = c(fits$dyn_constR$report$spr)), 
++     3))
+                [,1]  [,2]  [,3]  [,4]  [,5]  [,6]  [,7]  [,8]  [,9] [,10]
+gtg            0.189 0.194 0.217 0.229 0.253 0.262 0.269 0.280 0.282 0.268
+gtg.dyn        0.323 0.318 0.301 0.279 0.255 0.232 0.204 0.174 0.150 0.139
+dyn_sigR_fixed 0.266 0.264 0.255 0.241 0.228 0.221 0.210 0.198 0.189 0.185
+dyn_constR     0.481 0.417 0.339 0.297 0.278 0.256 0.208 0.142 0.091 0.074
+               [,11] [,12]
+gtg            0.282 0.272
+gtg.dyn        0.130 0.126
+dyn_sigR_fixed 0.180 0.175
+dyn_constR     0.068 0.065
+
+> cat("\ngtg.dyn dynamic SSB / unfished (per mean recruit):\n")
+
+gtg.dyn dynamic SSB / unfished (per mean recruit):
+
+> print(round(c(fd$report$ssb_dyn), 3))
+ [1] 0.244 0.256 0.269 0.281 0.288 0.290 0.286 0.277 0.262 0.245 0.225 0.205
+
+> cat("\ngtg.dyn recruitment multipliers:\n")
+
+gtg.dyn recruitment multipliers:
+
+> print(round(c(fd$report$rec_dev), 2))
+ [1] 0.95 0.94 0.90 0.92 1.13 1.39 1.34 1.24 0.99 0.81 0.74 1.14 0.98 0.99 0.91
+[16] 0.91 0.78 1.06 0.99 1.08 1.14 0.97
+
+> cat("\nsigmaR:", fd$report$sigmaR, "\n")
+
+sigmaR: 0.2307452 
+
+> stopifnot(!is.null(fd$report$Ndyn), !is.null(fd$report$ssb_dyn), 
++     !is.null(fd$report$rec_dev), all(dim(fd$report$Ndyn)[1:2] == 
++         dim(fd$report$N)[1:2]))
+
+> st <- flicc2FLStockR(fd, spr.btgt = 0.4, rel = TRUE)
+
+> fs <- fspr_flicc(fd)
+
+> print(fs)
+[1] 0.07495084
+
+> lbi <- LBIspr(fd)
+
+> print(lbi)
+An object of class "FLIndices"
+[[1]]
+An object of class "FLIndexBiomass"
+
+Name:  
+Description:  
+Distribution :   
+Quant: age 
+Dims:  age 	year	unit	season	area	iter
+	1	12	1	1	1	1	
+
+Range:  min	max	pgroup	minyear	maxyear	startf	endf 
+	NA	NA	NA	2013	2024	0.4	0.6	
+
+
+[[2]]
+An object of class "FLIndexBiomass"
+
+Name:  
+Description:  
+Distribution :   
+Quant: age 
+Dims:  age 	year	unit	season	area	iter
+	1	12	1	1	1	1	
+
+Range:  min	max	pgroup	minyear	maxyear	startf	endf 
+	NA	NA	NA	2013	2024	0.4	0.6	
+
+
+Slot "names":
+[1] "Trawl"   "Gillnet"
+
+Slot "desc":
+character(0)
+
+Slot "lock":
+[1] FALSE
+
+
+> stopifnot(is.finite(c(fs)[1]))
+
+> yl <- as.numeric(dimnames(lfd[[1]])$year)
+
+> cy <- (min(yl) - 10):max(yl)
+
+> cq <- FLQuants(Trawl = FLQuant(700 * exp(0.05 * seq_along(cy)), 
++     dimnames = list(year = cy)), Gillnet = FLQuant(300 * exp(0.05 * 
++     seq_along(cy)), dimnames = list(year = cy)))
+
+> names(cq) <- names(lfd)
+
+> t0 <- system.time(fc <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cq, settings = list(CVL = 0.1, 
++     obs_model = "dm", pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, 
++     catch_cv = 0.1), se = FALSE))[["elapsed"]]
+
+> cat(sprintf("\ncatch fit: %.1f s, conv %d, R0 %.3g\n", 
++     t0, fc$opt$convergence, fc$report$R0))
+
+catch fit: 2.5 s, conv 0, R0 5.2e+04
+
+> print(round(rbind(obs = c(cq[[1]]), pred = c(fc$report$catch_pred[[1]])), 
++     1))
+      [,1]  [,2]  [,3] [,4]  [,5]  [,6]  [,7]   [,8]   [,9]  [,10]  [,11]
+obs  735.9 773.6 813.3  855 898.8 944.9 993.3 1044.3 1097.8 1154.1 1213.3
+pred 771.3 766.1 799.7  851 901.9 945.8 991.4 1045.8 1102.1 1159.9 1228.4
+      [,12]  [,13]  [,14]  [,15]  [,16]  [,17]  [,18]  [,19]  [,20]  [,21]
+obs  1275.5 1340.9 1409.6 1481.9 1557.9 1637.8 1721.7 1810.0 1902.8 2000.4
+pred 1297.0 1347.2 1420.3 1505.4 1569.2 1646.1 1729.1 1769.6 1838.1 1952.5
+      [,22]
+obs  2102.9
+pred 2058.3
+
+> stopifnot(fc$opt$convergence == 0, is.finite(fc$report$R0), 
++     length(c(fc$report$catch_pred[[1]])) == length(cy))
+
+> fa <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cq, settings = list(CVL = 0.1, 
++     obs_model = "dm", pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, 
++     catch_cv = 0.1, dyn_npre = "catch"), se = FALSE)
+
+> stopifnot(fa$tmb_data$dyn_npre == 10)
+
+> tdb <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, 
++     c("dsnormal", "logistic"), cbgq, settings = list(CVL = 0.1, 
++         GL = 30, pop_model = "gtg.dyn", dyn_rec = "bh", dyn_s = 1)))
+
+> tdi <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, 
++     c("dsnormal", "logistic"), cbgq, settings = list(CVL = 0.1, 
++         GL = 30, pop_model = "gtg.dyn", dyn_rec = "iid")))
+
+> pb <- FLicc:::init_tmb_flicc(tdb)
+
+> pb[c("Sm", "log_Mk", "log_phi")] <- p0[c("Sm", "log_Mk", 
++     "log_phi")]
+
+> pb$log_Fk[] <- p0$log_Fk
+
+> pb$log_Fpre[] <- rep(p0$log_Fk[1, ], each = nrow(pb$log_Fpre))
+
+> d_bh <- max(abs(rep_at(tdb, pb)$plen - rep_at(tdi, 
++     pb)$plen))
+
+> cat(sprintf("\nBH with s = 1 vs constant recruitment: max diff %.1e\n", 
++     d_bh))
+
+BH with s = 1 vs constant recruitment: max diff 0.0e+00
+
+> stopifnot(d_bh < 1e-10)
+
+> tdb$dyn_s <- 0.75
+
+> rb <- rep_at(tdb, pb)
+
+> cat("BH s = 0.75: SSB/SSB0 by year:", round(rb$dep_y, 
++     3), "\n")
+BH s = 0.75: SSB/SSB0 by year: 0.115 0.115 0.115 0.117 0.12 0.123 0.127 0.132 0.136 0.141 0.145 0.149 
+
+> cat("recruitment relative to R0:", round(rb$Rdev, 
++     3), "\n")
+recruitment relative to R0: 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.609 0.61 0.614 0.62 0.628 0.637 0.646 0.655 0.663 0.67 0.678 
+
+> fb <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cq, settings = list(CVL = 0.1, 
++     obs_model = "dm", pop_model = "gtg.dyn", dyn_rec = "bh", 
++     sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1), se = FALSE)
+
+> cat(sprintf("BH + catch fit: conv %d, R0 %.3g, last SPR %.3f, last SSB/SSB0 %.3f\n", 
++     fb$opt$convergence, fb$report$R0, tail(c(fb$report$spr), 
++         1), tail(c(fb$report$dep), 1)))
+BH + catch fit: conv 0, R0 7.34e+04, last SPR 0.053, last SSB/SSB0 0.092
+
+> stopifnot(fb$opt$convergence == 0, !is.null(fb$report$dep))
+
+> print(summary(warnings()))
+No warnings
+
+> cat("\ngtg.dyn tests passed\n")
+
+gtg.dyn tests passed
+There were 50 or more warnings (use warnings() to see the first 50)

@@ -1,0 +1,39 @@
+
+
+processing file: gtgdyn_alfonsino_OM_test.Rmd
+1/31               
+2/31 [setup]       
+3/31               
+4/31 [packages]    
+5/31               
+6/31 [load-om]     
+7/31               
+8/31 [catch-shares]
+9/31               
+10/31 [truth]       
+11/31               
+12/31 [settings]    
+13/31               
+14/31 [fit]         
+15/31               
+16/31 [collect]     
+17/31               
+18/31 [timing]      
+19/31               
+20/31 [plot-iter1]  
+21/31               
+22/31 [plot-rec]    
+23/31               
+24/31 [plot-lfd-fit]
+25/31               
+26/31 [plot-relerr] 
+27/31               
+28/31 [table-relerr]
+29/31               
+30/31 [table-sigmaR]
+31/31               
+output file: gtgdyn_alfonsino_OM_test.knit.md
+
+/opt/hostedtoolcache/pandoc/3.8.3/x64/pandoc +RTS -K512m -RTS gtgdyn_alfonsino_OM_test.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /home/runner/work/FLicc/FLicc/out/html/gtgdyn_alfonsino_OM_test.html --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /home/runner/work/_temp/Library/rmarkdown/rmd/h/default.html --syntax-highlighting none --variable highlightjs=1 --number-sections --variable theme=bootstrap --mathml --include-in-header /tmp/Rtmpn5tRem/rmarkdown-str15e771b86c4c.html 
+
+Output created: out/html/gtgdyn_alfonsino_OM_test.html
