@@ -117,8 +117,13 @@ tc
 LLB <- fit_def$mn$tmb_data$LLB
 check("Tail cut", "cut at 50 starts at the first bin with lower bound >= 50",
       all(tc$Lcut[tc$cut == "L50"] == min(LLB[LLB >= 50])))
-w_frac <- tryCatch(fitf(obs_model = "dm", tail_cut = 50), warning = function(w) conditionMessage(w))
-check("Tail cut", "a fraction (<= 1.5) is still accepted, with a warning", grepl("fraction of Linf", w_frac))
+w_frac <- character(0)
+f_frac <- withCallingHandlers(fitf(obs_model = "dm", tail_cut = 0.9),
+                              warning = function(w) { w_frac <<- c(w_frac, conditionMessage(w)); invokeRestart("muffleWarning") })
+L09 <- 0.9 * as.numeric(stklen@lhpar["linf"])
+check("Tail cut", "a fraction (<= 1.5) gives a warning", any(grepl("fraction of Linf", w_frac)))
+check("Tail cut", "a fraction (<= 1.5) is read as x Linf",
+      f_frac$tmb_data$LLB[f_frac$tmb_data$cut_bin + 1] == min(LLB[LLB >= L09]))
 check("Tail cut", "all observation models fit with a cut", all(is.finite(tc$SPR_last)))
 ```
 
