@@ -53,8 +53,12 @@ jobs:
               git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-om )
           }
           mode=$(cat ci/gtgdyn_om/mode.txt 2>/dev/null || echo trial)
-          if [ "$mode" = "check" ]; then script=check_truth.R; else script=run_om_trial.R; fi
-          ( Rscript ci/gtgdyn_om/$script ci/gtgdyn_om out 8 > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
+          case "$mode" in
+            check) script=check_truth.R; nit=1;;
+            grid)  script=run_eq_grid.R; nit=10;;
+            *)     script=run_om_trial.R; nit=8;;
+          esac
+          ( Rscript ci/gtgdyn_om/$script ci/gtgdyn_om out $nit > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
           pid=$!
           while kill -0 $pid 2>/dev/null; do sleep 180; publish running; done
           publish finished
