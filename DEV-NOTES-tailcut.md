@@ -7,8 +7,8 @@ been compiled or run yet: it was written without access to R.
 
 ### Tail cut in the likelihood (`settings$tail_cut`)
 
-* `fiticc(..., settings = list(tail_cut = 0.9))` excludes length bins with
-  lower bound `>= tail_cut * linf` (input Linf, fixed during estimation) from
+* `fiticc(..., settings = list(tail_cut = 50))` excludes length bins with
+  lower bound `>= tail_cut` (an absolute length, as `Lplus`; values <= 1.5 are read as a fraction of Linf with a warning) from
   the composition likelihood. Observed and predicted compositions are
   truncated and the predicted proportions renormalised over the retained
   bins; the observed total over retained bins is the ESS / precision in the
@@ -59,7 +59,7 @@ f0 <- fiticc(lfd_alfonsino, stklen, sel_fun = c("dsnormal", "logistic"),
 
 ## 2. with a cut
 f9 <- fiticc(lfd_alfonsino, stklen, sel_fun = c("dsnormal", "logistic"),
-             catch_by_gear = c(0.7, 0.3), settings = list(tail_cut = 0.9))
+             catch_by_gear = c(0.7, 0.3), settings = list(tail_cut = 50))
 f9$tmb_data$cut_bin                      # first excluded bin (0-based)
 c(f0$report$spr[, ac(dims(f0$report$spr)$maxyear)],
   f9$report$spr[, ac(dims(f9$report$spr)$maxyear)])
@@ -73,7 +73,7 @@ attr(LBIspr(f9, tail_cut = FALSE), "Lcut")            # NA
 for (om in c("nb", "mn", "dm"))
   fiticc(lfd_alfonsino, stklen, sel_fun = c("dsnormal", "logistic"),
          catch_by_gear = c(0.7, 0.3),
-         settings = list(tail_cut = 0.9, obs_model = om))
+         settings = list(tail_cut = 50, obs_model = om))
 
 ## 5. reference points on a cut fit and on an old saved fit
 fspr_flicc(f9, spr = 40); brp_tmb_flicc(f9, spr = 40)
@@ -83,7 +83,7 @@ x <- lfd_alfonsino; x[[1]][, 1] <- 0
 any(is.nan(unlist(lapply(lfdess(x, 100), c))))        # FALSE
 
 ## 7. MP smoke test (FLicc_lfd_mp_test.Rmd), short horizon
-##    est: flicc.sa(settings = list(..., tail_cut = 0.9))
+##    est: flicc.sa(settings = list(..., tail_cut = 50))
 ##    hcr: lbi.hcr(gear = "SPR", trend = "track") or
 ##         rfb.flicc.hcr(index = "SPR", trend = "track", f = "Zrel")
 ##    isys: flicc.is(initac = initac, Cmin = 0.1 * initac)

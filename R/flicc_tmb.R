@@ -187,25 +187,21 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     }
   }
 
-  # Tail cut: exclude length bins with lower bound >= tail_cut * Linf (input
-  # Linf, so the cut is fixed during estimation) from the composition
-  # likelihood. Observed and predicted compositions are truncated and the
-  # predicted proportions renormalised over the retained bins.
+  # Tail cut: exclude length bins with lower bound >= tail_cut (an absolute
+  # length, as Lplus, so the same bins are used whatever Linf is assumed) from
+  # the composition likelihood. Observed and predicted compositions are
+  # truncated and the predicted proportions renormalised over the retained bins.
   cut_bin <- -1L
   if (!is.null(settings$tail_cut)) {
-    tail_cut <- as.numeric(settings$tail_cut)
-    if (length(tail_cut) != 1 || !is.finite(tail_cut) || tail_cut <= 0) {
-      stop("settings$tail_cut must be a single positive fraction of Linf, e.g. 0.9.")
-    }
-    Lcut <- tail_cut * Linf_init
+    Lcut <- tail_cut_length_flicc(settings$tail_cut, Linf_init)
     idx  <- which(LLB >= Lcut)
     if (length(idx) == 0) {
-      warning("settings$tail_cut * Linf = ", round(Lcut, 2),
+      warning("settings$tail_cut = ", round(Lcut, 2),
               " is above the largest length bin; no bins cut.")
     } else {
       cut_bin <- as.integer(min(idx) - 1L)    # 0-based first excluded bin
       if (cut_bin < 2L) {
-        stop("settings$tail_cut = ", tail_cut, " would leave fewer than two ",
+        stop("settings$tail_cut = ", round(Lcut, 2), " would leave fewer than two ",
              "length bins in the likelihood.")
       }
       if (plus_bin >= cut_bin) {
@@ -303,6 +299,29 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     gear_names  = gear_names,
     year_names  = years
   )
+}
+
+#' Tail cut as a length (internal)
+#'
+#' `tail_cut` is an absolute length (same units as the length bins, as
+#' `Lplus`). For backward compatibility a value <= 1.5 is read as a fraction of
+#' Linf (the earlier definition), with a warning.
+#' @param tail_cut single positive number
+#' @param linf input Linf
+#' @return the cut length
+#' @noRd
+tail_cut_length_flicc <- function(tail_cut, linf) {
+  tc <- as.numeric(tail_cut)
+  if (length(tc) != 1 || !is.finite(tc) || tc <= 0) {
+    stop("tail_cut must be a single positive length (e.g. 50), as Lplus.")
+  }
+  if (tc <= 1.5) {
+    warning(sprintf(paste0("tail_cut = %g is read as a fraction of Linf (%.1f); tail_cut is now an ",
+                           "absolute length, as Lplus: use tail_cut = %.1f."), tc, linf, tc * linf),
+            call. = FALSE)
+    tc <- tc * linf
+  }
+  tc
 }
 
 #' Generate initial parameter values for FLicc TMB fits
@@ -557,6 +576,18 @@ fiticc_core <- function(lfd, stklen,
 
   if (!settings$obs_model %in% c("nb", "mn", "dm")) {
     stop("settings$obs_model must be 'nb', 'mn', or 'dm'")
+  }
+
+  if (!is.null(settings$sigmaF) &&
+      (length(settings$sigmaF) != 1 || !is.finite(as.numeric(settings$sigmaF)) || settings$sigmaF <= 0)) {
+    stop("settings$sigmaF must be a single positive value (the fixed random-walk SD of log F). ",
+         "To switch the random walk off use prior_sigmaF = FALSE.")
+  }
+  if (isTRUE(settings$prior_sigmaF[3] == 1) && is.null(settings$sigmaF) && !isTRUE(settings$F_re) &&
+      !(is.finite(settings$prior_sigmaF[2]) && settings$prior_sigmaF[2] > 0)) {
+    warning("Random walk on log F with sigmaF estimated without a prior: sigmaF tends to collapse to 0 ",
+            "(flat F). Fix it (sigmaF = 0.3), use F_re = TRUE, or switch the walk off ",
+            "(prior_sigmaF = FALSE).", call. = FALSE)
   }
 
   unknown <- setdiff(names(settings), names(default_settings))
@@ -912,18 +943,19 @@ fiticc_core <- function(lfd, stklen,
 #'       of the binning and sampling of the largest fish. Default \code{NULL}
 #'       (off). Predicted compositions in the report stay unpooled.}
 #'
-#'     \item{\code{tail_cut}}{Optional tail cut as a fraction of the input
-#'       \eqn{L_\infty} (e.g. \code{0.9}). Length bins with lower bound
-#'       \code{>= tail_cut * linf} are excluded from the composition
-#'       likelihood: observed and predicted compositions are truncated and
-#'       the predicted proportions renormalised over the retained bins, so the
-#'       fit conditions on fish below the cut. Reduces the influence of the
-#'       largest fish, which are most sensitive to \eqn{L_\infty}, growth
-#'       variability and dome-shaped selectivity. The cut uses the input
-#'       \eqn{L_\infty} and is fixed during estimation. \code{LBIspr()} and
-#'       \code{LBImean()} apply the same cut by default. The catch likelihood
-#'       and reported predictions are not truncated. Default \code{NULL}
-#'       (off). Takes precedence over \code{Lplus} when both are set.}
+#'     \item{\code{tail_cut}}{Optional tail cut, an absolute length in the
+#'       units of the length bins (as \code{Lplus}), e.g. \code{50}. Length
+#'       bins with lower bound \code{>= tail_cut} are excluded from the
+#'       composition likelihood: observed and predicted compositions are
+#'       truncated and the predicted proportions renormalised over the retained
+#'       bins, so the fit conditions on fish below the cut. Reduces the
+#'       influence of the largest fish, which are most sensitive to
+#'       \eqn{L_\infty}, growth variability (CVL), dome-shaped selectivity and
+#'       the memory of past F. As a fixed length, the same bins are used
+#'       whatever \eqn{L_\infty} is assumed (sensitivity runs, MSE
+#'       iterations). \code{LBIspr()} and \code{LBImean()} apply the same cut by
+#'       default. Values <= 1.5 are read as a fraction of \eqn{L_\infty} (earlier
+#'       definition) with a warning. Default \code{NULL} (off).}
 #'
 #'     \item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
 #'       The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
