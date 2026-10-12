@@ -126,9 +126,10 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   pop_model <- if (!is.null(settings$pop_model)) settings$pop_model else "gamma"
 
   pop_model_code <- switch(pop_model,
-                           gamma = 1L,
-                           gtg   = 2L,
-                           stop("Supported pop_model options are 'gamma' and 'gtg'")
+                           gamma     = 1L,
+                           gtg       = 2L,
+                           gtg.dyn   = 3L,
+                           stop("Supported pop_model options are 'gamma', 'gtg' and 'gtg.dyn'")
   )
 
 
@@ -164,6 +165,12 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # non-positive boundary is replaced by half the first bin width.
   LBins    <- c(LLB, tail(LLB, 1) + tail(step, 1))
   LBins_mk <- ifelse(LBins > 0, LBins, step[1] / 2)
+
+  # gtg.dyn inputs (ages at the length boundaries, quadrature nodes, grid)
+  dyn <- dyn_inputs_flicc(
+    LBins = LBins, Linf = Linf_init, CVL = CVL_init, gtg_z = gtg_z,
+    k = as.numeric(lhpar["k"]), M = Mk_init * as.numeric(lhpar["k"]),
+    nyear = nyear, settings = settings, on = pop_model == "gtg.dyn")
 
   # SPR targets whose Fspr is computed at report time (not during fitting)
   spr_ref <- if (!is.null(settings$spr_ref)) as.numeric(settings$spr_ref) else 40
@@ -217,7 +224,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
   # Warn when observations fall in bins the GTG model cannot reach
   # (lower bound at or beyond the largest GTG Linf at the input values).
-  if (pop_model == "gtg" && isTRUE(settings$tail_warning)) {
+  if (pop_model %in% c("gtg", "gtg.dyn") && isTRUE(settings$tail_warning)) {
     maxLinf <- Linf_init * (1 + maxsd * CVL_init)
     beyond  <- LLB >= maxLinf
     if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
@@ -288,6 +295,19 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     brp_spawn   = 0,
     brp_Fmax    = 5,
     brp_only    = 0L,
+    dyn_npre     = dyn$npre,
+    dyn_tq       = dyn$tq,
+    dyn_A        = dyn$A,
+    dyn_reach    = dyn$reach,
+    dyn_node_g   = dyn$node_g,
+    dyn_node_j   = dyn$node_j,
+    dyn_node_tau = dyn$node_tau,
+    dyn_node_w   = dyn$node_w,
+    dyn_db       = dyn$db,
+    dyn_b0       = dyn$b0,
+    dyn_nbg      = dyn$nbg,
+    dyn_rmode    = dyn$rmode,
+    prior_sigmaR = dyn$prior_sigmaR,
     sel_type   = as.integer(sel_type),
     sm_start   = as.integer(sm_start),
     sm_n       = as.integer(sm_n),
@@ -411,6 +431,10 @@ init_tmb_flicc <- function(tmb_data) {
 
   log_Fk <- log(pmax(Fk_init, 1e-8))
 
+  npre <- if (is.null(tmb_data$dyn_npre)) 0L else as.integer(tmb_data$dyn_npre)
+  is_dyn <- isTRUE(tmb_data$pop_model == 3L)
+  log_Fpre <- matrix(rep(log_Fk[1, ], each = npre), nrow = npre, ncol = ngear)
+  sR <- tmb_data$prior_sigmaR
   list(
     log_Linf   = log(tmb_data$Linf_init),
     log_Galpha = log(tmb_data$Galpha_init),
@@ -418,8 +442,81 @@ init_tmb_flicc <- function(tmb_data) {
     log_Fk     = log_Fk,
     Sm         = Sm,
     log_phi    = log(10),
-    log_sigmaF = tmb_data$prior_sigmaF_mean
+    log_sigmaF = tmb_data$prior_sigmaF_mean,
+    log_Fpre   = log_Fpre,
+    log_Rdev   = if (is_dyn) rep(0, npre + nyear) else numeric(0),
+    log_sigmaR = if (length(sR) && is.finite(sR[1])) sR[1] else log(0.5)
   )
+}
+
+#' Inputs for the dynamic GTG population model (pop_model = "gtg.dyn")
+#'
+#' Ages (years since the first length boundary) at the length-bin boundaries
+#' for each growth-type group, within-bin quadrature nodes and the birth-time
+#' grid used by the TMB template. Growth (Linf, CVL, k) is fixed, so all
+#' evaluation times are data.
+#'
+#' @param LBins length-bin boundaries (nlen + 1)
+#' @param Linf,CVL,k growth parameters (input values)
+#' @param gtg_z standardised GTG Linf nodes
+#' @param M annual natural mortality (sets the truncation of the bin containing
+#'   Linf_g)
+#' @param nyear number of data years
+#' @param settings fiticc settings (dyn_npre, dyn_nq, dyn_db, dyn_h, dyn_Tcap,
+#'   dyn_rec, prior_sigmaR, sigmaR)
+#' @param on logical; FALSE returns empty inputs (other population models)
+#' @return list of template inputs
+#' @keywords internal
+dyn_inputs_flicc <- function(LBins, Linf, CVL, gtg_z, k, M, nyear, settings, on = TRUE) {
+  rmode <- switch(if (is.null(settings$dyn_rec)) "iid" else settings$dyn_rec,
+                  none = 0L, iid = 1L, rw = 2L,
+                  stop("settings$dyn_rec must be 'none', 'iid' or 'rw'"))
+  pS <- settings$prior_sigmaR
+  prior_sigmaR <- if (is.null(pS) || isTRUE(any(pS == FALSE, na.rm = TRUE)) || length(pS) < 3) c(log(0.5), 0, 0) else as.numeric(pS)
+  if (!is.finite(prior_sigmaR[2]) || prior_sigmaR[2] <= 0) prior_sigmaR[2:3] <- 0
+  if (!is.finite(prior_sigmaR[1])) prior_sigmaR[1] <- log(0.5)
+  if (!on) {
+    return(list(npre = 0L, tq = numeric(0), A = matrix(0, 0, 0), reach = matrix(0L, 0, 0),
+                node_g = integer(0), node_j = integer(0), node_tau = numeric(0), node_w = numeric(0),
+                db = 0, b0 = 0, nbg = 0L, rmode = 0L, prior_sigmaR = c(log(0.5), 0, 0)))
+  }
+  npre <- as.integer(if (is.null(settings$dyn_npre)) 10 else settings$dyn_npre)
+  nq   <- as.integer(if (is.null(settings$dyn_nq)) 1 else settings$dyn_nq)
+  db   <- as.numeric(if (is.null(settings$dyn_db)) 0.5 else settings$dyn_db)
+  h    <- as.numeric(if (is.null(settings$dyn_h)) 4 else settings$dyn_h)
+  Tcap <- as.numeric(if (is.null(settings$dyn_Tcap)) max(40, 7 / M) else settings$dyn_Tcap)
+  nlen <- length(LBins) - 1L
+  linfs <- Linf * (1 + CVL * gtg_z)
+  ng <- length(linfs)
+  # years since the first boundary (recruits enter the first bin at age 0, as
+  # in the gtg recursion)
+  age <- function(L, li) ifelse(L < li, -log(1 - L / li) / k, Inf)
+  A <- t(vapply(linfs, function(li) age(LBins, li) - age(LBins[1], li), numeric(nlen + 1)))
+  A[!is.finite(A)] <- Inf
+  reach <- matrix(0L, ng, nlen); dT <- matrix(0, ng, nlen)
+  for (g in seq_len(ng)) for (j in seq_len(nlen)) {
+    if (is.finite(A[g, j])) {
+      if (is.finite(A[g, j + 1])) { reach[g, j] <- 1L; dT[g, j] <- A[g, j + 1] - A[g, j] }
+      else { reach[g, j] <- 2L; dT[g, j] <- Tcap }
+    }
+  }
+  # composite 2-point Gauss-Legendre over the time spent in each bin
+  x <- 0.5 + c(-1, 1) * 0.5 / sqrt(3); w <- c(0.5, 0.5)
+  nodes <- list()
+  for (g in seq_len(ng)) for (j in seq_len(nlen)) if (reach[g, j] > 0) {
+    D <- dT[g, j]; np <- ceiling(D / h); hp <- D / np
+    tau <- as.vector(outer(x, 0:(np - 1), "+")) * hp
+    nodes[[length(nodes) + 1]] <- cbind(g - 1, j - 1, tau, rep(w, np) * hp)
+  }
+  nodes <- do.call(rbind, nodes)
+  Afin <- A; Afin[!is.finite(Afin)] <- 1e10
+  b0 <- -max(A[, 1:nlen][reach > 0]) - 1
+  nFd <- npre + nyear
+  list(npre = npre, tq = (seq_len(nq) - 0.5) / nq, A = Afin, reach = reach,
+       node_g = as.integer(nodes[, 1]), node_j = as.integer(nodes[, 2]),
+       node_tau = as.numeric(nodes[, 3]), node_w = as.numeric(nodes[, 4]),
+       db = db, b0 = b0, nbg = as.integer(ceiling((nFd + 1 - b0) / db) + 2L),
+       rmode = rmode, prior_sigmaR = prior_sigmaR)
 }
 
 #' Fit the FLicc model in a single optimizer pass
@@ -530,7 +627,18 @@ fiticc_core <- function(lfd, stklen,
     tail_warning = FALSE,
     FM_min = 0.05,
     FM_max = 4,
-    FMpen_sd = 0.2
+    FMpen_sd = 0.2,
+    # gtg.dyn
+    dyn_npre = 10,
+    dyn_rec = "iid",
+    R_re = TRUE,
+    sigmaR = NULL,
+    prior_sigmaR = c(log(0.5), 0.5, 1),
+    dyn_nq = 1,
+    dyn_db = 0.5,
+    dyn_h = 4,
+    dyn_Tcap = NULL,
+    dyn_start = TRUE
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -551,15 +659,27 @@ fiticc_core <- function(lfd, stklen,
     }
   }
 
-  if (!settings$pop_model %in% c("gamma", "gtg")) {
-    stop("settings$pop_model must be 'gamma' or 'gtg'")
+  if (!settings$pop_model %in% c("gamma", "gtg", "gtg.dyn")) {
+    stop("settings$pop_model must be 'gamma', 'gtg' or 'gtg.dyn'")
+  }
+  is_dyn <- settings$pop_model == "gtg.dyn"
+  if (is_dyn) {
+    if (!is.null(settings$linf.sd) || !is.null(settings$CVL.sd)) {
+      stop("pop_model = 'gtg.dyn' needs fixed growth: linf.sd and CVL.sd must be NULL ",
+           "(ages at length are data in the dynamic model).")
+    }
+    if (isTRUE(settings$prior_sigmaF[3] == 0) && settings$dyn_npre > 0) {
+      warning("gtg.dyn: no random walk on F (prior_sigmaF[3] = 0), so dyn_npre is set to 0 ",
+              "(F before the first data year = first-year F).", call. = FALSE)
+      settings$dyn_npre <- 0
+    }
   }
 
   if (!settings$obs_model %in% c("nb", "mn", "dm")) {
     stop("settings$obs_model must be 'nb', 'mn', or 'dm'")
   }
 
-  unknown <- setdiff(names(settings), names(default_settings))
+  unknown <- setdiff(names(settings), c(names(default_settings), "dyn_Tcap", "sigmaR", "linf.sd", "Mk.sd", "CVL.sd", "Lplus", "tail_cut"))
   if (length(unknown) > 0) {
     stop("Unknown settings: ", paste(unknown, collapse = ", "))
   }
@@ -651,10 +771,46 @@ fiticc_core <- function(lfd, stklen,
   random <- NULL
   if (isTRUE(settings$F_re)) {
     if (rw_on) {
-      random <- "log_Fk"
+      random <- c("log_Fk", if (is_dyn && tmb_data$dyn_npre > 0) "log_Fpre")
     } else {
       warning("settings$F_re = TRUE ignored: needs more than one year and ",
               "prior_sigmaF[3] = 1 (random walk on).", call. = FALSE)
+    }
+  }
+
+  # gtg.dyn recruitment deviations (random effects by default) and sigmaR
+  if (is_dyn && tmb_data$dyn_rmode > 0L) {
+    nR <- length(parameters$log_Rdev)
+    if (tmb_data$dyn_rmode == 2L) map$log_Rdev <- factor(c(NA, seq_len(nR - 1)))  # level not identified
+    if (!is.null(settings$sigmaR)) {
+      parameters$log_sigmaR <- log(as.numeric(settings$sigmaR))
+      map$log_sigmaR <- factor(NA)
+      tmb_data$prior_sigmaR[3] <- 0
+    }
+    if (isTRUE(settings$R_re)) random <- c(random, "log_Rdev")
+  } else {
+    if (length(parameters$log_Rdev)) map$log_Rdev <- factor(rep(NA, length(parameters$log_Rdev)))
+    map$log_sigmaR <- factor(NA)
+  }
+  if (is_dyn && !rw_on && length(parameters$log_Fpre)) {
+    map$log_Fpre <- factor(rep(NA, length(parameters$log_Fpre)))
+  }
+
+  # gtg.dyn starting values from the equilibrium gtg fit (same settings)
+  if (is_dyn && is.null(start) && isTRUE(settings$dyn_start)) {
+    s0 <- settings; s0$pop_model <- "gtg"; s0$F_re <- FALSE
+    f0 <- tryCatch(fiticc_core(lfd, stklen, sel_fun = sel_fun, catch_by_gear = catch_by_gear,
+                               settings = s0, years = years, iter = iter, silent = silent,
+                               dll = dll, sel_fixed = sel_fixed, n_restart = 0, se = FALSE),
+                   error = function(e) NULL)
+    if (!is.null(f0)) {
+      p0 <- f0$obj$env$parList(f0$opt$par)
+      parameters$Sm     <- p0$Sm
+      parameters$log_Fk <- p0$log_Fk
+      parameters$log_Mk <- p0$log_Mk
+      parameters$log_phi <- p0$log_phi
+      if (nrow(parameters$log_Fpre) > 0)
+        parameters$log_Fpre[] <- rep(p0$log_Fk[1, ], each = nrow(parameters$log_Fpre))
     }
   }
 
@@ -851,8 +1007,13 @@ fiticc_core <- function(lfd, stklen,
 #'   \describe{
 #'     \item{\code{pop_model}}{Population model. Options are:
 #'       \code{"gtg"} (default), a growth-type-group approximation inspired
-#'       by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
-#'       growth formulation.}
+#'       by LBSPR, \code{"gamma"}, the original FLicc/BLICC continuous
+#'       growth formulation, and \code{"gtg.dyn"}, a dynamic version of
+#'       \code{"gtg"}: each year's length composition follows from the history
+#'       of F (random walk, extended back \code{dyn_npre} years) and
+#'       recruitment, without an age dimension. Status (SPR) remains the
+#'       equilibrium SPR at the year's F; dynamic numbers and SSB are reported
+#'       in addition (\code{Ndyn}, \code{ssb_dyn}, \code{rec_dev}).}
 #'
 #'     \item{\code{obs_model}}{Observation likelihood. Options are:
 #'       \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
@@ -900,6 +1061,25 @@ fiticc_core <- function(lfd, stklen,
 #'       use is to estimate sigmaF once with \code{F_re = TRUE} on the full
 #'       data, then fix it for repeated fits (e.g. in an MSE); the yearly
 #'       estimates closely match the full random-effects fit.}
+#'
+#'     \item{\code{dyn_npre}, \code{dyn_rec}, \code{R_re}, \code{sigmaR},
+#'       \code{prior_sigmaR}, \code{dyn_nq}, \code{dyn_db}, \code{dyn_h},
+#'       \code{dyn_Tcap}, \code{dyn_start}}{Settings for
+#'       \code{pop_model = "gtg.dyn"}. \code{dyn_npre} (default 10) pre-data
+#'       years over which the random walk on log F extends back (F constant
+#'       before them); \code{dyn_rec} recruitment: \code{"iid"} (default,
+#'       log deviations by model year), \code{"rw"} (random walk) or
+#'       \code{"none"}; \code{R_re} (default \code{TRUE}) treats the deviations
+#'       as random effects with sigmaR estimated (Laplace), \code{FALSE} as a
+#'       penalty; \code{sigmaR} fixes sigmaR (fast route, e.g. in an MSE);
+#'       \code{prior_sigmaR = c(mean, sd, use)} weak prior on log(sigmaR),
+#'       default \code{c(log(0.5), 0.5, 1)}; numerical settings
+#'       \code{dyn_nq} (observation times per year, 1), \code{dyn_db}
+#'       (birth-time grid step in years, 0.5), \code{dyn_h} (quadrature panel
+#'       width in years, 4), \code{dyn_Tcap} (truncation of the bin containing
+#'       each group's Linf, default \code{max(40, 7 / M)}); \code{dyn_start}
+#'       (default \code{TRUE}) starts from the equilibrium \code{gtg} fit.
+#'       Growth must be fixed (\code{linf.sd} and \code{CVL.sd} \code{NULL}).}
 #'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become
@@ -1124,7 +1304,7 @@ fiticc <- function(lfd, stklen,
     FLRreport = FLRreport
   )
 
-  if(pop_model_flicc(fit1)%in%"gtg")  safe_fit = FALSE
+  if(pop_model_flicc(fit1) %in% c("gtg", "gtg.dyn"))  safe_fit = FALSE
 
   refit_used <- FALSE
   fit_final <- fit1

@@ -269,6 +269,22 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
+  // gtg.dyn (pop_model 3): dynamic length-indexed GTG. All evaluation times
+  // are data (growth fixed), so the AD tape is valid for all parameter values.
+  DATA_INTEGER(dyn_npre);    // pre-data model years (F random walk extends back)
+  DATA_VECTOR(dyn_tq);       // observation times within the year
+  DATA_MATRIX(dyn_A);        // ngtg x (nlen + 1): years since the first length
+                             //   boundary at each boundary (1e10: unreachable)
+  DATA_IMATRIX(dyn_reach);   // ngtg x nlen: 0 unreachable, 1 bin, 2 bin with Linf_g
+  DATA_IVECTOR(dyn_node_g);  // within-bin quadrature nodes (GTG, bin, time in
+  DATA_IVECTOR(dyn_node_j);  //   bin, weight)
+  DATA_VECTOR(dyn_node_tau);
+  DATA_VECTOR(dyn_node_w);
+  DATA_SCALAR(dyn_db);       // step of the birth-time grid for fishing exposure
+  DATA_SCALAR(dyn_b0);       // first grid point (exposure constant below)
+  DATA_INTEGER(dyn_nbg);     // number of grid points
+  DATA_INTEGER(dyn_rmode);   // recruitment: 0 constant, 1 iid deviations, 2 random walk
+  DATA_VECTOR(prior_sigmaR); // log mean, sd, use
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -277,6 +293,9 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(Sm);
   PARAMETER(log_phi);
   PARAMETER(log_sigmaF); // random walk F
+  PARAMETER_MATRIX(log_Fpre); // dyn_npre x ngear (gtg.dyn pre-data years)
+  PARAMETER_VECTOR(log_Rdev); // dyn_npre + nyear (gtg.dyn), else length 0
+  PARAMETER(log_sigmaR);
 
   Type nll = 0.0;
 
@@ -324,7 +343,7 @@ Type objective_function<Type>::operator() ()
   if(pop_model == 1) {
     N0 = pop_len_glq(node, quad_wt, LLB, Z0, Galpha, Gbeta);
 
-  } else if(pop_model == 2) {
+  } else if(pop_model == 2 || pop_model == 3) {
     matrix<Type> ZKL0(nlen + 1, ngtg);
     ZKL0.setZero();
 
@@ -368,6 +387,122 @@ Type objective_function<Type>::operator() ()
   plen_all_y.setZero();
 
 
+
+  // --- gtg.dyn: dynamic numbers-at-length (pop_model 3) ---
+  // For growth group g, a fish at length boundary j at time t entered the
+  // first bin at b = t - A_gj; its fishing exposure is the integral of the
+  // annual F-at-length over the times it spent in each bin. Numbers in bin j
+  // integrate over the time spent in the bin (fixed quadrature nodes). The
+  // exposure H_g(b, j) is computed once on a birth-time grid and interpolated.
+  // With constant F and recruitment this reproduces the gtg recursion.
+  int nFd = dyn_npre + nyear;
+  matrix<Type> Ndyn(nlen, nyear);
+  Ndyn.setZero();
+  matrix<Type> Nmid(nlen, nyear);
+  Nmid.setZero();
+  if (pop_model == 3 && brp_only == 0) {
+    Type kk = brp_k;
+    int nn = dyn_node_g.size(), nq = dyn_tq.size();
+    double dbd = asDouble(dyn_db), b0d = asDouble(dyn_b0);
+
+    // annual F-at-length by model year and its cumulative sum
+    matrix<Type> FLa(nFd, nlen), cumFL(nFd + 1, nlen);
+    for (int k = 0; k < nFd; k++) {
+      for (int l = 0; l < nlen; l++) {
+        Type sf = Type(0);
+        for (int g = 0; g < ngear; g++) {
+          Type lf = (k < dyn_npre) ? log_Fpre(k, g) : log_Fk(k - dyn_npre, g);
+          sf += exp(lf) * Sel(l, g);
+        }
+        FLa(k, l) = kk * sf;
+      }
+    }
+    for (int l = 0; l < nlen; l++) {
+      cumFL(0, l) = Type(0);
+      for (int k = 0; k < nFd; k++) cumFL(k + 1, l) = cumFL(k, l) + FLa(k, l);
+    }
+    // cumulative F-at-length in bin l up to time t (F constant before the
+    // first and after the last model year)
+    auto cfl = [&](double t, int l) -> Type {
+      if (t < 0.0) return FLa(0, l) * t;
+      if (t >= nFd) return cumFL(nFd, l) + FLa(nFd - 1, l) * (t - nFd);
+      int k = (int) std::floor(t);
+      return cumFL(k, l) + FLa(k, l) * (t - k);
+    };
+    // log recruitment deviation at time b (linear between year mid-points)
+    auto logr = [&](double b) -> Type {
+      if (dyn_rmode == 0) return Type(0);
+      double u = b - 0.5;
+      if (u <= 0.0) return log_Rdev(0);
+      if (u >= nFd - 1) return log_Rdev(nFd - 1);
+      int k = (int) std::floor(u);
+      double fr = u - k;
+      return (1.0 - fr) * log_Rdev(k) + fr * log_Rdev(k + 1);
+    };
+    // annual natural mortality by bin and cumulative to each boundary
+    vector<Type> Mann(nlen);
+    for (int l = 0; l < nlen; l++) Mann(l) = kk * MKMat(l, 0) * Mscaler(l, 0);
+    matrix<Type> CM(ngtg, nlen + 1);
+    CM.setZero();
+    for (int g = 0; g < ngtg; g++) {
+      for (int l = 0; l < nlen; l++) {
+        double a1 = asDouble(dyn_A(g, l + 1)), a0 = asDouble(dyn_A(g, l));
+        CM(g, l + 1) = (a1 > 1e9) ? CM(g, l) : CM(g, l) + Mann(l) * (a1 - a0);
+      }
+    }
+    // fishing exposure on reaching boundary j for a cohort entering at grid time b
+    array<Type> H(ngtg, dyn_nbg, nlen + 1);
+    H.setZero();
+    for (int g = 0; g < ngtg; g++) {
+      for (int m = 0; m < dyn_nbg; m++) {
+        double b = b0d + dbd * m;
+        for (int l = 0; l < nlen; l++) {
+          double a1 = asDouble(dyn_A(g, l + 1)), a0 = asDouble(dyn_A(g, l));
+          if (a1 > 1e9) {
+            for (int ll = l + 1; ll <= nlen; ll++) H(g, m, ll) = H(g, m, l);
+            break;
+          }
+          H(g, m, l + 1) = H(g, m, l) + cfl(b + a1, l) - cfl(b + a0, l);
+        }
+      }
+    }
+    // numbers-at-length (summed over GTG, per unit recruitment rate) at time t
+    auto dynN = [&](double t) {
+      vector<Type> Nt(nlen);
+      Nt.setZero();
+      for (int n = 0; n < nn; n++) {
+        int g = dyn_node_g(n), j = dyn_node_j(n);
+        double tau = asDouble(dyn_node_tau(n)), Aj = asDouble(dyn_A(g, j));
+        double sx = t - tau, b = sx - Aj;
+        double u = (b - b0d) / dbd;
+        int m = (int) std::floor(u);
+        if (m < 0) m = 0;
+        if (m > dyn_nbg - 2) m = dyn_nbg - 2;
+        double fr = u - m;
+        if (fr < 0) fr = 0;
+        if (fr > 1) fr = 1;
+        Type E = CM(g, j) + (1.0 - fr) * H(g, m, j) + fr * H(g, m + 1, j);
+        Type within = Mann(j) * tau + cfl(t, j) - cfl(sx, j);
+        Nt(j) += recP(g) * dyn_node_w(n) * exp(logr(b) - E - within);
+      }
+      return Nt;
+    };
+    for (int y = 0; y < nyear; y++) {
+      vector<Type> Ny(nlen);
+      Ny.setZero();
+      for (int q = 0; q < nq; q++) Ny += dynN(dyn_npre + y + asDouble(dyn_tq(q)));
+      Ny /= Type(nq);
+      // K-time units, as the gtg recursion (N_gtg = k * N_years)
+      for (int l = 0; l < nlen; l++) Ndyn(l, y) = kk * Ny(l);
+      if (isDouble<Type>::value) {
+        vector<Type> Nm = dynN(dyn_npre + y + 0.5);
+        for (int l = 0; l < nlen; l++) Nmid(l, y) = kk * Nm(l);
+      }
+    }
+  }
+  vector<Type> ssb_dyn_y(nyear);
+  ssb_dyn_y.setZero();
+
   // --- LOOP OVER YEARS ---
   int y_first = 0;
   if(brp_only == 1) {
@@ -406,7 +541,7 @@ Type objective_function<Type>::operator() ()
     if(pop_model == 1) {
       N = pop_len_glq(node, quad_wt, LLB, Z, Galpha, Gbeta);
 
-    } else if(pop_model == 2) {
+    } else if(pop_model == 2 || pop_model == 3) {
       matrix<Type> ZKL(nlen + 1, ngtg);
       ZKL.setZero();
 
@@ -442,9 +577,15 @@ Type objective_function<Type>::operator() ()
       spr_y(y) = Type(0);
     }
 
+    if(pop_model == 3 && spr0 > Type(0)) {
+      Type sbd = Type(0);
+      for(int l = 0; l < nlen; l++) sbd += Nmid(l,y) * mat(l,y) * wt(l,y);
+      ssb_dyn_y(y) = sbd / spr0;
+    }
+
     for(int g = 0; g < ngear; g++) {
       for(int l = 0; l < nlen; l++) {
-        Cpred(l,g) = N(l) * F_len(l,g);
+        Cpred(l,g) = ((pop_model == 3) ? Ndyn(l,y) : N(l)) * F_len(l,g);
         pred_gear(g) += Cpred(l,g);
         obs_gear(g)  += obs(l,y,g);
       }
@@ -782,6 +923,13 @@ Type objective_function<Type>::operator() ()
       for(int y = 1; y < nyear; y++) {
         nll -= dnorm(log_Fk(y,g), log_Fk(y-1,g), sigmaF, true);
       }
+      // gtg.dyn: the walk extends back over the pre-data years
+      if(pop_model == 3 && dyn_npre > 0) {
+        for(int k = 1; k < dyn_npre; k++) {
+          nll -= dnorm(log_Fpre(k,g), log_Fpre(k-1,g), sigmaF, true);
+        }
+        nll -= dnorm(log_Fk(0,g), log_Fpre(dyn_npre-1,g), sigmaF, true);
+      }
     }
 
     // optional prior on sigmaF (prior_sigmaF_sd <= 0: none, e.g. when F is a
@@ -789,6 +937,18 @@ Type objective_function<Type>::operator() ()
     if(prior_sigmaF_sd > Type(0)) {
       nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
     }
+  }
+
+  // gtg.dyn recruitment deviations: penalty, or random-effect density (R_re)
+  Type sigmaR = exp(log_sigmaR);
+  if(pop_model == 3 && dyn_rmode > 0) {
+    int nR = log_Rdev.size();
+    if(dyn_rmode == 1) {
+      for(int k = 0; k < nR; k++) nll -= dnorm(log_Rdev(k), Type(0), sigmaR, true);
+    } else {
+      for(int k = 1; k < nR; k++) nll -= dnorm(log_Rdev(k), log_Rdev(k-1), sigmaR, true);
+    }
+    if(prior_sigmaR(2) > Type(0)) nll -= dnorm(log_sigmaR, prior_sigmaR(0), prior_sigmaR(1), true);
   }
 
   // --- NORMAL PRIOR PENALTIES ---
@@ -837,6 +997,15 @@ Type objective_function<Type>::operator() ()
   REPORT(gtgLinfs);   // GTG Linf groups at the estimates (pop_model = "gtg")
   REPORT(recP);
   REPORT(MKMat);      // (nlen + 1) x ngtg M/K used in GTG survival
+  if(pop_model == 3) {
+    matrix<Type> Fpre = log_Fpre.array().exp().matrix();
+    vector<Type> Rdev = exp(log_Rdev);
+    REPORT(Ndyn);       // nlen x nyear dynamic numbers (annual mean, K-time units)
+    REPORT(ssb_dyn_y);  // dynamic SSB (mid-year) / unfished, per mean recruit
+    REPORT(Fpre);       // dyn_npre x ngear, natural scale (F / k)
+    REPORT(Rdev);       // dyn_npre + nyear recruitment multipliers
+    REPORT(sigmaR);
+  }
 
 
 

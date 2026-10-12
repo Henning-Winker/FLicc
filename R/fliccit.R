@@ -42,6 +42,7 @@ pop_model_flicc <- function(fit) {
   switch(as.character(code),
          "1" = "gamma",
          "2" = "gtg",
+         "3" = "gtg.dyn",
          stop("Unknown pop_model code in fit$tmb_data$pop_model")
   )
 }
@@ -339,7 +340,7 @@ nf_from_flicc <- function(fit,
       return_surv = return_surv
     )
 
-  } else if (pop_model == "gtg") {
+  } else if (pop_model %in% c("gtg", "gtg.dyn")) {
 
     td <- fit$tmb_data
     if (is.null(td$cut_bin)) td$cut_bin <- -1L                    # fits before tail_cut

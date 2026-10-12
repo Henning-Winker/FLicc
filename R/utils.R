@@ -273,7 +273,7 @@ as_FLQuants <- function(fit,stklen) {
     par_list$Gbeta  <- report$Gbeta
   }
 
-  if (pop_model == "gtg") {
+  if (pop_model %in% c("gtg", "gtg.dyn")) {
     if (!is.null(report$CVL))     par_list$CVL   <- report$CVL
     if (!is.null(tmb_data$ngtg))  par_list$ngtg  <- tmb_data$ngtg
     if (!is.null(fit$settings$maxsd)) par_list$maxsd <- fit$settings$maxsd
@@ -300,11 +300,29 @@ as_FLQuants <- function(fit,stklen) {
     out$Fspr <- stats::setNames(fs, paste0("Fspr", out$spr_ref))
     out$Nspr <- report$brp_Nspr
   }
-  if (pop_model == "gtg") {
+  if (pop_model %in% c("gtg", "gtg.dyn")) {
     # GTG inputs at the estimates, used by nf_from_flicc() and reference points
     out$gtgLinfs <- report$gtgLinfs
     out$recP     <- report$recP
     out$MKMat    <- report$MKMat
+  }
+  if (pop_model == "gtg.dyn" && !is.null(report$Ndyn)) {
+    npre <- as.integer(tmb_data$dyn_npre)
+    yall <- c(if (npre > 0) yrs[1] - rev(seq_len(npre)), yrs)
+    dn <- function(len, year) list(len = len, year = year, unit = "unique", season = "all",
+                                   area = "unique", iter = "1")
+    # dynamic numbers-at-length (annual mean over the observation times)
+    out$Ndyn <- FLCore::FLQuant(report$Ndyn, dimnames = dn(lens, yrs))
+    # dynamic SSB (mid-year) relative to unfished, per mean recruitment
+    out$ssb_dyn <- FLCore::FLQuant(as.numeric(report$ssb_dyn_y), dimnames = dn("all", yrs))
+    # recruitment multipliers (model years incl. pre-data years)
+    out$rec_dev <- FLCore::FLQuant(as.numeric(report$Rdev), dimnames = dn("all", yall))
+    out$sigmaR <- as.numeric(report$sigmaR)
+    if (npre > 0) {
+      out$Fpre <- FLCore::FLQuants(lapply(seq_along(gears), function(g)
+        FLCore::FLQuant(as.numeric(report$Fpre[, g]) * k, dimnames = dn("all", head(yall, npre)))))
+      names(out$Fpre) <- gears
+    }
   }
   out$logLik <- -fit$opt$objective
   out$pop_model <- pop_model

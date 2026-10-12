@@ -47,8 +47,17 @@ Must sum to 1.}
 \describe{
 \item{\code{pop_model}}{Population model. Options are:
 \code{"gtg"} (default), a growth-type-group approximation inspired
-by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
-growth formulation.}
+by LBSPR, \code{"gamma"}, the original FLicc/BLICC continuous
+growth formulation, and \code{"gtg.dyn"}, a dynamic version of
+\code{"gtg"}: each year's length composition follows from the history of
+F (random walk, extended back \code{dyn_npre} years) and recruitment,
+without an age dimension. Status (SPR) remains the equilibrium SPR at the
+year's F; dynamic numbers and SSB are reported in addition. gtg.dyn settings:
+\code{dyn_npre} (10), \code{dyn_rec} ("iid", "rw", "none"), \code{R_re}
+(TRUE: recruitment deviations as random effects), \code{sigmaR} (fixed
+value), \code{prior_sigmaR} (c(log(0.5), 0.5, 1)), \code{dyn_nq} (1),
+\code{dyn_db} (0.5), \code{dyn_h} (4), \code{dyn_Tcap}, \code{dyn_start}
+(TRUE). Growth must be fixed.}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
   \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
