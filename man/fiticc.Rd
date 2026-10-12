@@ -57,7 +57,8 @@ year's F; dynamic numbers and SSB are reported in addition. gtg.dyn settings:
 (TRUE: recruitment deviations as random effects), \code{sigmaR} (fixed
 value), \code{prior_sigmaR} (c(log(0.5), 0.5, 1)), \code{dyn_nq} (1),
 \code{dyn_db} (0.5), \code{dyn_h} (4), \code{dyn_Tcap}, \code{dyn_start}
-(TRUE). Growth must be fixed.}
+(TRUE). For gtg.dyn, sigmaF is fixed at 0.3 unless \code{sigmaF} is given
+or \code{F_re = TRUE}. Growth must be fixed.}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
   \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),

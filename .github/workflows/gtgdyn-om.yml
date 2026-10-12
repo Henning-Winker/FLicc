@@ -1,0 +1,58 @@
+# gtg vs gtg.dyn on OM-like simulations (ci/gtgdyn_om). Runs on pushes to
+# dev-gtgdyn that touch ci/gtgdyn_om, src or R; results are pushed to
+# ci-out/gtgdyn-om every 3 minutes while running.
+name: gtgdyn-om
+
+on:
+  push:
+    branches: ['dev-gtgdyn']
+    paths: ['ci/gtgdyn_om/**', 'src/**', 'R/**', '.github/workflows/gtgdyn-om.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gtgdyn-om
+  cancel-in-progress: true
+
+jobs:
+  om:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+      - name: Cache R packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.R_LIBS_USER }}
+          key: rlib-${{ runner.os }}-${{ hashFiles('DESCRIPTION') }}-v1
+          restore-keys: rlib-${{ runner.os }}-
+      - name: Install dependencies
+        run: |
+          Rscript -e 'pk <- c("remotes","TMB","RcppEigen","statmod","doFuture","progressr","scales","ggplot2","foreach","future");
+                      miss <- pk[!pk %in% rownames(installed.packages())]; if (length(miss)) install.packages(miss)'
+          Rscript -e 'for (p in c("FLCore","ggplotFL")) if (!requireNamespace(p, quietly = TRUE)) remotes::install_github(paste0("flr/", p), upgrade = "never")'
+      - name: Build FLicc
+        run: R CMD INSTALL . > build.log 2>&1 || (tail -50 build.log; exit 1)
+      - name: Run (results pushed to ci-out/gtgdyn-om every 3 min)
+        shell: bash {0}
+        run: |
+          mkdir -p out pub
+          publish() {
+            rm -rf pub/* && for f in out/*.log out/*.csv out/*.md out/*.txt; do [ -f "$f" ] && cp "$f" pub/; done
+            echo "$1" > pub/state.txt
+            ( cd pub && rm -rf .git && git init -q && git checkout -q -b ci-out/gtgdyn-om &&
+              git config user.name flicc-ci && git config user.email flicc-ci@users.noreply.github.com &&
+              git add -A && git commit -qm "gtgdyn OM trial @ ${GITHUB_SHA::7} ($1)" &&
+              git push -qf "https://x-access-token:${GITHUB_PAT}@github.com/${GITHUB_REPOSITORY}.git" ci-out/gtgdyn-om )
+          }
+          ( Rscript ci/gtgdyn_om/run_om_trial.R ci/gtgdyn_om out 8 > out/console.log 2>&1; echo "status=$?" > out/status.txt ) &
+          pid=$!
+          while kill -0 $pid 2>/dev/null; do sleep 180; publish running; done
+          publish finished

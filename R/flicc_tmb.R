@@ -664,6 +664,10 @@ fiticc_core <- function(lfd, stklen,
   }
   is_dyn <- settings$pop_model == "gtg.dyn"
   if (is_dyn) {
+    # sigmaF fixed by default: estimated as a penalised fixed effect it
+    # collapses towards 0 (each pre-data F step adds -log(sigmaF) with no data
+    # to resist), flattening F. Estimated only with F_re = TRUE.
+    if (is.null(settings$sigmaF) && !isTRUE(settings$F_re)) settings$sigmaF <- 0.3
     if (!is.null(settings$linf.sd) || !is.null(settings$CVL.sd)) {
       stop("pop_model = 'gtg.dyn' needs fixed growth: linf.sd and CVL.sd must be NULL ",
            "(ages at length are data in the dynamic model).")
@@ -1073,6 +1077,8 @@ fiticc_core <- function(lfd, stklen,
 #'       as random effects with sigmaR estimated (Laplace), \code{FALSE} as a
 #'       penalty; \code{sigmaR} fixes sigmaR (fast route, e.g. in an MSE);
 #'       \code{prior_sigmaR = c(mean, sd, use)} weak prior on log(sigmaR),
+#'       sigmaF is fixed at 0.3 for gtg.dyn unless \code{sigmaF} is given or
+#'       \code{F_re = TRUE} (estimated as a penalised fixed effect it collapses);
 #'       default \code{c(log(0.5), 0.5, 1)}; numerical settings
 #'       \code{dyn_nq} (observation times per year, 1), \code{dyn_db}
 #'       (birth-time grid step in years, 0.5), \code{dyn_h} (quadrature panel
