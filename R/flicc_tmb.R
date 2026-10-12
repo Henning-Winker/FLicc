@@ -326,6 +326,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     dyn_nbg      = dyn$nbg,
     dyn_rmode    = dyn$rmode,
     prior_sigmaR = dyn$prior_sigmaR,
+    dyn_s        = as.numeric(if (is.null(settings$dyn_s)) 0.75 else settings$dyn_s),
     dyn_catch_on = as.integer(catch_on),
     dyn_cobs     = dyn_cobs,
     dyn_catch_cv = if (catch_on) as.numeric(settings$catch_cv) else 0.1,
@@ -491,8 +492,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @keywords internal
 dyn_inputs_flicc <- function(LBins, Linf, CVL, gtg_z, k, M, nyear, settings, on = TRUE) {
   rmode <- switch(if (is.null(settings$dyn_rec)) "iid" else settings$dyn_rec,
-                  none = 0L, iid = 1L, rw = 2L,
-                  stop("settings$dyn_rec must be 'none', 'iid' or 'rw'"))
+                  none = 0L, iid = 1L, rw = 2L, bh = 3L,
+                  stop("settings$dyn_rec must be 'none', 'iid', 'rw' or 'bh'"))
   pS <- settings$prior_sigmaR
   prior_sigmaR <- if (is.null(pS) || isTRUE(any(pS == FALSE, na.rm = TRUE)) || length(pS) < 3) c(log(0.5), 0, 0) else as.numeric(pS)
   if (!is.finite(prior_sigmaR[2]) || prior_sigmaR[2] <= 0) prior_sigmaR[2:3] <- 0
@@ -661,6 +662,7 @@ fiticc_core <- function(lfd, stklen,
     dyn_h = 4,
     dyn_Tcap = NULL,
     dyn_start = TRUE,
+    dyn_s = 0.75,
     catch_cv = NULL
   )
   # ---- merge user settings with defaults ----
@@ -1124,6 +1126,13 @@ fiticc_core <- function(lfd, stklen,
 #'       each group's Linf, default \code{max(40, 7 / M)}); \code{dyn_start}
 #'       (default \code{TRUE}) starts from the equilibrium \code{gtg} fit.
 #'       Growth must be fixed (\code{linf.sd} and \code{CVL.sd} \code{NULL}).}
+#'
+#'     \item{\code{dyn_rec = "bh"}, \code{dyn_s}}{gtg.dyn recruitment from a
+#'       Beverton-Holt relationship with steepness \code{dyn_s} (default 0.75)
+#'       on the model's own dynamic SSB (relative to unfished), times log
+#'       deviations; the stock starts at equilibrium at the first model year's
+#'       F. Reports \code{dep} (SSB/SSB0). Anchors recruitment trends to the F
+#'       history, which identifies the F level when catch is used.}
 #'
 #'     \item{\code{catch_cv}}{gtg.dyn only. If given (e.g. 0.1), \code{catch_by_gear}
 #'       is read as absolute catch weight by gear (\code{FLQuants}, may cover

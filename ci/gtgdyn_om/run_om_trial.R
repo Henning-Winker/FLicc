@@ -22,12 +22,14 @@ base_set <- list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3)
 models <- list(
   gtg        = base_set,
   dyn        = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE)),
-  # recruitment as a random walk (can follow the Beverton-Holt rise during recovery)
   dyn_Rrw    = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE)),
-  dyn_Rrw_catch10 = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE,
-                                              catch_cv = 0.1)),
-  dyn_Rrw_catchAll = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE,
-                                               catch_cv = 0.1, dyn_npre = "catch"))
+  # Beverton-Holt recruitment (steepness 0.75, as the OM) on the dynamic SSB
+  dyn_BH     = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "bh", dyn_s = 0.75,
+                                         sigmaR = 0.5, R_re = FALSE)),
+  dyn_BH_catch10  = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "bh", dyn_s = 0.75,
+                                              sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1)),
+  dyn_BH_catchAll = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "bh", dyn_s = 0.75,
+                                              sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1, dyn_npre = "catch"))
 )
 lh <- om_lh
 lhpar <- FLPar(linf = lh$linf, k = lh$k, M = lh$M, L50 = lh$linf * (1 - exp(-lh$k * (lh$tm - lh$t0))),

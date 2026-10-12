@@ -135,5 +135,26 @@ fa <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c
                              catch_cv = 0.1, dyn_npre = "catch"), se = FALSE)
 stopifnot(fa$tmb_data$dyn_npre == 10)
 
+## Beverton-Holt recruitment: steepness 1 = constant recruitment (exact at zero deviations)
+tdb <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, c("dsnormal", "logistic"), cbgq,
+              settings = list(CVL = 0.1, GL = 30, pop_model = "gtg.dyn", dyn_rec = "bh", dyn_s = 1)))
+tdi <- add_rw(FLicc:::data_tmb_flicc(lfd, stklen, c("dsnormal", "logistic"), cbgq,
+              settings = list(CVL = 0.1, GL = 30, pop_model = "gtg.dyn", dyn_rec = "iid")))
+pb <- FLicc:::init_tmb_flicc(tdb); pb[c("Sm", "log_Mk", "log_phi")] <- p0[c("Sm", "log_Mk", "log_phi")]
+pb$log_Fk[] <- p0$log_Fk; pb$log_Fpre[] <- rep(p0$log_Fk[1, ], each = nrow(pb$log_Fpre))
+d_bh <- max(abs(rep_at(tdb, pb)$plen - rep_at(tdi, pb)$plen))
+cat(sprintf("\nBH with s = 1 vs constant recruitment: max diff %.1e\n", d_bh))
+stopifnot(d_bh < 1e-10)
+tdb$dyn_s <- 0.75
+rb <- rep_at(tdb, pb)
+cat("BH s = 0.75: SSB/SSB0 by year:", round(rb$dep_y, 3), "\n")
+cat("recruitment relative to R0:", round(rb$Rdev, 3), "\n")
+fb <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cq,
+             settings = list(CVL = 0.1, obs_model = "dm", pop_model = "gtg.dyn", dyn_rec = "bh",
+                             sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1), se = FALSE)
+cat(sprintf("BH + catch fit: conv %d, R0 %.3g, last SPR %.3f, last SSB/SSB0 %.3f\n", fb$opt$convergence,
+            fb$report$R0, tail(c(fb$report$spr), 1), tail(c(fb$report$dep), 1)))
+stopifnot(fb$opt$convergence == 0, !is.null(fb$report$dep))
+
 print(summary(warnings()))
 cat("\ngtg.dyn tests passed\n")

@@ -318,6 +318,7 @@ as_FLQuants <- function(fit,stklen) {
     # recruitment multipliers (model years incl. pre-data years)
     out$rec_dev <- FLCore::FLQuant(as.numeric(report$Rdev), dimnames = dn("all", yall))
     out$sigmaR <- as.numeric(report$sigmaR)
+    if (!is.null(report$dep_y)) out$dep <- FLCore::FLQuant(as.numeric(report$dep_y), dimnames = dn("all", yrs))
     if (!is.null(report$catch_pred)) {
       out$catch_pred <- FLCore::FLQuants(lapply(seq_along(gears), function(g)
         FLCore::FLQuant(as.numeric(report$catch_pred[, g]), dimnames = dn("all", yall))))

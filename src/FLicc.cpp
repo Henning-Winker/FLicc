@@ -292,6 +292,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(dyn_nbg);     // number of grid points
   DATA_INTEGER(dyn_rmode);   // recruitment: 0 constant, 1 iid deviations, 2 random walk
   DATA_VECTOR(prior_sigmaR); // log mean, sd, use
+  DATA_SCALAR(dyn_s);          // Beverton-Holt steepness (dyn_rmode 3)
   DATA_INTEGER(dyn_catch_on);  // 1: absolute catch by gear in the likelihood
   DATA_MATRIX(dyn_cobs);       // (dyn_npre + nyear) x ngear catch weight (<= 0: missing)
   DATA_SCALAR(dyn_catch_cv);   // lognormal sd of catch
@@ -413,6 +414,11 @@ Type objective_function<Type>::operator() ()
   Nmid.setZero();
   matrix<Type> catch_pred(nFd, ngear);
   catch_pred.setZero();
+  vector<Type> logRv(nFd);
+  logRv.setZero();
+  Type linit = Type(0);
+  vector<Type> dep_y(nyear);
+  dep_y.setZero();
   if (pop_model == 3 && brp_only == 0) {
     Type kk = brp_k;
     int nn = dyn_node_g.size(), nq = dyn_tq.size();
@@ -442,15 +448,21 @@ Type objective_function<Type>::operator() ()
       int k = (int) std::floor(t);
       return cumFL(k, l) + FLa(k, l) * (t - k);
     };
-    // log recruitment deviation at time b (linear between year mid-points)
+    // log recruitment (relative to R0) at time b, linear between year
+    // mid-points; dyn_rmode 1/2: log_Rdev; 3: Beverton-Holt from the dynamic
+    // SSB times deviations, filled year by year (kfill years known; linit
+    // before the first model year)
+    for (int k = 0; k < nFd; k++) logRv(k) = (dyn_rmode == 0) ? Type(0) : log_Rdev(k);
+    int kfill = nFd;
     auto logr = [&](double b) -> Type {
       if (dyn_rmode == 0) return Type(0);
+      if (dyn_rmode == 3 && (b < 0.0 || kfill <= 0)) return linit;
       double u = b - 0.5;
-      if (u <= 0.0) return log_Rdev(0);
-      if (u >= nFd - 1) return log_Rdev(nFd - 1);
+      if (u <= 0.0) return logRv(0);
+      if (u >= kfill - 1) return logRv(kfill - 1);
       int k = (int) std::floor(u);
       double fr = u - k;
-      return (1.0 - fr) * log_Rdev(k) + fr * log_Rdev(k + 1);
+      return (1.0 - fr) * logRv(k) + fr * logRv(k + 1);
     };
     // annual natural mortality by bin and cumulative to each boundary
     vector<Type> Mann(nlen);
@@ -500,6 +512,38 @@ Type objective_function<Type>::operator() ()
       }
       return Nt;
     };
+    // Beverton-Holt recruitment from the dynamic SSB (start of year), relative
+    // to R0: R = 4 s S / ((1 - s) + (5 s - 1) S), S = SSB / SSB0 per R0;
+    // before the first model year the stock is at equilibrium at that year's F
+    if (dyn_rmode == 3) {
+      Type sb0 = Type(0);
+      for (int l = 0; l < nlen; l++) sb0 += N0(l) / kk * mat(l, 0) * wt(l, 0);
+      matrix<Type> ZKLf(nlen + 1, ngtg);
+      for (int g = 0; g < ngtg; g++) {
+        for (int l = 0; l < nlen; l++) ZKLf(l, g) = MKMat(l, g) * Mscaler(l, 0) + FLa(0, l) / kk;
+        ZKLf(nlen, g) = MKMat(nlen, g) * Mscaler(nlen - 1, 0) + FLa(0, nlen - 1) / kk;
+      }
+      vector<Type> Neq = pop_len_gtg(LLB, gtgLinfs, ZKLf, recP);
+      Type seq = Type(0), s0 = Type(0);
+      for (int l = 0; l < nlen; l++) { seq += Neq(l) * mat(l, 0) * wt(l, 0); s0 += N0(l) * mat(l, 0) * wt(l, 0); }
+      Type Seq = seq / s0;
+      Type Rinit = (Type(4) * dyn_s * Seq - (Type(1) - dyn_s)) / ((Type(5) * dyn_s - Type(1)) * Seq);
+      Rinit = FLICC_CONDEXPLE(Rinit, Type(1e-3), Type(1e-3), Rinit);
+      linit = log(Rinit);
+      for (int k = 0; k < nFd; k++) {
+        kfill = k;
+        vector<Type> Nk = dynN(double(k));
+        int yw = (k < dyn_npre) ? 0 : k - dyn_npre;
+        Type sb = Type(0);
+        for (int l = 0; l < nlen; l++) sb += Nk(l) * mat(l, yw) * wt(l, yw);
+        Type S = sb / sb0;
+        if (k >= dyn_npre) dep_y(k - dyn_npre) = S;
+        Type Rbh = Type(4) * dyn_s * S / ((Type(1) - dyn_s) + (Type(5) * dyn_s - Type(1)) * S);
+        logRv(k) = log(Rbh) + log_Rdev(k);
+      }
+      kfill = nFd;
+    }
+
     for (int k = 0; k < nFd; k++) {
       int y = k - dyn_npre;
       bool has_c = false;
@@ -975,7 +1019,7 @@ Type objective_function<Type>::operator() ()
   Type sigmaR = exp(log_sigmaR);
   if(pop_model == 3 && dyn_rmode > 0) {
     int nR = log_Rdev.size();
-    if(dyn_rmode == 1) {
+    if(dyn_rmode == 1 || dyn_rmode == 3) {
       for(int k = 0; k < nR; k++) nll -= dnorm(log_Rdev(k), Type(0), sigmaR, true);
     } else {
       for(int k = 1; k < nR; k++) nll -= dnorm(log_Rdev(k), log_Rdev(k-1), sigmaR, true);
@@ -1031,12 +1075,13 @@ Type objective_function<Type>::operator() ()
   REPORT(MKMat);      // (nlen + 1) x ngtg M/K used in GTG survival
   if(pop_model == 3) {
     matrix<Type> Fpre = log_Fpre.array().exp().matrix();
-    vector<Type> Rdev = exp(log_Rdev);
+    vector<Type> Rdev = exp(logRv);  // recruitment relative to R0 (incl. BH)
     REPORT(Ndyn);       // nlen x nyear dynamic numbers (annual mean, K-time units)
     REPORT(ssb_dyn_y);  // dynamic SSB (mid-year) / unfished, per mean recruit
     REPORT(Fpre);       // dyn_npre x ngear, natural scale (F / k)
     REPORT(Rdev);       // dyn_npre + nyear recruitment multipliers
     REPORT(sigmaR);
+    if(dyn_rmode == 3) REPORT(dep_y);   // SSB / SSB0 at the start of each data year (BH)
     if(dyn_catch_on == 1) {
       Type R0 = exp(log_R0);
       REPORT(catch_pred);   // (dyn_npre + nyear) x ngear predicted catch weight

@@ -62,7 +62,8 @@ or \code{F_re = TRUE}. Growth must be fixed. \code{catch_cv} (gtg.dyn): if
 given, \code{catch_by_gear} is absolute catch weight by gear (may cover years
 before the length data) in a lognormal likelihood with this CV and a
 recruitment scale R0; \code{dyn_npre = "catch"} extends the model back to the
-first catch year.}
+first catch year. \code{dyn_rec = "bh"} with steepness \code{dyn_s} (0.75):
+Beverton-Holt recruitment on the dynamic SSB (reports \code{dep}, SSB/SSB0).}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
   \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
