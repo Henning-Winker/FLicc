@@ -117,5 +117,23 @@ print(fs)
 lbi <- LBIspr(fd)
 print(lbi)
 stopifnot(is.finite(c(fs)[1]))
+## catch by gear in the likelihood (synthetic catch, years before the length data)
+yl <- as.numeric(dimnames(lfd[[1]])$year)
+cy <- (min(yl) - 10):max(yl)
+cq <- FLQuants(Trawl = FLQuant(700 * exp(0.05 * seq_along(cy)), dimnames = list(year = cy)),
+               Gillnet = FLQuant(300 * exp(0.05 * seq_along(cy)), dimnames = list(year = cy)))
+names(cq) <- names(lfd)
+t0 <- system.time(fc <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cq,
+                               settings = list(CVL = 0.1, obs_model = "dm", pop_model = "gtg.dyn",
+                                               sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1), se = FALSE))[["elapsed"]]
+cat(sprintf("\ncatch fit: %.1f s, conv %d, R0 %.3g\n", t0, fc$opt$convergence, fc$report$R0))
+print(round(rbind(obs = c(cq[[1]]), pred = c(fc$report$catch_pred[[1]])), 1))
+stopifnot(fc$opt$convergence == 0, is.finite(fc$report$R0),
+          length(c(fc$report$catch_pred[[1]])) == length(cy))
+fa <- fiticc(lfd, stklen, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cq,
+             settings = list(CVL = 0.1, obs_model = "dm", pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE,
+                             catch_cv = 0.1, dyn_npre = "catch"), se = FALSE)
+stopifnot(fa$tmb_data$dyn_npre == 10)
+
 print(summary(warnings()))
 cat("\ngtg.dyn tests passed\n")

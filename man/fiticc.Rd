@@ -58,7 +58,11 @@ year's F; dynamic numbers and SSB are reported in addition. gtg.dyn settings:
 value), \code{prior_sigmaR} (c(log(0.5), 0.5, 1)), \code{dyn_nq} (1),
 \code{dyn_db} (0.5), \code{dyn_h} (4), \code{dyn_Tcap}, \code{dyn_start}
 (TRUE). For gtg.dyn, sigmaF is fixed at 0.3 unless \code{sigmaF} is given
-or \code{F_re = TRUE}. Growth must be fixed.}
+or \code{F_re = TRUE}. Growth must be fixed. \code{catch_cv} (gtg.dyn): if
+given, \code{catch_by_gear} is absolute catch weight by gear (may cover years
+before the length data) in a lognormal likelihood with this CV and a
+recruitment scale R0; \code{dyn_npre = "catch"} extends the model back to the
+first catch year.}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
   \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),

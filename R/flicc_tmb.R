@@ -95,11 +95,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
 
   # catch weights by gear
-  catch_wt <- do.call(
+  catch_all <- do.call(
     cbind,
-    lapply(catch_by_gear, function(x) as.data.frame(x)$data)
+    lapply(catch_by_gear, function(x) as.numeric(x))
   )
-  rownames(catch_wt) <- dimnames(catch_by_gear[[1]])$year
+  rownames(catch_all) <- dimnames(catch_by_gear[[1]])$year
+  catch_wt <- if (all(as.character(years) %in% rownames(catch_all)) && nrow(catch_all) != nyear)
+    catch_all[as.character(years), , drop = FALSE] else catch_all
 
   catch_wt <- catch_wt / rowSums(catch_wt)
 
@@ -166,11 +168,27 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   LBins    <- c(LLB, tail(LLB, 1) + tail(step, 1))
   LBins_mk <- ifelse(LBins > 0, LBins, step[1] / 2)
 
+  # gtg.dyn with absolute catch in the likelihood (settings$catch_cv)
+  catch_on <- pop_model == "gtg.dyn" && !is.null(settings$catch_cv)
+  if (identical(settings$dyn_npre, "catch")) {
+    cy <- as.numeric(rownames(catch_all))[rowSums(catch_all, na.rm = TRUE) > 0]
+    settings$dyn_npre <- max(0, min(years) - min(cy))
+  }
+
   # gtg.dyn inputs (ages at the length boundaries, quadrature nodes, grid)
   dyn <- dyn_inputs_flicc(
     LBins = LBins, Linf = Linf_init, CVL = CVL_init, gtg_z = gtg_z,
     k = as.numeric(lhpar["k"]), M = Mk_init * as.numeric(lhpar["k"]),
     nyear = nyear, settings = settings, on = pop_model == "gtg.dyn")
+
+  dyn_cobs <- matrix(0, 0, 0)
+  if (catch_on) {
+    my <- as.character((min(years) - dyn$npre):max(years))
+    dyn_cobs <- catch_all[match(my, rownames(catch_all)), , drop = FALSE]
+    dyn_cobs[is.na(dyn_cobs) | dyn_cobs <= 0] <- -1
+    dyn_cobs <- unname(dyn_cobs)
+    if (all(dyn_cobs <= 0)) stop("settings$catch_cv given but catch_by_gear has no positive catch in the model years.")
+  }
 
   # SPR targets whose Fspr is computed at report time (not during fitting)
   spr_ref <- if (!is.null(settings$spr_ref)) as.numeric(settings$spr_ref) else 40
@@ -308,6 +326,9 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     dyn_nbg      = dyn$nbg,
     dyn_rmode    = dyn$rmode,
     prior_sigmaR = dyn$prior_sigmaR,
+    dyn_catch_on = as.integer(catch_on),
+    dyn_cobs     = dyn_cobs,
+    dyn_catch_cv = if (catch_on) as.numeric(settings$catch_cv) else 0.1,
     sel_type   = as.integer(sel_type),
     sm_start   = as.integer(sm_start),
     sm_n       = as.integer(sm_n),
@@ -445,7 +466,8 @@ init_tmb_flicc <- function(tmb_data) {
     log_sigmaF = tmb_data$prior_sigmaF_mean,
     log_Fpre   = log_Fpre,
     log_Rdev   = if (is_dyn) rep(0, npre + nyear) else numeric(0),
-    log_sigmaR = if (length(sR) && is.finite(sR[1])) sR[1] else log(0.5)
+    log_sigmaR = if (length(sR) && is.finite(sR[1])) sR[1] else log(0.5),
+    log_R0     = 0
   )
 }
 
@@ -638,7 +660,8 @@ fiticc_core <- function(lfd, stklen,
     dyn_db = 0.5,
     dyn_h = 4,
     dyn_Tcap = NULL,
-    dyn_start = TRUE
+    dyn_start = TRUE,
+    catch_cv = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -683,7 +706,7 @@ fiticc_core <- function(lfd, stklen,
     stop("settings$obs_model must be 'nb', 'mn', or 'dm'")
   }
 
-  unknown <- setdiff(names(settings), c(names(default_settings), "dyn_Tcap", "sigmaR", "linf.sd", "Mk.sd", "CVL.sd", "Lplus", "tail_cut"))
+  unknown <- setdiff(names(settings), c(names(default_settings), "dyn_Tcap", "sigmaR", "linf.sd", "Mk.sd", "CVL.sd", "Lplus", "tail_cut", "catch_cv"))
   if (length(unknown) > 0) {
     stop("Unknown settings: ", paste(unknown, collapse = ", "))
   }
@@ -706,6 +729,9 @@ fiticc_core <- function(lfd, stklen,
   },x=lfd_i,y=catch_by_gear))
 
  }
+
+  catch_by_gear <- FLCore::FLQuants(lapply(catch_by_gear, function(x)
+    if (dim(x)[6] > 1) FLCore::iter(x, iter) else x))
 
   tmb_data <- data_tmb_flicc(
     lfd = lfd_i,
@@ -796,6 +822,7 @@ fiticc_core <- function(lfd, stklen,
     if (length(parameters$log_Rdev)) map$log_Rdev <- factor(rep(NA, length(parameters$log_Rdev)))
     map$log_sigmaR <- factor(NA)
   }
+  if (!isTRUE(tmb_data$dyn_catch_on == 1L)) map$log_R0 <- factor(NA)
   if (is_dyn && !rw_on && length(parameters$log_Fpre)) {
     map$log_Fpre <- factor(rep(NA, length(parameters$log_Fpre)))
   }
@@ -832,7 +859,7 @@ fiticc_core <- function(lfd, stklen,
     dyn.load(dynlib("src/FLicc"))
   }
 
-  obj <- TMB::MakeADFun(
+  mk_obj <- function(parameters) TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
                             c("gear_names", "year_names",
                               "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
@@ -842,6 +869,17 @@ fiticc_core <- function(lfd, stklen,
     DLL = dll,
     silent = silent
   )
+  obj <- mk_obj(parameters)
+
+  # gtg.dyn with catch: start R0 so that predicted catch matches on average
+  if (isTRUE(tmb_data$dyn_catch_on == 1L) && is.null(start)) {
+    cp <- obj$report()$catch_pred; co <- tmb_data$dyn_cobs
+    ok <- co > 0 & cp > 0
+    if (any(ok)) {
+      parameters$log_R0 <- log(sum(co[ok]) / sum(cp[ok]))
+      obj <- mk_obj(parameters)
+    }
+  }
 
   # Optional restart from user-supplied starting values.
   # This is useful for reducing gradients by restarting from a previous optimum,
@@ -1086,6 +1124,14 @@ fiticc_core <- function(lfd, stklen,
 #'       each group's Linf, default \code{max(40, 7 / M)}); \code{dyn_start}
 #'       (default \code{TRUE}) starts from the equilibrium \code{gtg} fit.
 #'       Growth must be fixed (\code{linf.sd} and \code{CVL.sd} \code{NULL}).}
+#'
+#'     \item{\code{catch_cv}}{gtg.dyn only. If given (e.g. 0.1), \code{catch_by_gear}
+#'       is read as absolute catch weight by gear (\code{FLQuants}, may cover
+#'       years before the length data) and enters a lognormal likelihood with
+#'       this CV and one recruitment scale R0; the soft constraint on catch
+#'       shares is then not used. \code{dyn_npre = "catch"} extends the model
+#'       back to the first year with catch. Constant under-reporting is absorbed
+#'       by R0; a trend in under-reporting is not.}
 #'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become

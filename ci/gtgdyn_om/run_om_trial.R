@@ -23,7 +23,12 @@ models <- list(
   gtg        = base_set,
   dyn        = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE)),
   dyn_noR    = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "none")),
-  dyn_npre25 = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, dyn_npre = 25))
+  dyn_npre25 = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, dyn_npre = 25)),
+  # absolute catch by gear (lognormal error CV 0.1), from 10 years before the
+  # length data, or the full series from 1971 (dyn_npre = "catch")
+  dyn_catch10  = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1)),
+  dyn_catchAll = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1,
+                                           dyn_npre = "catch"))
 )
 lh <- om_lh
 lhpar <- FLPar(linf = lh$linf, k = lh$k, M = lh$M, L50 = lh$linf * (1 - exp(-lh$k * (lh$tm - lh$t0))),
@@ -40,9 +45,13 @@ for (sn in names(scen)) {
     stk <- stocklen(lfd, lhpar, m_model = "constant")
     kd <- match(sim$data_years, sim$years)
     cbg <- colSums(sim$catch_w[kd, , drop = FALSE]); cbg <- cbg / sum(cbg)
+    cobs <- sim$catch_w * exp(matrix(rnorm(length(sim$catch_w), 0, 0.1) - 0.005, nrow(sim$catch_w)))
+    cq <- FLQuants(lapply(colnames(cobs), function(g) FLQuant(cobs[, g], dimnames = list(year = sim$years))))
+    names(cq) <- colnames(cobs)
     for (mn in names(models)) {
       t0 <- Sys.time()
-      f <- tryCatch(fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+      cin <- if (is.null(models[[mn]]$catch_cv)) cbg else cq
+      f <- tryCatch(fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cin,
                            settings = models[[mn]], se = FALSE),
                     error = function(e) { say("ERROR %s %d %s: %s", sn, it, mn, conditionMessage(e)); NULL })
       secs <- as.numeric(difftime(Sys.time(), t0, units = "secs"))

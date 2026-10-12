@@ -292,6 +292,9 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(dyn_nbg);     // number of grid points
   DATA_INTEGER(dyn_rmode);   // recruitment: 0 constant, 1 iid deviations, 2 random walk
   DATA_VECTOR(prior_sigmaR); // log mean, sd, use
+  DATA_INTEGER(dyn_catch_on);  // 1: absolute catch by gear in the likelihood
+  DATA_MATRIX(dyn_cobs);       // (dyn_npre + nyear) x ngear catch weight (<= 0: missing)
+  DATA_SCALAR(dyn_catch_cv);   // lognormal sd of catch
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -303,6 +306,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER_MATRIX(log_Fpre); // dyn_npre x ngear (gtg.dyn pre-data years)
   PARAMETER_VECTOR(log_Rdev); // dyn_npre + nyear (gtg.dyn), else length 0
   PARAMETER(log_sigmaR);
+  PARAMETER(log_R0);          // recruitment scale (catch likelihood)
 
   Type nll = 0.0;
 
@@ -407,6 +411,8 @@ Type objective_function<Type>::operator() ()
   Ndyn.setZero();
   matrix<Type> Nmid(nlen, nyear);
   Nmid.setZero();
+  matrix<Type> catch_pred(nFd, ngear);
+  catch_pred.setZero();
   if (pop_model == 3 && brp_only == 0) {
     Type kk = brp_k;
     int nn = dyn_node_g.size(), nq = dyn_tq.size();
@@ -494,16 +500,34 @@ Type objective_function<Type>::operator() ()
       }
       return Nt;
     };
-    for (int y = 0; y < nyear; y++) {
+    for (int k = 0; k < nFd; k++) {
+      int y = k - dyn_npre;
+      bool has_c = false;
+      if (dyn_catch_on == 1) for (int g = 0; g < ngear; g++) if (dyn_cobs(k, g) > 0) has_c = true;
+      if (y < 0 && !has_c) continue;
       vector<Type> Ny(nlen);
       Ny.setZero();
-      for (int q = 0; q < nq; q++) Ny += dynN(dyn_npre + y + asDouble(dyn_tq(q)));
+      for (int q = 0; q < nq; q++) Ny += dynN(k + asDouble(dyn_tq(q)));
       Ny /= Type(nq);
-      // K-time units, as the gtg recursion (N_gtg = k * N_years)
-      for (int l = 0; l < nlen; l++) Ndyn(l, y) = kk * Ny(l);
-      if (isDouble<Type>::value) {
-        vector<Type> Nm = dynN(dyn_npre + y + 0.5);
-        for (int l = 0; l < nlen; l++) Nmid(l, y) = kk * Nm(l);
+      if (y >= 0) {
+        // K-time units, as the gtg recursion (N_gtg = k * N_years)
+        for (int l = 0; l < nlen; l++) Ndyn(l, y) = kk * Ny(l);
+        if (isDouble<Type>::value) {
+          vector<Type> Nm = dynN(k + 0.5);
+          for (int l = 0; l < nlen; l++) Nmid(l, y) = kk * Nm(l);
+        }
+      }
+      if (has_c) {
+        // annual catch weight by gear: R0 * sum_l N(l) F_g(l) w(l) (per year)
+        int yw = (y < 0) ? 0 : y;
+        for (int g = 0; g < ngear; g++) {
+          Type lf = (k < dyn_npre) ? log_Fpre(k, g) : log_Fk(y, g);
+          Type cg = Type(0);
+          for (int l = 0; l < nlen; l++) cg += Ny(l) * kk * exp(lf) * Sel(l, g) * wt(l, yw);
+          cg *= exp(log_R0);
+          catch_pred(k, g) = cg;
+          if (dyn_cobs(k, g) > 0) nll -= dnorm(log(dyn_cobs(k, g)), log(cg), dyn_catch_cv, true);
+        }
       }
     }
   }
@@ -681,7 +705,8 @@ Type objective_function<Type>::operator() ()
 
 
     // soft constraint on predicted gear shares using relative catch
-    for(int g = 0; g < (ngear - 1); g++) {
+    // (not used when absolute catch enters the likelihood, gtg.dyn)
+    for(int g = 0; g < (ngear - 1) && dyn_catch_on == 0; g++) {
       if(pred_pgear(g) > Type(0) &&
          pred_pgear(ngear - 1) > Type(0) &&
          catch_wt(y,g) > Type(0) &&
@@ -1012,6 +1037,11 @@ Type objective_function<Type>::operator() ()
     REPORT(Fpre);       // dyn_npre x ngear, natural scale (F / k)
     REPORT(Rdev);       // dyn_npre + nyear recruitment multipliers
     REPORT(sigmaR);
+    if(dyn_catch_on == 1) {
+      Type R0 = exp(log_R0);
+      REPORT(catch_pred);   // (dyn_npre + nyear) x ngear predicted catch weight
+      REPORT(R0);
+    }
   }
 
 
