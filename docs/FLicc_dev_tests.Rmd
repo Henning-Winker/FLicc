@@ -356,5 +356,5 @@ cat(sum(checks$pass), "of", nrow(checks), "checks passed\n")
 
 ```{r stop-if-failed}
 if (!all(checks$pass))
-  stop("failed checks: ", paste(checks$section[!checks$pass], checks$label[!checks$pass], sep = ": ", collapse = " | "))
+  stop("failed checks: ", paste(checks$section[!checks$pass], checks$check[!checks$pass], sep = ": ", collapse = " | "))
 ```
