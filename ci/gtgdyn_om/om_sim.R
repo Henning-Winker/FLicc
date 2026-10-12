@@ -18,7 +18,8 @@
 om_lh <- list(linf = 55.662, k = 0.08, t0 = -1, M = 0.162, a = 3.24e-05, b = 2.932,
               tm = 6, h = 0.75)
 
-om_structure <- function(persist = FALSE, continuous = FALSE, lh = om_lh) {
+om_structure <- function(persist = FALSE, continuous = FALSE, lh = om_lh,
+                         gill = "logistic", gill_sdr = 20) {
   ages <- 0:20
   lb <- 5:67                                   # lower bounds, last bin plus group
   if (persist) {
@@ -44,7 +45,8 @@ om_structure <- function(persist = FALSE, continuous = FALSE, lh = om_lh) {
   lmid <- lb + 0.5
   sel_len <- list(
     Trawl   = { d <- lmid - 23.35; exp(-d^2 / (2 * ifelse(d < 0, 3.19, 11.22)^2)) },
-    Gillnet = 1 / (1 + exp(-log(19) * (lmid - 29.7) / (34.1 - 29.7))))
+    Gillnet = if (gill == "dome") { d <- lmid - 35.5; exp(-d^2 / (2 * ifelse(d < 0, 5, gill_sdr)^2)) }
+              else 1 / (1 + exp(-log(19) * (lmid - 29.7) / (34.1 - 29.7))))
   sel_len <- lapply(sel_len, function(s) s / max(s))
   f_mult <- c(Trawl = 0.9, Gillnet = 0.1)
   # selectivity of each cell by gear and conditional length distribution
@@ -59,6 +61,7 @@ om_structure <- function(persist = FALSE, continuous = FALSE, lh = om_lh) {
   })
   Fsel <- sweep(s_cell, 2, f_mult / scale_g, "*")   # F_cell,gear = Fbar * Fsel[, gear]
   list(cells = cells, lb = lb, P = P, cond = cond, Fsel = Fsel, ages = ages, lh = lh,
+       Fap = f_mult / scale_g,
        Fap = f_mult / scale_g,                    # gear apical F = Fbar * Fap (length selectivity max 1)
        gears = names(sel_len), nsub = nsub, ng = length(linf_g))
 }
@@ -95,6 +98,10 @@ om_fhist <- function(ny, Fmsy, shape = "fudc", fhi = 3, flo = 1.5, f0 = 0.2,
                      breaks = c(0.6, 0.8), sdF = 0.15, sdIter = 0.2) {
   if (shape == "flat") {
     m <- rep(flo, ny)
+  } else if (shape == "rebuild") {          # F falls from 3 x to 0.7 x Fmsy inside the data years
+    m <- approx(c(1, 36, 46, ny), c(f0, 3, 0.7, 0.7), xout = seq_len(ny))$y
+  } else if (shape == "decline") {          # F rises from 0.7 x to 2.5 x Fmsy inside the data years
+    m <- approx(c(1, 40, 48, ny), c(f0, 0.7, 2.5, 2.5), xout = seq_len(ny))$y
   } else {
     i <- seq_len(ny); b1 <- round(breaks[1] * ny); b2 <- round(breaks[2] * ny)
     m <- approx(c(1, b1, b2, ny), c(f0, fhi, flo, flo), xout = i)$y
