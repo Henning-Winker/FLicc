@@ -355,6 +355,6 @@ cat(sum(checks$pass), "of", nrow(checks), "checks passed\n")
 ```
 
 ```{r stop-if-failed}
-if (!all(checks$pass)) print(checks[!checks$pass, ])
-stopifnot("some checks failed - see the table above" = all(checks$pass))
+if (!all(checks$pass))
+  stop("failed checks: ", paste(checks$section[!checks$pass], checks$check[!checks$pass], sep = ": ", collapse = " | "))
 ```
