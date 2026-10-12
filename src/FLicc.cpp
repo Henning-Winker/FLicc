@@ -1,5 +1,12 @@
 #include <TMB.hpp>
 
+// AD framework: TMBad (src/Makevars) or CppAD
+#ifdef TMBAD_FRAMEWORK
+#define FLICC_CONDEXPLE TMBad::CondExpLe
+#else
+#define FLICC_CONDEXPLE CppAD::CondExpLe
+#endif
+
 // ---------------------------------------------------------
 // Selectivity (unchanged)
 // ---------------------------------------------------------
@@ -189,8 +196,8 @@ vector<Type> pop_len_gtg(const vector<Type>& LLB,
 
       // AD-safe floor: gtgLinfs depend on estimated Linf and CVL, so a plain
       // if() would be frozen at the values used when the tape was recorded.
-      num = CppAD::CondExpLe(num, Type(1e-12), Type(1e-12), num);
-      den = CppAD::CondExpLe(den, Type(1e-12), Type(1e-12), den);
+      num = FLICC_CONDEXPLE(num, Type(1e-12), Type(1e-12), num);
+      den = FLICC_CONDEXPLE(den, Type(1e-12), Type(1e-12), den);
 
       NPRFished(l, g) =
         NPRFished(l - 1, g) * pow(num / den, ZKLMat(l - 1, g));
