@@ -16,7 +16,8 @@ params:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center")
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, fig.align = "center",
+                      eval = file.exists(params$rdata))   # code only if the OM inputs are missing
 ```
 
 # Purpose
