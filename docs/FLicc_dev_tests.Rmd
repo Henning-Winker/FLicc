@@ -92,16 +92,17 @@ check("Defaults", "F is not a random effect by default", !isTRUE(fit_def$mn$F_re
 
 ## What it does
 
-`tail_cut = x` excludes length bins with lower bound $\geq x \cdot L_\infty$
-(input $L_\infty$, fixed during estimation) from the composition likelihood.
+`tail_cut = L` excludes length bins with lower bound $\geq L$ (an absolute
+length, as `Lplus`, so the same bins are used whatever $L_\infty$ is assumed)
+from the composition likelihood.
 Observed and predicted compositions are truncated and the predicted proportions
 renormalised over the retained bins, so the comparison is conditional on
-$L < x \cdot L_\infty$. Unlike `Lplus`, which pools the largest fish into one bin,
+$L < L_{cut}$. Unlike `Lplus`, which pools the largest fish into one bin,
 the cut removes their influence completely. SPR and reference points are still
 calculated over all lengths from the fitted model.
 
 ```{r tailcut-fits}
-cuts <- c(none = NA, x1.0 = 1.0, x0.9 = 0.9)
+cuts <- c(none = NA, L56 = 56, L50 = 50)
 tc <- do.call(rbind, lapply(c("mn", "dm", "nb"), function(om) {
   do.call(rbind, lapply(names(cuts), function(nm) {
     f <- if (is.na(cuts[nm])) fitf(obs_model = om) else fitf(obs_model = om, tail_cut = cuts[[nm]])
@@ -114,15 +115,17 @@ tc <- do.call(rbind, lapply(c("mn", "dm", "nb"), function(om) {
 }))
 tc
 LLB <- fit_def$mn$tmb_data$LLB
-check("Tail cut", "cut at 0.9 Linf starts at the first bin with lower bound >= 0.9 * 55.7",
-      all(tc$Lcut[tc$cut == "x0.9"] == min(LLB[LLB >= 0.9 * 55.7])))
+check("Tail cut", "cut at 50 starts at the first bin with lower bound >= 50",
+      all(tc$Lcut[tc$cut == "L50"] == min(LLB[LLB >= 50])))
+w_frac <- tryCatch(fitf(obs_model = "dm", tail_cut = 50), warning = function(w) conditionMessage(w))
+check("Tail cut", "a fraction (<= 1.5) is still accepted, with a warning", grepl("fraction of Linf", w_frac))
 check("Tail cut", "all observation models fit with a cut", all(is.finite(tc$SPR_last)))
 ```
 
 ```{r tailcut-plot, fig.height = 4}
 f_none <- fitf(obs_model = "dm")
-f_cut  <- fitf(obs_model = "dm", tail_cut = 0.9)
-plot_spr(list(no_cut = f_none, cut_0.9 = f_cut))
+f_cut  <- fitf(obs_model = "dm", tail_cut = 50)
+plot_spr(list(no_cut = f_none, cut_50 = f_cut))
 ```
 
 ```{r tailcut-len, fig.height = 5}
@@ -134,11 +137,11 @@ plot_len(f_cut)   # predicted compositions are shown over all lengths
 A plus group at or above the cut has no effect and is ignored with a warning:
 
 ```{r tailcut-lplus}
-w <- tryCatch(fitf(obs_model = "dm", tail_cut = 0.9, Lplus = 54),
+w <- tryCatch(fitf(obs_model = "dm", tail_cut = 50, Lplus = 54),
               warning = function(w) conditionMessage(w))
 w
 check("Tail cut", "Lplus above the cut gives a warning", is.character(w))
-f_both <- fitf(obs_model = "dm", tail_cut = 1.0, Lplus = 45)
+f_both <- fitf(obs_model = "dm", tail_cut = 56, Lplus = 45)
 check("Tail cut", "Lplus below the cut works together with it", is.finite(lastspr(f_both)))
 ```
 
@@ -275,7 +278,7 @@ round(c(penalised          = tm(settings = s_dm),
 # New features together and downstream functions
 
 ```{r combined}
-f_all <- fitf(obs_model = "dm", tail_cut = 0.9, F_re = TRUE)
+f_all <- fitf(obs_model = "dm", tail_cut = 50, F_re = TRUE)
 summ(f_all)
 check("Combined", "tail cut and F_re fit together", f_all$opt$convergence == 0)
 
@@ -292,7 +295,7 @@ check("Combined", "eqstklen()", ok(eqstklen(f_all, s = 0.75)))
 check("Combined", "flicc_convergence()", ok(flicc_convergence(f_all)))
 check("Combined", "restart from the previous estimates (start argument)",
       ok(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                settings = modifyList(base, list(obs_model = "dm", tail_cut = 0.9, F_re = TRUE)),
+                settings = modifyList(base, list(obs_model = "dm", tail_cut = 50, F_re = TRUE)),
                 start = f_all$opt$par)))
 ```
 
@@ -317,12 +320,12 @@ so they are shown here but not run; please run the MP smoke test
 
 ```{r mse-setup, eval = FALSE}
 sig <- sigmaF_flicc(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                           settings = list(F_re = TRUE, tail_cut = 0.9)))
+                           settings = list(F_re = TRUE, tail_cut = 50)))
 ctrl <- mpCtrl(list(
   est  = mseCtrl(method = flicc.sa,
                  args = list(lhpar = lhpar, sel_fun = sel_fun,
                              settings = list(pop_model = "gtg", obs_model = "dm",
-                                             tail_cut = 0.9, sigmaF = sig),
+                                             tail_cut = 50, sigmaF = sig),
                              se = FALSE)),
   hcr  = mseCtrl(method = rfb.flicc.hcr, args = list(index = "SPR", trend = "track")),
   isys = mseCtrl(method = flicc.is, args = list(initac = initac, Cmin = 0.1 * initac))))

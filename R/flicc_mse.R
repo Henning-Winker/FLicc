@@ -532,7 +532,7 @@ hcr_sprlbi <- function(fit, gear,
 #' @param m_model Natural-mortality-at-length model passed to stocklen():
 #'   one of "constant", "inverse", "Lorenzen", "Gislason".
 #' @param settings List of fiticc() model settings (pop_model, obs_model,
-#'   ngtg, tail_cut, ...); see ?fiticc. A `tail_cut` (fraction of Linf) is
+#'   ngtg, tail_cut, ...); see ?fiticc. A `tail_cut` (absolute length) is
 #'   applied in the likelihood and, by default, in LBIspr() and LBImean().
 #' @param spr,thresh Target SPR (%) for LBIspr() and Ztgt, and the cumulative
 #'   threshold defining LBIspr()'s Lref.

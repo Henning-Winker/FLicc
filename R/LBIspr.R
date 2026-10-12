@@ -17,9 +17,9 @@
 #' @param tail_cut Length bins used for the reference and observed
 #'   proportions: `NULL` (default) applies the fit's own tail cut
 #'   (`settings$tail_cut` in [fiticc()]), so the indicator uses the same
-#'   bins as the likelihood; `FALSE` uses all bins; a number is a fraction
-#'   of the input Linf (bins with lower bound `>= tail_cut * linf` are
-#'   excluded).
+#'   bins as the likelihood; `FALSE` uses all bins; a number is an absolute
+#'   length (bins with lower bound `>= tail_cut` are excluded), as in
+#'   [fiticc()].
 #'
 #' @return *FLIndices* with *FLIndexBiomass*. Attributes `"Lref"` (threshold
 #'   length by gear), `"LFDref"` and `"Lcut"` (first excluded length, `NA`
@@ -179,7 +179,7 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
 #' @param nyears,scale_sel Passed to [nf_flicc()] / [fspr_flicc()].
 #' @param tail_cut Upper length limit, as in [LBIspr()]: `NULL` (default)
 #'   applies the fit's own tail cut (`settings$tail_cut`), `FALSE` uses all
-#'   bins, a number is a fraction of the input Linf. Together with `lc`,
+#'   bins, a number is an absolute length. Together with `lc`,
 #'   both the observed and the reference mean length use the bins
 #'   `Lc <= L < Lcut`.
 #'
@@ -283,7 +283,7 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
 #' @param fit Fitted FLicc object.
 #' @param Len Lower bounds of the length bins.
 #' @param tail_cut `NULL`: the fit's own cut (`fit$tmb_data$cut_bin`);
-#'   `FALSE`: none; numeric: fraction of the input Linf.
+#'   `FALSE`: none; numeric: absolute length.
 #' @return Logical vector, `TRUE` for retained bins.
 #' @noRd
 tail_keep_flicc <- function(fit, Len, tail_cut = NULL) {
@@ -293,7 +293,7 @@ tail_keep_flicc <- function(fit, Len, tail_cut = NULL) {
     if (is.null(cb) || cb < 0) return(rep(TRUE, length(Len)))
     return(seq_along(Len) <= cb)                 # 0-based first excluded bin
   }
-  Lcut <- as.numeric(tail_cut) * as.numeric(fit$stklen@lhpar["linf"])
+  Lcut <- tail_cut_length_flicc(tail_cut, as.numeric(fit$stklen@lhpar["linf"]))
   Len < Lcut
 }
 
