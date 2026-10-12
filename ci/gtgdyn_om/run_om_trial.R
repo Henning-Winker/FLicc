@@ -22,13 +22,12 @@ base_set <- list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3)
 models <- list(
   gtg        = base_set,
   dyn        = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE)),
-  dyn_noR    = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "none")),
-  dyn_npre25 = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, dyn_npre = 25)),
-  # absolute catch by gear (lognormal error CV 0.1), from 10 years before the
-  # length data, or the full series from 1971 (dyn_npre = "catch")
-  dyn_catch10  = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1)),
-  dyn_catchAll = modifyList(base_set, list(pop_model = "gtg.dyn", sigmaR = 0.5, R_re = FALSE, catch_cv = 0.1,
-                                           dyn_npre = "catch"))
+  # recruitment as a random walk (can follow the Beverton-Holt rise during recovery)
+  dyn_Rrw    = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE)),
+  dyn_Rrw_catch10 = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE,
+                                              catch_cv = 0.1)),
+  dyn_Rrw_catchAll = modifyList(base_set, list(pop_model = "gtg.dyn", dyn_rec = "rw", sigmaR = 0.3, R_re = FALSE,
+                                               catch_cv = 0.1, dyn_npre = "catch"))
 )
 lh <- om_lh
 lhpar <- FLPar(linf = lh$linf, k = lh$k, M = lh$M, L50 = lh$linf * (1 - exp(-lh$k * (lh$tm - lh$t0))),
