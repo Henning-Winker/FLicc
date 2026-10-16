@@ -95,11 +95,14 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
 
   # catch weights by gear
-  catch_wt <- do.call(
+  catch_all <- do.call(
     cbind,
-    lapply(catch_by_gear, function(x) as.data.frame(x)$data)
+    lapply(catch_by_gear, function(x) as.numeric(x))
   )
-  rownames(catch_wt) <- dimnames(catch_by_gear[[1]])$year
+  rownames(catch_all) <- dimnames(catch_by_gear[[1]])$year
+  # catch may cover more years than the fitted ones (e.g. fiticc(years = ))
+  catch_wt <- if (all(as.character(years) %in% rownames(catch_all)) && nrow(catch_all) != nyear)
+    catch_all[as.character(years), , drop = FALSE] else catch_all
 
   catch_wt <- catch_wt / rowSums(catch_wt)
 
