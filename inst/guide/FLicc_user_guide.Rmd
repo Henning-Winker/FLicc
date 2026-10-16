@@ -22,8 +22,9 @@ It walks through a complete assessment with the built-in splendid alfonsino data
 with explicit **checks** at each step (what to look at, what is a red flag, what
 to do about it), and documents the options added in FLicc 1.0.9 and 1.0.10:
 fishing mortality over time, effective sample size, missing data, tail
-treatment, reference points with steepness, length-based indicators,
-Monte-Carlo ensembles and use inside an MSE. Recommendations marked
+treatment, reference points with steepness, length-based indicators
+and use inside an MSE. Monte-Carlo ensembles over life-history uncertainty
+(`mc_flicc()`) will be documented separately. Recommendations marked
 *simulation* come from tests with an alfonsino-like operating model
 (fixed-CV length-at-age, annual recruitment, Beverton-Holt h = 0.75, two gears,
 two-stage length sampling).
@@ -53,7 +54,7 @@ packageVersion("FLicc")
 3. **Life history**: `FLPar` and `stocklen()`; check Linf against the largest fish.
 4. **Fit**: `fiticc()`; check convergence, residuals, selectivity and retrospective consistency.
 5. **Status**: SPR, Fspr, steepness-corrected biomass, length-based indicators.
-6. **Uncertainty**: life-history ensembles with `mc_flicc()`; sensitivity runs.
+6. **Uncertainty**: sensitivity runs (selectivity dome, CVL, Linf, tail cut).
 7. **Management**: `flicc.sa()` and harvest control rules in an MSE.
 
 A plain `fiticc()` call uses the GTG population model, a multinomial likelihood,
@@ -88,7 +89,7 @@ plot_lfdn(lfd)
 | **Why** | The information in a composition depends on how many independent samples (trips, hauls, landings) it comes from, not only on the number of fish. |
 | **Look for** | Gear-years with very few fish or few occupied bins (labels), years where one gear is missing, strong changes in the gear mix between years. |
 | **Red flags** | Gear-years with < 50 fish or < 10 occupied bins; a gear present only in some years; combined sample size dominated by one gear in some years and another in others. |
-| **Action** | Set effective sample sizes per gear (section 4); consider dropping or pooling very poor gear-years; check that `catch_by_gear` reflects the catch, not the sampling, split. |
+| **Action** | Set effective sample sizes per gear (section *Effective sample size*); consider dropping or pooling very poor gear-years; check that `catch_by_gear` reflects the catch, not the sampling, split. |
 
 ## Check 2: consistency of the compositions
 
@@ -117,7 +118,7 @@ sapply(lfd, function(x) {
 |---|---|
 | **Why** | The tail is the part of the composition most sensitive to Linf, CVL, dome-shaped selectivity and the GTG discretisation. |
 | **Red flags** | More than about 1% of fish at or above the input Linf; a long thin tail far beyond Linf (misidentified species, measurement errors, other stocks). |
-| **Action** | Re-examine Linf; use a tail cut (section 11) or `rob_eps`; `tail_warning = TRUE` in `settings` reports fish beyond the largest growth group. |
+| **Action** | Re-examine Linf; use a tail cut (section *Tail of the length composition*) or `rob_eps`; `tail_warning = TRUE` in `settings` reports fish beyond the largest growth group. |
 
 ## Check 4: empirical catch curves
 
@@ -255,8 +256,8 @@ Three things change with the effective sample size:
 
 The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
 moderate; with the thousands of fish per year common in market sampling the
-effects above are much stronger, also for the AIC weights of an ensemble
-(section 12).
+effects above are much stronger, also for the AIC weights of a Monte-Carlo
+ensemble.
 
 SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
 for the raw counts:
@@ -448,7 +449,7 @@ wide right-hand SD forces a shape the data reject, which shows as very large dAI
 - A dome fitted without support absorbs a shortage of large fish that may come
   from F; SPR then becomes optimistic.
 - Several gears sampling different length ranges make domes more identifiable.
-- A tail cut (section 11) reduces the cost of an unmodelled mild dome
+- A tail cut (section *Tail of the length composition*) reduces the cost of an unmodelled mild dome
   (*simulation*: a strong dome fitted as logistic, -17% bias in SPR; with a cut at
   0.8 Linf, +1%).
 - Always run the dome sensitivity for gears assumed logistic, and report it.
@@ -480,7 +481,7 @@ N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right
 $$
 `pop_model = "gamma"` follows fishblicc (gamma-distributed Linf, numerical
 integration; slower). Both are equilibrium models: each year is explained by
-the equilibrium at that year's F (section 10.2 on the consequences).
+the equilibrium at that year's F (section *Lag under changing F* on the consequences).
 
 ## Status: SPR
 
@@ -580,7 +581,7 @@ round(mohn_rho, 3)
 |---|---|
 | **Pass** | Mohn's rho for SPR within about ±0.2. |
 | **Red flags** | Consistent revisions in one direction (the terminal SPR is systematically revised up or down). |
-| **Action** | Check for trends in selectivity or sampling; in a rebuild, an equilibrium model is expected to under-estimate SPR at the end of the series (section 10.2). |
+| **Action** | Check for trends in selectivity or sampling; in a rebuild, an equilibrium model is expected to under-estimate SPR at the end of the series (section *Lag under changing F*). |
 
 # Fishing mortality over time
 
@@ -964,28 +965,49 @@ plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
 
 `eqstklen(fit, s = )` gives the equilibrium curves and MSY proxies.
 
-## Status over selectivity and F: contour plots
+## Status over F, selectivity and gear shares: contour plots
 
-`contour_flicc()` computes, for each gear, yield per recruit and SPR over a grid
-of the gear's F and its selectivity location, with the other gears held at their
-current state. The location is `SL50` for a logistic gear and the mode for a
-dome; the curve is shifted along the length axis with its shape kept.
-`plot_contour_flicc()` draws the result with one row per gear: yield on the
-left, spawning potential on the right, both in % on the same colour scale
-(dark blue = 100%, red = 0%):
+`contour_flicc()` computes yield per recruit and SPR over a grid, and
+`plot_contour_flicc()` draws one row per gear with yield on the left and
+spawning potential on the right. The grid can be laid out in three ways
+(`view`):
 
-- **YPR%**: yield per recruit as a percentage of its maximum over the grid;
-- **SPR%**: spawning potential ratio in %.
+| `view` | x-axis | y-axis | other gears |
+|---|---|---|---|
+| `"fleet"` (default) | total F, F shares between gears as now | the gear's `SL50` (logistic) or mode (dome) | F scaled with the total, selectivity as fitted |
+| `"share"` | total F | the gear's share of the total F (%) | the rest of the total F, in their current proportions |
+| `"gear"` | the gear's own F | the gear's `SL50` or mode | current F and selectivity |
 
-The black lines are SPR 40% (solid) and 20% (dashed), the point is the current
-state with dotted guides to the axes, and the dotted horizontal line is the
-length at 50% maturity (Lmat).
+A change of selectivity shifts the gear's curve along the length axis, keeping
+its shape. Yield is shown as % of its maximum over the grid (viridis colours);
+SPR in % on a scale anchored on the reference points: red below SPR 20%,
+orange to pale yellow between 20% and 40%, blue above 40%. The black lines are
+SPR 40% (solid) and 20% (dashed), the point is the current state, and the dotted
+horizontal line is the length at 50% maturity (Lmat).
+
+The default view asks: if the whole fleet fished more or less, with the gears in
+their current proportions, and one gear changed its selectivity, what would
+yield and SPR be?
 
 ```{r contour, fig.height = 8.5, fig.width = 9}
 cf <- contour_flicc(fit)
 cf$current
 plot_contour_flicc(cf)
 ```
+
+The share view keeps all selectivities as fitted and asks how the split of F
+between gears matters. With two gears the two rows mirror each other, so one
+gear is enough. The subtitle gives the gear's current share of F and of the
+catch; the two differ because the gears catch fish of different sizes.
+
+```{r contour-share, fig.height = 4.4, fig.width = 9}
+cs <- contour_flicc(fit, view = "share", gear = "Gillnet")
+plot_contour_flicc(cs)
+```
+
+In the `"gear"` view only one gear's F changes; the other gears keep fishing at
+their current F, so at zero F of one gear the SPR reflects the other gear alone,
+and the catch split changes along the axis.
 
 Per-recruit results assume constant recruitment. With a steepness `s`, the same
 surfaces are converted under a Beverton-Holt relationship to **SSB%**
@@ -998,39 +1020,42 @@ $B/B_0 = \frac{4s\,SPR - (1-s)}{5s-1}$. The black lines are then SSB 40% and 20%
 plot_contour_flicc(cf, s = 0.75)
 ```
 
-```{r selF-numbers, include = FALSE}
-gn_cur <- cf$current[cf$current$gear == "Gillnet", ]
-gn_s <- cf$surface[cf$surface$gear == "Gillnet", ]
+```{r contour-numbers, include = FALSE}
 eng <- FLicc:::pr_engine_flicc(fit); st <- FLicc:::gear_state_flicc(fit)
-pr_gn <- function(loc, Fg) {
-  S <- function(g, p) sel_curve_flicc(st$Lmid, st$type[[g]], p)
-  eng(st$F[["Trawl"]] * S("Trawl", st$pars[["Trawl"]]) +
-      Fg * S("Gillnet", FLicc:::shift_sel_flicc(st$type[["Gillnet"]], st$pars[["Gillnet"]], loc)))
+sel_g <- function(g, loc = NULL) {
+  p <- st$pars[[g]]
+  if (!is.null(loc)) p <- FLicc:::shift_sel_flicc(st$type[[g]], p, loc)
+  sel_curve_flicc(st$Lmid, st$type[[g]], p)
 }
-ymax <- max(gn_s$YPR)
-v <- pr_gn(cf$Lmat, gn_cur$F)
-gn_lmat <- list(SPR = v[["SPR"]], YPRrel = v[["YPR"]] / ymax)
-f40 <- tryCatch(uniroot(function(f) pr_gn(gn_cur$loc, f)[["SPR"]] - 0.4, c(0, gn_cur$F))$root,
+pr_gn <- function(loc, Fg) eng(st$F[["Trawl"]] * sel_g("Trawl") + Fg * sel_g("Gillnet", loc))
+gn_loc <- st$pars[["Gillnet"]]$SL50
+gn_F <- st$F[["Gillnet"]]
+gn_now <- pr_gn(gn_loc, gn_F)
+gn_lmat <- pr_gn(cf$Lmat, gn_F)
+f40 <- tryCatch(uniroot(function(f) pr_gn(gn_loc, f)[["SPR"]] - 0.4, c(0, gn_F))$root,
                 error = function(e) NA)
-gn_cut <- if (is.na(f40)) "more than 100" else round(100 * (1 - f40 / gn_cur$F))
+gn_cut <- if (is.na(f40)) "more than 100" else round(100 * (1 - f40 / gn_F))
+gn_ypr_change <- round(100 * (gn_lmat[["YPR"]] / gn_now[["YPR"]] - 1))
 ```
 
-How to read it:
+How to read them:
 
-- Moving left from the point (less F) or up (larger fish first caught) raises
-  SPR; the YPR isopleths show what that costs, or gains, in yield per recruit.
-- Here the gillnet catches at `SL50` = `r round(gn_cur$loc, 1)`, below Lmat
-  (`r round(cf$Lmat, 1)`). At its current F, raising `SL50` to Lmat gives an SPR
-  of about `r round(100 * gn_lmat$SPR)`% and `r round(100 * gn_lmat$YPRrel)`% of
-  the maximum YPR (now `r round(100 * gn_cur$YPRrel)`%); reaching SPR 40% at the
-  current `SL50` instead needs the gillnet F cut by about `r gn_cut`%.
+- Moving left (less F) or up (larger fish first caught) raises SPR; the yield
+  isopleths show what that costs, or gains.
+- Here the gillnet catches at `SL50` = `r round(gn_loc, 1)` cm, below Lmat
+  (`r round(cf$Lmat, 1)` cm). With all F as now, raising the gillnet `SL50` to
+  Lmat gives an SPR of about `r round(100 * gn_lmat[["SPR"]])`% (now
+  `r round(100 * gn_now[["SPR"]])`%) for a change in YPR of
+  `r gn_ypr_change`%; reaching SPR 40% at the current `SL50` by the gillnet alone
+  needs its F cut by about `r gn_cut`%.
 - Without `s` the surfaces are per-recruit results; with `s` they include the
   loss of recruitment at low spawning biomass, so yield falls off more steeply
   at high F. Both are equilibrium results at the fitted life history, a guide to
   direction and scale, not a forecast.
 
 `gear =` selects gears (rows), `n` the grid resolution, `Fmax` and `Lrange` the
-axes, `ref` the black reference levels and `levels` the grey isopleths.
+axes, `ref` the reference levels (target, limit), and `levels`, `ylevels` the
+grey isopleths of the two columns.
 
 # Length-based indicators
 
@@ -1085,77 +1110,6 @@ indicator and the likelihood use the same bins; `tail_cut = FALSE` uses all bins
 | **Red flags** | Gears disagreeing strongly (selectivity misfit or sampling); indicator noise much larger than the SPR trend. |
 | **Action** | Use the more informative gear; pool gears (`pool` in `flicc.sa()`); smooth in the harvest control rule. |
 
-# Monte-Carlo ensembles
-
-`mc_flicc()` propagates uncertainty in the life-history inputs. It draws Linf,
-k, M and L50 (correlated, from FishLife) and CVL, refits the model for each draw
-and keeps each fit's SPR, F, selectivity and log-likelihood. Within each refit
-the drawn values are fixed; they are not estimated. The coefficients of
-variation of the draws are set with `cv`; the default is
-`cv = list(linf = 0.10, k = 0.1, M = 0.15, L50 = 0.10, CVL = 0.1)`.
-
-**Drawing CVL or not.** CVL shapes the tail of the predicted composition. When
-it varies between draws together with Linf, the largest growth group moves
-across bin boundaries, and fish in those bins switch between near-zero and
-positive probability. This produces jumps in the log-likelihood between draws
-and can make the profile over draws look bimodal. Setting `CVL = 0` in `cv`
-keeps CVL at its input value in every draw, so the ensemble reflects Linf, k, M
-and L50 only; CVL can then be examined as a separate sensitivity (section 11).
-The tail cut has a similar effect, because it removes the bins concerned; as a
-length, it is the same for every draw.
-
-The example runs two ensembles of 30 draws on the fit with the tail cut
-(ESS 200): one with CVL drawn (the default) and one with CVL fixed. The same
-`seed` gives the same Linf, k, M and L50 draws in both.
-
-```{r mc}
-mc_cvl_drawn <- mc_flicc(fit_cut, nsim = 30, seed = 1, verbose = FALSE)
-
-mc_cvl_fixed <- mc_flicc(fit_cut, nsim = 30, seed = 1, verbose = FALSE,
-                         cv = list(linf = 0.10, k = 0.1, M = 0.15, L50 = 0.10, CVL = 0))
-```
-
-`mc_spr_tab()` summarises the SPR by year over the draws: the base fit (`mle`),
-the unweighted mean (`mean_uw`), the AIC-weighted mean (`mean_w`), the number of
-draws within 20 AIC units of the best (`n_retained`) and the effective number of
-draws after weighting (`n_eff`). The last year:
-
-```{r mc-tab}
-tab_drawn <- mc_spr_tab(mc_cvl_drawn)
-tab_fixed <- mc_spr_tab(mc_cvl_fixed)
-rbind(CVL_drawn = tail(tab_drawn, 1),
-      CVL_fixed = tail(tab_fixed, 1))
-```
-
-Here, with the tail cut at 47 cm, drawing CVL makes little difference: the
-unweighted mean SPR in the last year is `r round(tail(tab_drawn$mean_uw, 1), 3)`
-with CVL drawn and `r round(tail(tab_fixed$mean_uw, 1), 3)` with CVL fixed, and the
-effective number of draws `r round(tail(tab_drawn$n_eff, 1), 1)` and
-`r round(tail(tab_fixed$n_eff, 1), 1)`. The cut has already removed the bins where
-CVL acts. Without a cut, CVL draws carry more weight (section 11.1), and keeping
-CVL fixed in the draws is the safer choice. In both ensembles the AIC-weighted
-mean (`r round(tail(tab_fixed$mean_w, 1), 3)`) lies well below the unweighted one,
-because a few draws carry most of the weight.
-
-The profile plots show SPR against the log-likelihood of each draw:
-
-```{r mc-plots, fig.height = 4.5}
-plot_mcprofile(mc_cvl_drawn)
-plot_mcprofile(mc_cvl_fixed)
-plot_mcsprdist(mc_cvl_fixed)
-```
-
-Recommendations:
-
-- Rescale the sample size first (ESS about 150-200). With large sample sizes the
-  log-likelihood differences between draws grow, and the AIC weights concentrate
-  on few draws.
-- Use the tail cut and fixed sigmaF in the base fit; every draw inherits its
-  settings.
-- Report the unweighted ensemble (`mean_uw`) alongside the weighted one; AIC
-  weighting across life-history draws mixes data fit with prior uncertainty and
-  should be treated with caution.
-
 # Use in an MSE
 
 `flicc.sa()` wraps `fiticc()` as the estimation step of an `mse` management
@@ -1205,7 +1159,6 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
 | Missing data | keep zeros, rely on the random walk; not without random walk |
 | Status | SPR at the year's F; `s` for $B/B_{tgt}$ under Beverton-Holt |
-| Ensembles | ESS rescaled; CVL not drawn (`cv$CVL = 0`) and examined separately; tail cut; fixed sigmaF |
 | MSE | fixed sigmaF, absolute tail cut, `se = FALSE`; tune with the HCR |
 
 *Planned: a worked example of a rebuilding stock, refitted year by year, to show

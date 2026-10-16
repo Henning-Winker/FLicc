@@ -121,7 +121,7 @@ sel_loc_flicc <- function(type, pars) if (type == "logistic") pars$SL50 else par
 #' plot_contour_flicc(contour_flicc(fit, view = "share"))     # total F x F share
 #' }
 #' @export
-contour_flicc <- function(fit, gear = NULL, view = c("gear", "fleet", "share"), n = 40,
+contour_flicc <- function(fit, gear = NULL, view = c("fleet", "gear", "share"), n = 40,
                           Fmax = NULL, Lrange = NULL, nyears = 1) {
   view <- match.arg(view)
   if (is.null(fit$report$selpars)) stop("fit needs FLRreport = TRUE (the default of fiticc()).")

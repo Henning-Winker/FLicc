@@ -4,7 +4,7 @@
 \alias{contour_flicc}
 \title{Yield and spawning-potential surfaces over selectivity, F and F shares}
 \usage{
-contour_flicc(fit, gear = NULL, view = c("gear", "fleet", "share"), n = 40,
+contour_flicc(fit, gear = NULL, view = c("fleet", "gear", "share"), n = 40,
   Fmax = NULL, Lrange = NULL, nyears = 1)
 }
 \arguments{
