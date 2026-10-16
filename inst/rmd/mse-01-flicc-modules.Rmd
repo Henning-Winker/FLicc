@@ -1,0 +1,739 @@
+---
+title: "FLicc management-procedure modules for mse: flow, indicators, harvest control rules and run time"
+author: "Henning Winker<br><span style=\"font-size: 0.8em;\">FAO Fisheries and Aquaculture Division, Assessment and Management Team (NFIFM)<br><a href=\"mailto:henning.winker@fao.org\">henning.winker@fao.org</a></span>"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    theme: readable
+    math_method: mathml
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 8, fig.height = 4.5, dpi = 110,
+                      fig.align = "center")
+library(FLCore)
+library(ggplotFL)
+library(ggplot2)
+library(FLicc)
+
+# Only the single-fit examples are evaluated here (seconds). The mp() set-up
+# in Section 6 is shown but not run; the full runs live in mse-02 and use the
+# cached results in rdata/ (see inst/scripts/render_docs.R).
+rdata <- getOption("FLicc.rdata", "rdata")
+```
+
+# Purpose and scope
+
+This guideline documents the FLicc utilities that turn a length-based
+catch-curve assessment into a management procedure (MP) for the FLR `mse`
+package. It concentrates on **how the modules connect** inside `mp()`, the
+**principles behind the indicators** they produce (SPR, Z, `LBIspr`,
+`LBImean`), the **harvest control rules** that use them (`lbi.hcr()` and the
+new rfb-type rule `rfb.flicc.hcr()`), and the **settings that control run
+time and robustness** of the repeated FLicc fits.
+
+The operating model (OM) and the length-sampling observation error model
+(OEM) are documented elsewhere and only summarised here:
+
+| Doc | Content | Status |
+|-----|---------|--------|
+| **mse-01 (this)** | FLicc MP modules: flow, indicators, HCRs, run time, robustness options | prototype |
+| mse-02 | Splendid alfonsino length-selective OM (FLRef), `sampling.lfd.oem()` and full FLicc MSE runs | planned (OM in *FLicc_MSE_lite_OM_v3*) |
+| mse-03 | Robustness set: misspecified M, Linf, CVL and selectivity form | planned |
+| FLRef `lfd-01` | Length-frequency simulation and `sampling.lfd.oem()` | [FLRef docs](https://henning-winker.github.io/FLRef/) |
+
+All single-fit examples below use the `alfonsino` example data in FLicc, so
+each function can be run and checked in isolation before it is used inside
+`mp()`.
+
+# The flow of an FLicc management procedure
+
+## Modules and what they pass on
+
+`mp()` calls three user modules in every management cycle: an estimator
+(`est`), a harvest control rule (`hcr`) and an implementation system
+(`isys`). The OEM in front of them is called by `mp()` itself.
+
+```
+OM (FLom)                  true N, F, M; catch by gear from partial F
+  |
+  |  sampling.lfd.oem()     (FLRef) two-stage length samples by gear and year,
+  v                         reported catch by gear with error
+attr(stk, "lfd")            FLQuants: len x year x unit x ... x iter, one per gear
+attr(stk, "catch_gear")     FLQuants: catch by gear (shares are formed in flicc.sa)
+  |
+  |  est  = flicc.sa()      one fiticc() fit per iteration (loop or parallel),
+  v                         diagnostics, usable iterations, indicators
+ind                         FLQuants: LBIspr.<gear>, LBImean.<gear>, [pooled],
+  |                         SPR, Z, Ztgt, Zrel   (NA for unusable iterations)
+  |  hcr  = lbi.hcr()  or  rfb.flicc.hcr()
+  v
+ctrl                        fwdControl holding a TAC *multiplier* (not a TAC)
+  |                         decision.hcr flag in tracking
+  |  isys = flicc.is()      TAC_y = TAC_{y-1} x mult, change limits, Cmax,
+  v                         optional split across units (areas)
+ctrl                        fwdControl with the TAC for ay + management_lag
+  |
+  |  fwd.om()               projection
+  v
+OM
+```
+
+Two design decisions run through all modules:
+
+1. **The length data travel as attributes of the observed stock.** `mp()`
+   only passes `stk` and `idx` to the estimator, so `sampling.lfd.oem()`
+   attaches the samples as `attr(stk, "lfd")` and `attr(stk, "catch_gear")`,
+   and `flicc.sa()` reads them from there. `stk` itself is returned
+   unchanged.
+2. **The HCRs return a relative change, not an absolute catch.** FLicc has no
+   biomass scale, so the HCR returns a multiplier on the previous TAC and
+   `flicc.is()` converts it. Every iteration that cannot be assessed (failed,
+   non-converged or boundary fit) carries `NA` indicators, which the HCRs turn
+   into `mult = 1` (TAC unchanged).
+
+| Module | `mp()` slot | Reads | Returns | Tracks |
+|---|---|---|---|---|
+| `sampling.lfd.oem()` (FLRef) | `oem` | OM stock, gear objects, common random numbers | `stk` with `lfd`, `catch_gear` attributes | |
+| `flicc.sa()` | `est` | `attr(stk, "lfd")`, `attr(stk, "catch_gear")` | `ind` (indicators, year x iter) | `conv.est`, `sprbound.est`, `refit.est`, `used.est`, `Lref.<gear>`, `Lmeanref.<gear>` |
+| `lbi.hcr()` | `hcr` | `ind[[gear]]`, `ind$SPR` | multiplier | `trend.hcr`, `metric.hcr`, `decision.hcr`, `mult.hcr` |
+| `rfb.flicc.hcr()` | `hcr` | `ind[[index]]`, `ind[[f]]`, `ind$SPR` | multiplier | `r.hcr`, `f.hcr`, `b.hcr`, `mult.hcr`, `decision.hcr` |
+| `flicc.is()` | `isys` | multiplier, previous TAC, `decision.hcr` | TAC for `ay + management_lag` | `tac.is` |
+
+## Timing within a cycle
+
+With the usual `mse` arguments (`iy`, `fy`, `y0`, `data_lag`,
+`management_lag`, `frq`):
+
+* the assessment year is `ay`; the last data year is `dy = ay - data_lag`;
+* `flicc.sa()` fits the length data from `y0` to `dy`, or only the last
+  `nyrs` years up to `dy` (rolling window, Section 7);
+* `flicc.is()` sets the TAC for `ay + management_lag`, starting from `initac`
+  in the first cycle (`ay == iy`) and from the TAC tracked at `ay - frq`
+  afterwards;
+* with `frq > 1` the TAC is held between assessments, and the trend windows
+  `n1`, `n2` of the HCRs refer to *data years*, not to cycles.
+
+# The estimator: `flicc.sa()`
+
+## Inputs from the OEM
+
+1. **Length compositions.** `attr(stk, "lfd")` is summed over units
+   (`unitSums()`), so area- or sex-structured samples are pooled into one
+   composition per gear. Each gear-year composition is then rescaled to the
+   effective sample size `ess.g` with `lfdess()`. The OEM's own sample size
+   (`ess_len`, typically hundreds of fish) would give the multinomial or
+   Dirichlet-multinomial likelihood far too much weight relative to the
+   real information in a length sample; `ess.g` (default 150) sets the
+   weight explicitly and can differ by gear. `ess.g = NULL` keeps the sampled
+   counts.
+2. **Catch split.** Catch shares by gear and year are formed from
+   `attr(stk, "catch_gear")` (catch weight by gear, with reporting error), so
+   that the partition carries observation error and differs by iteration and
+   cycle. `catch_by_gear` is only a fallback for an OEM that does not attach
+   catch by gear.
+3. **Life history.** `lhpar` (Linf, k, M or M/k, L50, a, b) is static across
+   cycles and builds the length template with `stocklen()` for each
+   iteration's composition.
+
+The OEM must deliver **annual** compositions (`season = FALSE` in
+`sampling.lfd.oem()`); seasonal samples are not pooled by `flicc.sa()`.
+
+## One fit per iteration
+
+`fiticc()` fits one FLR iteration at a time, so `flicc.sa()` loops over
+`args$it`. Each iteration gets its own `stocklen()` template and catch
+shares, and `fiticc()` is called with the `settings` list (population and
+observation model, CVL, priors, robustness options; see `?fiticc`).
+
+The loop runs sequentially or in parallel through `foreach`/`doFuture`
+(`parallel = TRUE`, `workers`). The two levels of parallelism must never be
+active together: if `mp()` itself runs in parallel, set
+`outer_parallel = TRUE`, which forces `parallel = FALSE` inside `flicc.sa()`.
+A `future::multisession` plan opened inside every `mp()` worker is a nested
+backend and crashes workers.
+
+## Diagnostics and usable iterations
+
+Each fit is classified before any indicator is computed:
+
+| Check | Setting | Effect |
+|---|---|---|
+| Fit fails (`try-error`) | | not used |
+| Convergence (`need_refit_flicc()`: optimiser code, finite objective, positive-definite Hessian) | `drop_nonconv = TRUE` | not used if not converged |
+| SPR at the boundary (any year with SPR $\geq$ `spr_max`) | `spr_max = 0.99` | flagged, not used |
+| Rescue of boundary fits with another selectivity form | `refit_sel_fun` | refit kept only if it leaves the boundary |
+| Inputs of boundary fits | `debug_dir` | saved as `flicc_bound_ay<year>.rds` |
+
+Boundary solutions (SPR close to one, i.e. F close to zero) arise mostly when
+a dome-shaped selectivity can explain the absence of large fish by a steep
+descending limb instead of mortality. `refit_sel_fun = c("logistic",
+"logistic")` retries such fits with asymptotic selectivity.
+
+An unusable iteration gets `NA` for all indicators in that cycle; the HCRs
+keep its TAC (`mult = 1`). The proportion of usable fits (`used.est` in the
+tracking) should be monitored: a management procedure that is frequently
+"frozen" by failed fits performs differently from the one that was intended.
+
+## Indicators returned in `ind`
+
+| Element | Definition | Equals 1 at |
+|---|---|---|
+| `LBIspr.<gear>` | $P^{obs}(L \geq L_{ref}) / P^{ref}(L \geq L_{ref})$ (Section 4.2) | SPR target |
+| `LBImean.<gear>` | $\bar L^{obs} / \bar L^{ref}$ (Section 4.3) | F = M (default) or SPR target |
+| `LBIspr`, `LBImean` | weighted mean over gears (`pool` not `"none"`) | as above |
+| `SPR` | fitted SPR (0–1) | |
+| `Z` | $F_{ap} + M$ (apical F, fitted M) | |
+| `Ztgt` | $F_{SPR_x} + M$ | |
+| `Zrel` | $Z / Z_{tgt}$ | SPR target (> 1: fishing above target) |
+
+`pool` decides how gear indices are combined: `"none"` (default, per gear
+only), `"equal"`, `"catch"` (reported catch shares by year), or a named
+vector of weights. Catch weighting is not necessarily best: a gear that
+selects large fish responds more strongly to changes in survival than a gear
+that catches mostly recruits, even if its catch is smaller.
+
+The tracking also stores the reference lengths `Lref.<gear>` and
+`Lmeanref.<gear>` of every refit, so drift of the references between cycles
+(e.g. through re-estimated selectivity) can be seen directly.
+
+# Indicators: principles
+
+The examples use one FLicc fit to the alfonsino data with a dome-shaped and
+an asymptotic gear.
+
+```{r example-fit}
+data("alfonsino")
+lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)),
+                  unit = "cm", midL = FALSE)
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
+               a = 0.004721956 / 1000, b = 3.146168)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+gears   <- names(lfd)
+sel_fun <- c("dsnormal", "logistic")
+cbg     <- c(0.7, 0.3)
+settings <- list(pop_model = "gtg", obs_model = "dm", CVL = 0.1,
+                 prior_sigmaF = c(log(0.5), 0.3, 1), spr_ref = 40)
+
+t_fit <- system.time(
+  fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                settings = settings)
+)[["elapsed"]]
+gears
+```
+
+## SPR, Z and Zrel
+
+SPR is the fitted spawning potential ratio by year. The mortality indicators
+compare total mortality with the mortality at the SPR target:
+
+$$
+Z_y = F_{ap,y} + M, \qquad Z_{tgt} = F_{SPR_x} + M, \qquad
+Z^{rel}_y = Z_y / Z_{tgt}.
+$$
+
+$F_{SPR_x}$ is the apical F that gives SPR = x % under the fitted selectivity,
+growth and M. Because `settings$spr_ref` equals the target (default 40), it
+is taken from `fit$report$Fspr` without any further calculation (Section 7.1).
+
+```{r spr-z}
+M    <- c(fit$report$lhpar["M"])
+Z    <- fit$report$Fap + M
+Ztgt <- fspr_flicc(fit, spr = 40) + M
+round(rbind(SPR = c(fit$report$spr), Zrel = c(Z / Ztgt)), 3)
+```
+
+## `LBIspr`: proportion of large fish relative to the SPR target
+
+For each gear $g$, the equilibrium numbers-at-length at $F_{SPR_x}$ are
+filtered through the gear's fitted selectivity, $v_g(l) = N_l(F_{SPR_x})\,
+s_g(l)$. The reference length $L_{ref,g}$ is the length at which the
+cumulative vulnerable numbers reach the fraction `thresh` (default 0.75), so
+about a quarter of the catch at the target lies above it. The indicator
+compares the observed proportion above $L_{ref,g}$ with that expected
+proportion:
+
+$$
+LBIspr_{g,y} = \frac{\sum_{l \geq L_{ref,g}} C^{obs}_{g,l,y} \big/ \sum_l C^{obs}_{g,l,y}}
+                    {\sum_{l \geq L_{ref,g}} v_g(l) \big/ \sum_l v_g(l)} .
+$$
+
+Values below one mean fewer large fish than at the target, i.e. fishing
+pressure above $F_{SPR_x}$. The reference is gear-specific because the same
+stock produces different length compositions in a trawl and a gillnet.
+
+```{r lbispr}
+lbi <- LBIspr(fit, spr = 40, thresh = 0.75)
+attr(lbi, "Lref")
+round(do.call(rbind, lapply(lbi, function(x) c(index(x)))), 3)
+```
+
+```{r lbispr-plot, fig.height = 5}
+plot_LBIspr(fit, spr = 40, thresh = 0.75)
+```
+
+## `LBImean`: mean length relative to Lmean(F = M)
+
+`LBImean()` is the model-based analogue of the ICES length indicator
+$f = \bar L / L_{F=M}$. The reference mean length is computed from the same
+filtered equilibrium numbers, but at a reference F:
+
+$$
+\bar L^{ref}_g = \frac{\sum_{l \geq L_{c,g}} \bar l\, N_l(F_{ref})\, s_g(l)}
+                      {\sum_{l \geq L_{c,g}} N_l(F_{ref})\, s_g(l)}, \qquad
+LBImean_{g,y} = \bar L^{obs}_{g,y} / \bar L^{ref}_g ,
+$$
+
+with $F_{ref} = \text{FM} \times M$ (`ref = "FM"`, default `FM = 1`, i.e.
+Lmean at F = M) or $F_{ref} = F_{SPR_x}$ (`ref = "spr"`). The cut-off
+$L_{c,g}$ (`lc = "sel50"`) is the first length at which the gear's
+selectivity reaches 0.5, which excludes poorly selected small fish as in the
+ICES $L_c$ convention.
+
+The ICES approximation $L_{F=M} = (L_\infty + 2 \cdot 1.5\, L_c)/(1 + 2
+\cdot 1.5)$ assumes knife-edge selection and a single growth curve.
+`LBImean()` instead uses the fitted growth variability (GTG), M and gear
+selectivity, including dome-shaped curves, where the ICES formula is not
+defined.
+
+```{r lbimean}
+lbm  <- LBImean(fit, ref = "FM", FM = 1)
+lbms <- LBImean(fit, ref = "spr", spr = 40)
+rbind(Lmean_FM = attr(lbm, "Lmean_ref"), Lmean_spr40 = attr(lbms, "Lmean_ref"),
+      Lc = attr(lbm, "Lc"))
+round(do.call(rbind, lapply(lbm, function(x) c(index(x)))), 3)
+```
+
+## Levels and trends
+
+Both length indicators are ratios to a model reference. Their **level**
+depends on the model's scale — M, Linf, CVL and the selectivity form all
+enter the reference — so a misspecified M shifts every year's value by
+roughly the same factor. Their **trend** does not: a constant reference
+cancels in a ratio of recent to earlier years,
+
+$$
+r = \frac{\frac{1}{n_1}\sum_{y \in \text{recent}} I_y}
+         {\frac{1}{n_2}\sum_{y \in \text{previous}} I_y}
+  = \frac{\frac{1}{n_1}\sum \bar L^{obs}_y}{\frac{1}{n_2}\sum \bar L^{obs}_y}
+  \quad \text{for } I_y = \bar L^{obs}_y / \bar L^{ref}.
+$$
+
+This is the main design principle of the HCRs below: the trend component
+(`r`) is robust to the life-history assumptions, while any level component
+(`f`, the SPR status, the SPR safeguard `b`) inherits the model's scale bias
+and is where the robustness set (mse-03) has to show that the MP is still
+precautionary. Between refits the reference can still move when selectivity
+or CVL are re-estimated; the tracked `Lref.<gear>` and `Lmeanref.<gear>`
+show by how much.
+
+# Harvest control rules
+
+## SPR status rule: `spr_rule()`
+
+`spr_rule()` maps current SPR to a relative change with four triggers: a
+fixed reduction `dlow` below `b1`, a linear increase to the no-change
+plateau (`dopt`) between `b2` and `b3`, a linear increase to `dhi` at `b4`,
+and a fixed increase above `b4`. `plot_hcrspr()` shows the rule with the
+stock-status zones (`blim`, `bthr`) and, optionally, the fitted SPR series.
+
+```{r spr-rule, fig.height = 4.5}
+plot_hcrspr(b1 = 0.1, b2 = 0.3, b3 = 0.5, b4 = 0.75, blim = 0.1, bthr = 0.2,
+            dlow = -0.2, dopt = 0, dup = 0.15, spr_target = 0.4,
+            obs = c(fit$report$spr), years = dimnames(fit$report$spr)$year)
+```
+
+## Trend and status: `lbi.hcr()`
+
+`lbi.hcr()` combines a trend ratio $r$ on one element of `ind` (recent `n1`
+years over the previous `n2`, default 2-over-3) with the SPR status
+multiplier $s$ from `spr_rule()`. The status change is applied only when
+both point in the same direction:
+
+$$
+\text{mult} = \begin{cases} s & \text{if } (r < 1 \text{ and } s < 1)
+\text{ or } (r > 1 \text{ and } s > 1)\\ 1 & \text{otherwise.}\end{cases}
+$$
+
+The rule does nothing while the stock is in the plateau or while trend and
+status disagree, which damps the response to noisy SPR estimates. The size
+of the change comes from the level (SPR), only its timing from the trend.
+`decision.hcr = 3` is set when SPR falls below `spr_trigger`, which makes
+`flicc.is()` apply its change limits (`dtaclow`, `dtacupp`, `Cmax`) in those
+iterations.
+
+`hcr_sprlbi()` applies the same logic to a single fit, outside `mp()`:
+
+```{r lbi-hcr}
+g <- gears[1]
+round(c(trend = r_rule(lbi[[g]], n1 = 2, n2 = 3),
+        status = spr_rule(tail(c(fit$report$spr), 1), b1 = 0.1, b2 = 0.3,
+                          b3 = 0.5, b4 = 0.75),
+        mult = hcr_sprlbi(fit, gear = g, b1 = 0.1, b2 = 0.3, b3 = 0.5,
+                          b4 = 0.75)), 3)
+```
+
+## The rfb-type rule: `rfb.flicc.hcr()`
+
+`rfb.flicc.hcr()` adapts the ICES category-3 rfb rule to the FLicc
+indicators:
+
+$$
+A_{y+1} = A_y \; r^{\gamma}\, f\, b\, m .
+$$
+
+| Component | `rfb.flicc.hcr()` | ICES rfb | Bias |
+|---|---|---|---|
+| $r$ trend | ratio of `index` (any element of `ind`), `n1` over `n2`, exponent `gamma` | biomass index, 2-over-3 | cancels (trend) |
+| $f$ fishing pressure | `f = NULL` (f = 1, rb rule); `"LBImean"`/`"LBImean.<gear>"` ($\bar L/\bar L_{F=M}$, the ICES-type f); `"LBIspr"`/`"LBIspr.<gear>"`; `"Zrel"` (used as $1/Z^{rel}$) | $\bar L / L_{F=M}$ | inherits level bias |
+| $b$ safeguard | $\min(1,\, SPR_y / SPR_{trigger})$, `spr_trigger` (default 0.25), `nspr` years | $\min(1, I_y/I_{trigger})$ | inherits level bias |
+| $m$ multiplier | `m` (default 0.95) | 0.95 for $k < 0.2$, 0.90 otherwise | |
+
+The SPR safeguard replaces the biomass-index trigger of the ICES rule, since
+no biomass index exists in a length-only MP. It is the only component that
+forces a reduction when the stock is depleted but stable. Because recruitment
+falls as SPR falls, a given SPR corresponds to a lower biomass ratio
+(`flicc2FLStockR(s = )`, `sprbrel_flicc()`), so `spr_trigger` should be
+chosen on that scale.
+
+As in the ICES rule, `decision.hcr = 3` when $b = 1$, so the stability
+limits in `flicc.is()` (ICES: +20 %, −30 %, i.e. `dtacupp = 1.2`,
+`dtaclow = 0.7`) apply only while the safeguard is inactive. Note that this
+is the opposite convention to `lbi.hcr()`, where the limits apply *below*
+the trigger.
+
+The components can be computed from one fit to see what each choice of `f`
+implies:
+
+```{r rfb-components}
+rfb_parts <- function(fit, index, f = NULL, n1 = 2, n2 = 3, gamma = 1,
+                      spr_trigger = 0.25, m = 0.95) {
+  ind <- c(lapply(LBIspr(fit), index), lapply(LBImean(fit), index))
+  names(ind) <- c(paste0("LBIspr.", gears), paste0("LBImean.", gears))
+  M <- c(fit$report$lhpar["M"])
+  ind$Zrel <- (fit$report$Fap + M) / (fspr_flicc(fit, spr = 40) + M)
+  I  <- c(ind[[index]])
+  r  <- (mean(tail(I, n1)) / mean(head(tail(I, n1 + n2), n2)))^gamma
+  fv <- if (is.null(f)) 1 else tail(c(ind[[f]]), 1)
+  if (identical(f, "Zrel")) fv <- 1 / fv
+  b  <- min(1, tail(c(fit$report$spr), 1) / spr_trigger)
+  round(c(r = r, f = fv, b = b, m = m, mult = r * fv * b * m), 3)
+}
+idx_g <- paste0("LBIspr.", gears[1])
+rbind(rb          = rfb_parts(fit, idx_g),
+      f_LBImean   = rfb_parts(fit, idx_g, f = paste0("LBImean.", gears[1])),
+      f_LBIspr    = rfb_parts(fit, idx_g, f = idx_g),
+      f_Zrel      = rfb_parts(fit, idx_g, f = "Zrel"))
+```
+
+## Implementation system: `flicc.is()`
+
+`flicc.is()` converts the multiplier into a TAC,
+$TAC_y = TAC_{y-1} \times \text{mult}$, for the iterations flagged by
+`decision.hcr > 2` limits the change to `dtaclow`–`dtacupp` times the
+previous TAC and caps it at `Cmax`, and sets it for `ay + management_lag`.
+The first cycle needs `initac`, normally the last observed catch. With
+`catch_area` the TAC is split across units (areas) by fixed shares.
+
+# Assembling the management procedure
+
+The OM `om` and the OEM `oem` (with `sampling.lfd.oem()`, `season = FALSE`)
+are built in mse-02. Given those, alternative MPs differ only in the `hcr`
+element:
+
+```{r mp-ctrl, eval = FALSE}
+library(mse)
+
+est <- mseCtrl(method = flicc.sa, args = list(
+  lhpar = lhpar, sel_fun = c("dsnormal", "logistic"),
+  settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1,
+                  ngtg = 13, maxsd = 2,
+                  prior_sigmaF = c(log(sigmaF_hat), 0.01, 1),  # Section 7.3
+                  Lplus = 50, rob_eps = 0.001,                  # Section 8
+                  spr_ref = 40),
+  spr = 40, thresh = 0.75, ess.g = 150, nyrs = 5,
+  lbi = c("spr", "mean"), pool = "none",
+  refit_sel_fun = c("logistic", "logistic"),
+  n_restart = 1, outer_parallel = TRUE))
+
+isys <- mseCtrl(method = flicc.is, args = list(
+  initac = initac, dtaclow = 0.7, dtacupp = 1.2))
+
+hcrs <- list(
+  # trend x status
+  lbi    = mseCtrl(method = lbi.hcr, args = list(
+             gear = "LBIspr.Gillnet", b1 = 0.1, b2 = 0.3, b3 = 0.5, b4 = 0.75,
+             dlow = -0.2, dopt = 0, dhi = 0.15, n1 = 2, n2 = 3)),
+  # rb: trend and SPR safeguard only
+  rb     = mseCtrl(method = rfb.flicc.hcr, args = list(
+             index = "LBIspr.Gillnet", spr_trigger = 0.25)),
+  # rfb with the ICES-type f = Lmean / Lmean(F = M)
+  rfb_Lm = mseCtrl(method = rfb.flicc.hcr, args = list(
+             index = "LBIspr.Gillnet", f = "LBImean.Gillnet",
+             spr_trigger = 0.25)),
+  # rfb with f = Ztgt / Z
+  rfb_Z  = mseCtrl(method = rfb.flicc.hcr, args = list(
+             index = "LBIspr.Gillnet", f = "Zrel", spr_trigger = 0.25)))
+
+mps <- lapply(hcrs, function(h) mpCtrl(list(est = est, hcr = h, isys = isys)))
+
+mseargs <- list(iy = 2024, fy = 2054, y0 = 2015, data_lag = 1,
+                management_lag = 1, frq = 2, it = nsim)
+
+runs <- lapply(mps, function(ctrl)
+  mp(om, oem = oem, ctrl = ctrl, args = mseargs, parallel = TRUE))
+```
+
+`outer_parallel = TRUE` is set because `mp()` runs in parallel here; with
+`parallel = FALSE` in `mp()`, use `parallel = TRUE, workers = n` in
+`flicc.sa()` instead. The FLRef OEM currently requires `parallel = FALSE` in
+`mp()` (common random numbers are plain arrays that `mp()` does not split
+across workers; see the FLRef developer notes), so until that is fixed the
+parallel loop belongs inside `flicc.sa()`.
+
+# Run time
+
+Inside `mp()` the cost of a run is approximately
+
+$$
+\text{time} \approx n_{cycles} \times \frac{n_{iter} \times
+(\bar t_{fit} + \bar t_{ind})}{n_{workers}},
+$$
+
+with $n_{cycles} = (fy - iy)/frq$. The indicator time $\bar t_{ind}$ is now
+negligible (Section 7.1), so run time is governed by the fit time
+$\bar t_{fit}$, which depends on the data window, the model settings and how
+often the optimiser restarts. The example fit above took
+`r round(t_fit, 2)` s on this machine.
+
+## Reference points computed in TMB (FLicc 1.0.9)
+
+Before 1.0.9, every `LBIspr()` call solved for $F_{SPR_x}$ in R with
+`uniroot()`, recomputing the unfished state at each step. The TMB template
+now has a per-recruit block that is evaluated only at report time (TMB's
+double evaluation, never during optimisation). It computes $F_{SPR_x}$ for
+the targets in `settings$spr_ref` and the numbers-at-length at those F, at
+the fitted parameters:
+
+* `fspr_flicc()` returns the stored value for these targets (no
+  computation); other targets cost one TMB call (`brp_tmb_flicc()`).
+* `LBIspr()` takes its reference composition from the stored numbers.
+* `LBImean(ref = "FM")` needs `nf_flicc()` at $F = M$, one TMB call.
+
+Keep `settings$spr_ref` equal to the `spr` argument of `flicc.sa()`
+(both default to 40). If they differ, every indicator call falls back to
+one extra TMB evaluation per iteration.
+
+```{r speed-ref}
+c(Fspr40_stored = system.time(fspr_flicc(fit, spr = 40))[["elapsed"]],
+  Fspr30_tmb    = system.time(fspr_flicc(fit, spr = 30))[["elapsed"]],
+  LBIspr        = system.time(LBIspr(fit))[["elapsed"]],
+  LBImean       = system.time(LBImean(fit))[["elapsed"]])
+```
+
+## Settings that control fit time
+
+| Setting | Where | Effect on time | Effect on results |
+|---|---|---|---|
+| `nyrs` | `flicc.sa()` | fixed, short data window instead of a growing `y0:dy`; cost stays constant across cycles | F random walk over fewer years; $\sigma_F$ weakly identified (Section 7.3) |
+| `n_restart` | `flicc.sa()` / `fiticc()` | each restart is a full `nlminb()` run; 0–1 is usually enough inside `mp()` | more restarts reduce residual gradients |
+| `grad_tol` | `flicc.sa()` / `fiticc()` | restarts stop once the max gradient is below it | also the convergence criterion |
+| `obs_model` | `settings` | `"mn"` fastest; `"dm"` adds one parameter | `"dm"` absorbs overdispersion of sampled compositions |
+| `ngtg`, `maxsd` | `settings` | cost scales with `ngtg`; little gain beyond 9–13 groups | `maxsd` sets the actual Linf spread and the largest reachable length |
+| `ess.g` | `flicc.sa()` | none directly; very large values make the likelihood sharp and convergence harder | weight of the length data |
+| `refit_sel_fun` | `flicc.sa()` | one extra fit per boundary iteration | rescues boundary fits |
+| `frq` | `mp()` args | halves the number of assessments for `frq = 2` | TAC held between assessments |
+| `parallel`, `workers`, `outer_parallel` | `flicc.sa()` / `mp()` | divides by the number of workers; one level only | none |
+| `verbose = FALSE` | `flicc.sa()` | avoids console output from every restart | none |
+
+## Estimate $\sigma_F$ once, then fix it
+
+FLicc smooths fishing mortality over years with a random walk on log F by
+gear,
+
+$$
+\log F_{g,y} \sim N(\log F_{g,y-1},\, \sigma_F^2), \qquad
+\log \sigma_F \sim N(\mu_{\sigma}, s_{\sigma}^2),
+$$
+
+set by `settings$prior_sigmaF = c(mu, sd, use)`. Inside an MP with a short
+rolling window (`nyrs = 5`), $\sigma_F$ is poorly determined by each cycle's
+data. Estimating it in every fit has three costs:
+
+1. one more, weakly identified parameter, so `nlminb()` needs more
+   iterations and more restarts, and more fits end flagged as not converged
+   (and are dropped, freezing the TAC);
+2. the degree of smoothing changes from cycle to cycle and iteration to
+   iteration, so part of the change in SPR seen by the HCR comes from the
+   estimator rather than from the data;
+3. the smoothing is less stable in exactly the years the HCR relies on, the
+   last one or two years of the window.
+
+A practical alternative is to estimate $\sigma_F$ once, in a conditioning
+step on the historical sampled data with the full time series, and then
+pass it to `flicc.sa()` with a tight prior, which holds it effectively
+fixed:
+
+```{r sigmaf}
+# 1. conditioning fit: sigmaF estimated with the default prior
+sigmaF_hat <- exp(fit$par$mpd[fit$par$par == "log_sigmaF"])
+sigmaF_hat
+
+# 2. fits with sigmaF held at the estimate (tight prior on log sigmaF)
+settings_fix <- modifyList(settings,
+                           list(prior_sigmaF = c(log(sigmaF_hat), 0.01, 1)))
+t_fix <- system.time(
+  fit_fix <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                    settings = settings_fix)
+)[["elapsed"]]
+
+rbind(estimated = c(time = t_fit, evals = fit$opt$evaluations[["function"]],
+                    max_grad = fit$max_gradient,
+                    SPR_last = tail(c(fit$report$spr), 1)),
+      fixed     = c(time = t_fix, evals = fit_fix$opt$evaluations[["function"]],
+                    max_grad = fit_fix$max_gradient,
+                    SPR_last = tail(c(fit_fix$report$spr), 1)))
+```
+
+In the MSE, the conditioning step is done once per iteration on the
+historical OEM samples (or once on the median), before `mp()` is called,
+and the estimate is then passed in `flicc.sa(settings = ...)`. A per-iteration
+value needs a small change in `flicc.sa()` (a vector of `sigmaF` by
+iteration); with a single value it works with the current code.
+
+Three cautions:
+
+* The tight prior holds $\sigma_F$ close to the estimate but does not remove
+  the parameter from the optimisation; a true fix through the TMB `map` is
+  proposed in the developer notes.
+* The gain in fit time is largest for short windows and noisy samples, where
+  $\sigma_F$ is least identified; check it with the timing comparison above
+  on the OM's own samples rather than assuming it.
+* Do not set the prior mean to exactly `log(1) = 0`: `fiticc()` currently
+  treats any element of `prior_sigmaF` equal to `FALSE` (i.e. 0) as "random
+  walk off" (developer notes).
+
+# Robustness options for repeated fits
+
+An MP fits the model hundreds of times to data that nobody inspects. The
+options below make the fits robust to the parts of a simulated length sample
+that the model cannot explain. They are off by default in `fiticc()` and
+are set through `flicc.sa(settings = ...)`.
+
+## Tail cut of the growth-type groups: `maxsd`, `ngtg`, `tail_warning`
+
+The GTG population model represents growth variation by `ngtg` growth
+curves with Linf spread over $\pm$ `maxsd` standard deviations
+($\sigma = CV_L L_\infty$). The truncation caps the largest length the model
+can produce at $L_\infty (1 + \text{maxsd}\, CV_L)$ and makes the actual
+spread smaller than `CVL` (about 0.9 CVL at `maxsd = 2`, the LBSPR default).
+The OM, in contrast, typically samples lengths from a normal length-at-age
+distribution up to 1.2 Linf or more. A few sampled fish beyond the largest
+GTG Linf get near-zero probability and can drive CVL, selectivity and SPR.
+`tail_warning = TRUE` reports how many observed fish fall in such bins
+(useful when setting up the MP, not inside `mp()`); `maxsd = 3, ngtg = 19`
+widens the reachable range and makes CVL close to the actual spread.
+
+## Robust composition likelihood: `rob_eps`
+
+`rob_eps` mixes the predicted proportions with a uniform,
+$\tilde p_l = (1 - \varepsilon) p_l + \varepsilon / n_{bins}$, which bounds
+the cost of a few fish in bins the model barely reaches. `rob_eps = 0.001`
+is safe; 0.01 already changes selectivity and F with clean data.
+
+## Plus group: `Lplus`
+
+`Lplus` pools observed and predicted counts in all bins with lower bound
+$\geq$ `Lplus` into one plus group before the likelihood (tail compression,
+as in SS3). The likelihood then sees how many fish are at or above `Lplus`,
+not how they fall into bins. Choose `Lplus` where counts become sparse,
+typically near Linf. Negative log-likelihoods are comparable only between
+fits with the same `Lplus`. Note that `LBIspr()` and `LBImean()` use the
+unpooled observed compositions, so the indicators themselves are not
+affected by `Lplus`, only the fit.
+
+```{r robust}
+fit_rob <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = modifyList(settings,
+                                        list(Lplus = 50, rob_eps = 0.001)))
+rbind(default = c(SPR = tail(c(fit$report$spr), 1),
+                  LBIspr = sapply(LBIspr(fit), function(x) tail(c(index(x)), 1))),
+      Lplus50_rob0.001 = c(SPR = tail(c(fit_rob$report$spr), 1),
+                  LBIspr = sapply(LBIspr(fit_rob), function(x) tail(c(index(x)), 1))))
+```
+
+## Boundary fits and selectivity form
+
+The SPR boundary check (`spr_max`) and the rescue refit (`refit_sel_fun`)
+in `flicc.sa()` (Section 3.3) are the MP-level counterpart of these
+likelihood options: they catch fits in which a dome-shaped selectivity
+explains away the large fish. Both are cheap insurance. Together with the
+tracked `used.est`, `sprbound.est` and `refit.est`, they show whether the
+estimator is the weak point of an MP.
+
+# Recommended starting values
+
+| Element | Setting | Starting value |
+|---|---|---|
+| Data window | `nyrs` | 5 |
+| Data weight | `ess.g` | 100–200 per gear |
+| Model | `pop_model`, `obs_model` | `"gtg"`, `"dm"` |
+| GTG | `ngtg`, `maxsd` | 13, 2 (or 19, 3 if large fish are common) |
+| $\sigma_F$ | `prior_sigmaF` | estimated once, then `c(log(sigmaF_hat), 0.01, 1)` |
+| Robustness | `Lplus`, `rob_eps` | near Linf, 0.001 |
+| Reference | `spr`, `spr_ref`, `thresh` | 40, 40, 0.75 |
+| Diagnostics | `drop_nonconv`, `spr_max`, `refit_sel_fun` | `TRUE`, 0.99, asymptotic forms |
+| Optimiser | `n_restart`, `grad_tol` | 1, 1e-3 |
+| HCR | `rfb.flicc.hcr()` | `index` = LBIspr of the gear selecting large fish, `f = NULL` or `"LBImean.<gear>"`, `spr_trigger` 0.25, `m` 0.95 |
+| Limits | `flicc.is()` | `dtacupp = 1.2`, `dtaclow = 0.7` |
+
+These are starting values for tuning, not recommendations for a particular
+stock. The HCR triggers and the SPR safeguard in particular need to be
+calibrated against the OM and tested across the robustness set.
+
+# Appendix A: MP-related functions in FLicc
+
+| Function | Purpose |
+|---|---|
+| `flicc.sa()` | `mp()` estimator: fits `fiticc()` per iteration, diagnostics, indicators |
+| `lbi.hcr()` | `mp()` HCR: trend x SPR status, applied when both agree |
+| `rfb.flicc.hcr()` | `mp()` HCR: $r^{\gamma} f b m$ (ICES rfb-type) |
+| `flicc.is()` | `mp()` implementation system: TAC from multiplier, limits, area split |
+| `LBIspr()` | proportion above $L_{ref}$ relative to the SPR target, by gear |
+| `LBImean()` | mean length relative to Lmean(F = M) or Lmean($F_{SPR_x}$), by gear |
+| `spr_rule()` | four-trigger SPR change multiplier |
+| `r_rule()` | trend ratio of an index (`n1` over `n2`) |
+| `hcr_sprlbi()` | `lbi.hcr()` logic for a single fit |
+| `plot_hcrspr()` | plot of the SPR rule with status zones |
+| `plot_LBIspr()`, `plot_LBIp()` | indicator and reference compositions |
+| `fspr_flicc()`, `brp_tmb_flicc()`, `nf_flicc()` | $F_{SPR_x}$, per-recruit quantities and numbers-at-length (TMB) |
+| `need_refit_flicc()`, `flicc_convergence()` | convergence checks |
+| `lfdess()` | rescales compositions to an effective sample size |
+
+# Appendix B: notation
+
+| Symbol | Meaning |
+|---|---|
+| $s_g(l)$ | selectivity-at-length of gear $g$ |
+| $N_l(F)$ | equilibrium numbers-at-length at apical F |
+| $v_g(l)$ | $N_l(F_{SPR_x})\, s_g(l)$, vulnerable numbers at the target |
+| $L_{ref,g}$ | length at which cumulative $v_g$ reaches `thresh` |
+| $L_{c,g}$ | first length with $s_g(l) \geq 0.5$ |
+| $\bar L^{ref}_g$ | reference mean length (F = M or $F_{SPR_x}$) |
+| $F_{ap}$ | apical fishing mortality |
+| $F_{SPR_x}$ | apical F giving SPR = x % |
+| $Z^{rel}$ | $(F_{ap} + M)/(F_{SPR_x} + M)$ |
+| $\sigma_F$ | standard deviation of the random walk on log F |
+| $r, f, b, m$ | trend, fishing pressure, safeguard and precautionary components of the rfb rule |
+
+# Session information
+
+```{r session}
+sessionInfo()
+```

@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Henning Winker — FAO Fisheries and Aquaculture Division (NFIFM)" />
+  <title>FLicc management-procedure modules for mse: flow, indicators, harvest control rules and run time</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+  <style type="text/css">body{max-width:900px;margin:0 auto;padding:24px 16px;font:16px/1.6 "Helvetica Neue",Arial,sans-serif;color:#1f2328;background:#fff}
+h1,h2,h3{color:#333;line-height:1.25} h1.title{font-size:1.9rem}
+pre{background:#f6f8fa;padding:10px 12px;border-radius:6px;overflow-x:auto;font-size:13.5px}
+code{font-family:Menlo,Consolas,monospace;font-size:0.92em}
+table{border-collapse:collapse;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid #d0d7de;padding:4px 8px;vertical-align:top} th{background:#f6f8fa}
+.preview{background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;padding:8px 12px;margin:12px 0}
+nav#TOC{background:#f6f8fa;border-radius:6px;padding:8px 16px;margin:16px 0;font-size:14px}
+a{color:#0b5d8a}
+@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}h1,h2,h3{color:#e6edf3}pre,th,nav#TOC{background:#161b22}th,td{border-color:#30363d}.preview{background:#3b2e00;border-color:#9e6a03}a{color:#58a6ff}}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">FLicc management-procedure modules for mse: flow,
+indicators, harvest control rules and run time</h1>
+<p class="author">Henning Winker — FAO Fisheries and Aquaculture
+Division (NFIFM)</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#purpose-and-scope" id="toc-purpose-and-scope"><span class="toc-section-number">1</span> Purpose and scope</a></li>
+<li><a href="#the-flow-of-an-flicc-management-procedure" id="toc-the-flow-of-an-flicc-management-procedure"><span class="toc-section-number">2</span> The flow of an FLicc management
+procedure</a>
+<ul>
+<li><a href="#modules-and-what-they-pass-on" id="toc-modules-and-what-they-pass-on"><span class="toc-section-number">2.1</span> Modules and what they pass
+on</a></li>
+<li><a href="#timing-within-a-cycle" id="toc-timing-within-a-cycle"><span class="toc-section-number">2.2</span> Timing within a cycle</a></li>
+</ul></li>
+<li><a href="#the-estimator-flicc.sa" id="toc-the-estimator-flicc.sa"><span class="toc-section-number">3</span> The estimator:
+<code>flicc.sa()</code></a>
+<ul>
+<li><a href="#inputs-from-the-oem" id="toc-inputs-from-the-oem"><span class="toc-section-number">3.1</span> Inputs from the OEM</a></li>
+<li><a href="#one-fit-per-iteration" id="toc-one-fit-per-iteration"><span class="toc-section-number">3.2</span> One fit per iteration</a></li>
+<li><a href="#diagnostics-and-usable-iterations" id="toc-diagnostics-and-usable-iterations"><span class="toc-section-number">3.3</span> Diagnostics and usable
+iterations</a></li>
+<li><a href="#indicators-returned-in-ind" id="toc-indicators-returned-in-ind"><span class="toc-section-number">3.4</span> Indicators returned in
+<code>ind</code></a></li>
+</ul></li>
+<li><a href="#indicators-principles" id="toc-indicators-principles"><span class="toc-section-number">4</span>
+Indicators: principles</a>
+<ul>
+<li><a href="#spr-z-and-zrel" id="toc-spr-z-and-zrel"><span class="toc-section-number">4.1</span> SPR, Z and Zrel</a></li>
+<li><a href="#lbispr-proportion-of-large-fish-relative-to-the-spr-target" id="toc-lbispr-proportion-of-large-fish-relative-to-the-spr-target"><span class="toc-section-number">4.2</span> <code>LBIspr</code>: proportion of
+large fish relative to the SPR target</a></li>
+<li><a href="#lbimean-mean-length-relative-to-lmeanf-m" id="toc-lbimean-mean-length-relative-to-lmeanf-m"><span class="toc-section-number">4.3</span> <code>LBImean</code>: mean length
+relative to Lmean(F = M)</a></li>
+<li><a href="#levels-and-trends" id="toc-levels-and-trends"><span class="toc-section-number">4.4</span> Levels and trends</a></li>
+</ul></li>
+<li><a href="#harvest-control-rules" id="toc-harvest-control-rules"><span class="toc-section-number">5</span>
+Harvest control rules</a>
+<ul>
+<li><a href="#spr-status-rule-spr_rule" id="toc-spr-status-rule-spr_rule"><span class="toc-section-number">5.1</span> SPR status rule:
+<code>spr_rule()</code></a></li>
+<li><a href="#trend-and-status-lbi.hcr" id="toc-trend-and-status-lbi.hcr"><span class="toc-section-number">5.2</span> Trend and status:
+<code>lbi.hcr()</code></a></li>
+<li><a href="#the-rfb-type-rule-rfb.flicc.hcr" id="toc-the-rfb-type-rule-rfb.flicc.hcr"><span class="toc-section-number">5.3</span> The rfb-type rule:
+<code>rfb.flicc.hcr()</code></a></li>
+<li><a href="#implementation-system-flicc.is" id="toc-implementation-system-flicc.is"><span class="toc-section-number">5.4</span> Implementation system:
+<code>flicc.is()</code></a></li>
+</ul></li>
+<li><a href="#assembling-the-management-procedure" id="toc-assembling-the-management-procedure"><span class="toc-section-number">6</span> Assembling the management
+procedure</a></li>
+<li><a href="#run-time" id="toc-run-time"><span class="toc-section-number">7</span> Run time</a>
+<ul>
+<li><a href="#reference-points-computed-in-tmb-flicc-1.0.9" id="toc-reference-points-computed-in-tmb-flicc-1.0.9"><span class="toc-section-number">7.1</span> Reference points computed in TMB
+(FLicc 1.0.9)</a></li>
+<li><a href="#settings-that-control-fit-time" id="toc-settings-that-control-fit-time"><span class="toc-section-number">7.2</span> Settings that control fit
+time</a></li>
+<li><a href="#estimate-sigma_f-once-then-fix-it" id="toc-estimate-sigma_f-once-then-fix-it"><span class="toc-section-number">7.3</span> Estimate
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+once, then fix it</a></li>
+</ul></li>
+<li><a href="#robustness-options-for-repeated-fits" id="toc-robustness-options-for-repeated-fits"><span class="toc-section-number">8</span> Robustness options for repeated
+fits</a>
+<ul>
+<li><a href="#tail-cut-of-the-growth-type-groups-maxsd-ngtg-tail_warning" id="toc-tail-cut-of-the-growth-type-groups-maxsd-ngtg-tail_warning"><span class="toc-section-number">8.1</span> Tail cut of the growth-type
+groups: <code>maxsd</code>, <code>ngtg</code>,
+<code>tail_warning</code></a></li>
+<li><a href="#robust-composition-likelihood-rob_eps" id="toc-robust-composition-likelihood-rob_eps"><span class="toc-section-number">8.2</span> Robust composition likelihood:
+<code>rob_eps</code></a></li>
+<li><a href="#plus-group-lplus" id="toc-plus-group-lplus"><span class="toc-section-number">8.3</span> Plus group:
+<code>Lplus</code></a></li>
+<li><a href="#boundary-fits-and-selectivity-form" id="toc-boundary-fits-and-selectivity-form"><span class="toc-section-number">8.4</span> Boundary fits and selectivity
+form</a></li>
+</ul></li>
+<li><a href="#recommended-starting-values" id="toc-recommended-starting-values"><span class="toc-section-number">9</span> Recommended starting values</a></li>
+<li><a href="#appendix-a-mp-related-functions-in-flicc" id="toc-appendix-a-mp-related-functions-in-flicc"><span class="toc-section-number">10</span> Appendix A: MP-related functions in
+FLicc</a></li>
+<li><a href="#appendix-b-notation" id="toc-appendix-b-notation"><span class="toc-section-number">11</span> Appendix B: notation</a></li>
+<li><a href="#session-information" id="toc-session-information"><span class="toc-section-number">12</span> Session information</a></li>
+</ul>
+</nav>
+<div class="preview">
+<p><strong>Preview.</strong> Converted with pandoc without running R:
+code is shown, output and figures are not. Re-render with
+<code>source(&quot;inst/scripts/render_docs.R&quot;)</code>.</p>
+</div>
+<h1 data-number="1" id="purpose-and-scope"><span class="header-section-number">1</span> Purpose and scope</h1>
+<p>This guideline documents the FLicc utilities that turn a length-based
+catch-curve assessment into a management procedure (MP) for the FLR
+<code>mse</code> package. It concentrates on <strong>how the modules
+connect</strong> inside <code>mp()</code>, the <strong>principles behind
+the indicators</strong> they produce (SPR, Z, <code>LBIspr</code>,
+<code>LBImean</code>), the <strong>harvest control rules</strong> that
+use them (<code>lbi.hcr()</code> and the new rfb-type rule
+<code>rfb.flicc.hcr()</code>), and the <strong>settings that control run
+time and robustness</strong> of the repeated FLicc fits.</p>
+<p>The operating model (OM) and the length-sampling observation error
+model (OEM) are documented elsewhere and only summarised here:</p>
+<table>
+<colgroup>
+<col style="width: 22%" />
+<col style="width: 40%" />
+<col style="width: 36%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Doc</th>
+<th>Content</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>mse-01 (this)</strong></td>
+<td>FLicc MP modules: flow, indicators, HCRs, run time, robustness
+options</td>
+<td>prototype</td>
+</tr>
+<tr class="even">
+<td>mse-02</td>
+<td>Splendid alfonsino length-selective OM (FLRef),
+<code>sampling.lfd.oem()</code> and full FLicc MSE runs</td>
+<td>planned (OM in <em>FLicc_MSE_lite_OM_v3</em>)</td>
+</tr>
+<tr class="odd">
+<td>mse-03</td>
+<td>Robustness set: misspecified M, Linf, CVL and selectivity form</td>
+<td>planned</td>
+</tr>
+<tr class="even">
+<td>FLRef <code>lfd-01</code></td>
+<td>Length-frequency simulation and <code>sampling.lfd.oem()</code></td>
+<td><a href="https://henning-winker.github.io/FLRef/">FLRef
+docs</a></td>
+</tr>
+</tbody>
+</table>
+<p>All single-fit examples below use the <code>alfonsino</code> example
+data in FLicc, so each function can be run and checked in isolation
+before it is used inside <code>mp()</code>.</p>
+<h1 data-number="2" id="the-flow-of-an-flicc-management-procedure"><span class="header-section-number">2</span> The flow of an FLicc management
+procedure</h1>
+<h2 data-number="2.1" id="modules-and-what-they-pass-on"><span class="header-section-number">2.1</span> Modules and what they pass
+on</h2>
+<p><code>mp()</code> calls three user modules in every management cycle:
+an estimator (<code>est</code>), a harvest control rule
+(<code>hcr</code>) and an implementation system (<code>isys</code>). The
+OEM in front of them is called by <code>mp()</code> itself.</p>
+<pre><code>OM (FLom)                  true N, F, M; catch by gear from partial F
+  |
+  |  sampling.lfd.oem()     (FLRef) two-stage length samples by gear and year,
+  v                         reported catch by gear with error
+attr(stk, &quot;lfd&quot;)            FLQuants: len x year x unit x ... x iter, one per gear
+attr(stk, &quot;catch_gear&quot;)     FLQuants: catch by gear (shares are formed in flicc.sa)
+  |
+  |  est  = flicc.sa()      one fiticc() fit per iteration (loop or parallel),
+  v                         diagnostics, usable iterations, indicators
+ind                         FLQuants: LBIspr.&lt;gear&gt;, LBImean.&lt;gear&gt;, [pooled],
+  |                         SPR, Z, Ztgt, Zrel   (NA for unusable iterations)
+  |  hcr  = lbi.hcr()  or  rfb.flicc.hcr()
+  v
+ctrl                        fwdControl holding a TAC *multiplier* (not a TAC)
+  |                         decision.hcr flag in tracking
+  |  isys = flicc.is()      TAC_y = TAC_{y-1} x mult, change limits, Cmax,
+  v                         optional split across units (areas)
+ctrl                        fwdControl with the TAC for ay + management_lag
+  |
+  |  fwd.om()               projection
+  v
+OM</code></pre>
+<p>Two design decisions run through all modules:</p>
+<ol type="1">
+<li><strong>The length data travel as attributes of the observed
+stock.</strong> <code>mp()</code> only passes <code>stk</code> and
+<code>idx</code> to the estimator, so <code>sampling.lfd.oem()</code>
+attaches the samples as <code>attr(stk, &quot;lfd&quot;)</code> and
+<code>attr(stk, &quot;catch_gear&quot;)</code>, and <code>flicc.sa()</code> reads
+them from there. <code>stk</code> itself is returned unchanged.</li>
+<li><strong>The HCRs return a relative change, not an absolute
+catch.</strong> FLicc has no biomass scale, so the HCR returns a
+multiplier on the previous TAC and <code>flicc.is()</code> converts it.
+Every iteration that cannot be assessed (failed, non-converged or
+boundary fit) carries <code>NA</code> indicators, which the HCRs turn
+into <code>mult = 1</code> (TAC unchanged).</li>
+</ol>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Module</th>
+<th><code>mp()</code> slot</th>
+<th>Reads</th>
+<th>Returns</th>
+<th>Tracks</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>sampling.lfd.oem()</code> (FLRef)</td>
+<td><code>oem</code></td>
+<td>OM stock, gear objects, common random numbers</td>
+<td><code>stk</code> with <code>lfd</code>, <code>catch_gear</code>
+attributes</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code>flicc.sa()</code></td>
+<td><code>est</code></td>
+<td><code>attr(stk, &quot;lfd&quot;)</code>,
+<code>attr(stk, &quot;catch_gear&quot;)</code></td>
+<td><code>ind</code> (indicators, year x iter)</td>
+<td><code>conv.est</code>, <code>sprbound.est</code>,
+<code>refit.est</code>, <code>used.est</code>,
+<code>Lref.&lt;gear&gt;</code>, <code>Lmeanref.&lt;gear&gt;</code></td>
+</tr>
+<tr class="odd">
+<td><code>lbi.hcr()</code></td>
+<td><code>hcr</code></td>
+<td><code>ind[[gear]]</code>, <code>ind$SPR</code></td>
+<td>multiplier</td>
+<td><code>trend.hcr</code>, <code>metric.hcr</code>,
+<code>decision.hcr</code>, <code>mult.hcr</code></td>
+</tr>
+<tr class="even">
+<td><code>rfb.flicc.hcr()</code></td>
+<td><code>hcr</code></td>
+<td><code>ind[[index]]</code>, <code>ind[[f]]</code>,
+<code>ind$SPR</code></td>
+<td>multiplier</td>
+<td><code>r.hcr</code>, <code>f.hcr</code>, <code>b.hcr</code>,
+<code>mult.hcr</code>, <code>decision.hcr</code></td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>isys</code></td>
+<td>multiplier, previous TAC, <code>decision.hcr</code></td>
+<td>TAC for <code>ay + management_lag</code></td>
+<td><code>tac.is</code></td>
+</tr>
+</tbody>
+</table>
+<h2 data-number="2.2" id="timing-within-a-cycle"><span class="header-section-number">2.2</span> Timing within a cycle</h2>
+<p>With the usual <code>mse</code> arguments (<code>iy</code>,
+<code>fy</code>, <code>y0</code>, <code>data_lag</code>,
+<code>management_lag</code>, <code>frq</code>):</p>
+<ul>
+<li>the assessment year is <code>ay</code>; the last data year is
+<code>dy = ay - data_lag</code>;</li>
+<li><code>flicc.sa()</code> fits the length data from <code>y0</code> to
+<code>dy</code>, or only the last <code>nyrs</code> years up to
+<code>dy</code> (rolling window, Section 7);</li>
+<li><code>flicc.is()</code> sets the TAC for
+<code>ay + management_lag</code>, starting from <code>initac</code> in
+the first cycle (<code>ay == iy</code>) and from the TAC tracked at
+<code>ay - frq</code> afterwards;</li>
+<li>with <code>frq &gt; 1</code> the TAC is held between assessments,
+and the trend windows <code>n1</code>, <code>n2</code> of the HCRs refer
+to <em>data years</em>, not to cycles.</li>
+</ul>
+<h1 data-number="3" id="the-estimator-flicc.sa"><span class="header-section-number">3</span> The estimator:
+<code>flicc.sa()</code></h1>
+<h2 data-number="3.1" id="inputs-from-the-oem"><span class="header-section-number">3.1</span> Inputs from the OEM</h2>
+<ol type="1">
+<li><strong>Length compositions.</strong> <code>attr(stk, &quot;lfd&quot;)</code>
+is summed over units (<code>unitSums()</code>), so area- or
+sex-structured samples are pooled into one composition per gear. Each
+gear-year composition is then rescaled to the effective sample size
+<code>ess.g</code> with <code>lfdess()</code>. The OEM’s own sample size
+(<code>ess_len</code>, typically hundreds of fish) would give the
+multinomial or Dirichlet-multinomial likelihood far too much weight
+relative to the real information in a length sample; <code>ess.g</code>
+(default 150) sets the weight explicitly and can differ by gear.
+<code>ess.g = NULL</code> keeps the sampled counts.</li>
+<li><strong>Catch split.</strong> Catch shares by gear and year are
+formed from <code>attr(stk, &quot;catch_gear&quot;)</code> (catch weight by gear,
+with reporting error), so that the partition carries observation error
+and differs by iteration and cycle. <code>catch_by_gear</code> is only a
+fallback for an OEM that does not attach catch by gear.</li>
+<li><strong>Life history.</strong> <code>lhpar</code> (Linf, k, M or
+M/k, L50, a, b) is static across cycles and builds the length template
+with <code>stocklen()</code> for each iteration’s composition.</li>
+</ol>
+<p>The OEM must deliver <strong>annual</strong> compositions
+(<code>season = FALSE</code> in <code>sampling.lfd.oem()</code>);
+seasonal samples are not pooled by <code>flicc.sa()</code>.</p>
+<h2 data-number="3.2" id="one-fit-per-iteration"><span class="header-section-number">3.2</span> One fit per iteration</h2>
+<p><code>fiticc()</code> fits one FLR iteration at a time, so
+<code>flicc.sa()</code> loops over <code>args$it</code>. Each iteration
+gets its own <code>stocklen()</code> template and catch shares, and
+<code>fiticc()</code> is called with the <code>settings</code> list
+(population and observation model, CVL, priors, robustness options; see
+<code>?fiticc</code>).</p>
+<p>The loop runs sequentially or in parallel through
+<code>foreach</code>/<code>doFuture</code>
+(<code>parallel = TRUE</code>, <code>workers</code>). The two levels of
+parallelism must never be active together: if <code>mp()</code> itself
+runs in parallel, set <code>outer_parallel = TRUE</code>, which forces
+<code>parallel = FALSE</code> inside <code>flicc.sa()</code>. A
+<code>future::multisession</code> plan opened inside every
+<code>mp()</code> worker is a nested backend and crashes workers.</p>
+<h2 data-number="3.3" id="diagnostics-and-usable-iterations"><span class="header-section-number">3.3</span> Diagnostics and usable
+iterations</h2>
+<p>Each fit is classified before any indicator is computed:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Check</th>
+<th>Setting</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Fit fails (<code>try-error</code>)</td>
+<td></td>
+<td>not used</td>
+</tr>
+<tr class="even">
+<td>Convergence (<code>need_refit_flicc()</code>: optimiser code, finite
+objective, positive-definite Hessian)</td>
+<td><code>drop_nonconv = TRUE</code></td>
+<td>not used if not converged</td>
+</tr>
+<tr class="odd">
+<td>SPR at the boundary (any year with SPR
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>≥</mo><annotation encoding="application/x-tex">\geq</annotation></semantics></math>
+<code>spr_max</code>)</td>
+<td><code>spr_max = 0.99</code></td>
+<td>flagged, not used</td>
+</tr>
+<tr class="even">
+<td>Rescue of boundary fits with another selectivity form</td>
+<td><code>refit_sel_fun</code></td>
+<td>refit kept only if it leaves the boundary</td>
+</tr>
+<tr class="odd">
+<td>Inputs of boundary fits</td>
+<td><code>debug_dir</code></td>
+<td>saved as <code>flicc_bound_ay&lt;year&gt;.rds</code></td>
+</tr>
+</tbody>
+</table>
+<p>Boundary solutions (SPR close to one, i.e. F close to zero) arise
+mostly when a dome-shaped selectivity can explain the absence of large
+fish by a steep descending limb instead of mortality.
+<code>refit_sel_fun = c(&quot;logistic&quot;, &quot;logistic&quot;)</code> retries such fits
+with asymptotic selectivity.</p>
+<p>An unusable iteration gets <code>NA</code> for all indicators in that
+cycle; the HCRs keep its TAC (<code>mult = 1</code>). The proportion of
+usable fits (<code>used.est</code> in the tracking) should be monitored:
+a management procedure that is frequently “frozen” by failed fits
+performs differently from the one that was intended.</p>
+<h2 data-number="3.4" id="indicators-returned-in-ind"><span class="header-section-number">3.4</span> Indicators returned in
+<code>ind</code></h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Definition</th>
+<th>Equals 1 at</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>LBIspr.&lt;gear&gt;</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>P</mi><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><mi>L</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mi>/</mi><msup><mi>P</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msup><mrow><mo stretchy="true" form="prefix">(</mo><mi>L</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">P^{obs}(L \geq L_{ref}) / P^{ref}(L \geq L_{ref})</annotation></semantics></math>
+(Section 4.2)</td>
+<td>SPR target</td>
+</tr>
+<tr class="even">
+<td><code>LBImean.&lt;gear&gt;</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msup><mi>/</mi><msup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msup></mrow><annotation encoding="application/x-tex">\bar L^{obs} / \bar L^{ref}</annotation></semantics></math>
+(Section 4.3)</td>
+<td>F = M (default) or SPR target</td>
+</tr>
+<tr class="odd">
+<td><code>LBIspr</code>, <code>LBImean</code></td>
+<td>weighted mean over gears (<code>pool</code> not
+<code>&quot;none&quot;</code>)</td>
+<td>as above</td>
+</tr>
+<tr class="even">
+<td><code>SPR</code></td>
+<td>fitted SPR (0–1)</td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code>Z</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mrow><mi>a</mi><mi>p</mi></mrow></msub><mo>+</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">F_{ap} + M</annotation></semantics></math>
+(apical F, fitted M)</td>
+<td></td>
+</tr>
+<tr class="even">
+<td><code>Ztgt</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><mo>+</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">F_{SPR_x} + M</annotation></semantics></math></td>
+<td></td>
+</tr>
+<tr class="odd">
+<td><code>Zrel</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>Z</mi><mi>/</mi><msub><mi>Z</mi><mrow><mi>t</mi><mi>g</mi><mi>t</mi></mrow></msub></mrow><annotation encoding="application/x-tex">Z / Z_{tgt}</annotation></semantics></math></td>
+<td>SPR target (&gt; 1: fishing above target)</td>
+</tr>
+</tbody>
+</table>
+<p><code>pool</code> decides how gear indices are combined:
+<code>&quot;none&quot;</code> (default, per gear only), <code>&quot;equal&quot;</code>,
+<code>&quot;catch&quot;</code> (reported catch shares by year), or a named vector
+of weights. Catch weighting is not necessarily best: a gear that selects
+large fish responds more strongly to changes in survival than a gear
+that catches mostly recruits, even if its catch is smaller.</p>
+<p>The tracking also stores the reference lengths
+<code>Lref.&lt;gear&gt;</code> and <code>Lmeanref.&lt;gear&gt;</code> of
+every refit, so drift of the references between cycles (e.g. through
+re-estimated selectivity) can be seen directly.</p>
+<h1 data-number="4" id="indicators-principles"><span class="header-section-number">4</span> Indicators: principles</h1>
+<p>The examples use one FLicc fit to the alfonsino data with a
+dome-shaped and an asymptotic gear.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">data</span>(<span class="st">&quot;alfonsino&quot;</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>lfd <span class="ot">&lt;-</span> <span class="fu">FLQuantLen</span>(<span class="fu">lfd_long_to_wide</span>(<span class="fu">as.data.frame</span>(lfd_alfonsino)),</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>                  <span class="at">unit =</span> <span class="st">&quot;cm&quot;</span>, <span class="at">midL =</span> <span class="cn">FALSE</span>)</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>lhpar <span class="ot">&lt;-</span> <span class="fu">FLPar</span>(<span class="at">linf =</span> <span class="fl">55.7</span>, <span class="at">k =</span> <span class="fl">0.08</span>, <span class="at">M =</span> <span class="fl">0.162</span>, <span class="at">L50 =</span> <span class="fl">31.1859</span>,</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>               <span class="at">a =</span> <span class="fl">0.004721956</span> <span class="sc">/</span> <span class="dv">1000</span>, <span class="at">b =</span> <span class="fl">3.146168</span>)</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>stklen <span class="ot">&lt;-</span> <span class="fu">stocklen</span>(lfd, lhpar, <span class="at">m_model =</span> <span class="st">&quot;constant&quot;</span>)</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>gears   <span class="ot">&lt;-</span> <span class="fu">names</span>(lfd)</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>sel_fun <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;dsnormal&quot;</span>, <span class="st">&quot;logistic&quot;</span>)</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>cbg     <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">0.7</span>, <span class="fl">0.3</span>)</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>settings <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">pop_model =</span> <span class="st">&quot;gtg&quot;</span>, <span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>,</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>                 <span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(<span class="fl">0.5</span>), <span class="fl">0.3</span>, <span class="dv">1</span>), <span class="at">spr_ref =</span> <span class="dv">40</span>)</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>t_fit <span class="ot">&lt;-</span> <span class="fu">system.time</span>(</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  fit <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>                <span class="at">settings =</span> settings)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>)[[<span class="st">&quot;elapsed&quot;</span>]]</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>gears</span></code></pre></div>
+<h2 data-number="4.1" id="spr-z-and-zrel"><span class="header-section-number">4.1</span> SPR, Z and Zrel</h2>
+<p>SPR is the fitted spawning potential ratio by year. The mortality
+indicators compare total mortality with the mortality at the SPR
+target:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Z</mi><mi>y</mi></msub><mo>=</mo><msub><mi>F</mi><mrow><mi>a</mi><mi>p</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>+</mo><mi>M</mi><mo>,</mo><mspace width="2.0em"></mspace><msub><mi>Z</mi><mrow><mi>t</mi><mi>g</mi><mi>t</mi></mrow></msub><mo>=</mo><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><mo>+</mo><mi>M</mi><mo>,</mo><mspace width="2.0em"></mspace><msubsup><mi>Z</mi><mi>y</mi><mrow><mi>r</mi><mi>e</mi><mi>l</mi></mrow></msubsup><mo>=</mo><msub><mi>Z</mi><mi>y</mi></msub><mi>/</mi><msub><mi>Z</mi><mrow><mi>t</mi><mi>g</mi><mi>t</mi></mrow></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
+Z_y = F_{ap,y} + M, \qquad Z_{tgt} = F_{SPR_x} + M, \qquad
+Z^{rel}_y = Z_y / Z_{tgt}.
+</annotation></semantics></math></p>
+<p><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>
+is the apical F that gives SPR = x % under the fitted selectivity,
+growth and M. Because <code>settings$spr_ref</code> equals the target
+(default 40), it is taken from <code>fit$report$Fspr</code> without any
+further calculation (Section 7.1).</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>M    <span class="ot">&lt;-</span> <span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>lhpar[<span class="st">&quot;M&quot;</span>])</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>Z    <span class="ot">&lt;-</span> fit<span class="sc">$</span>report<span class="sc">$</span>Fap <span class="sc">+</span> M</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>Ztgt <span class="ot">&lt;-</span> <span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>) <span class="sc">+</span> M</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">rbind</span>(<span class="at">SPR =</span> <span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="at">Zrel =</span> <span class="fu">c</span>(Z <span class="sc">/</span> Ztgt)), <span class="dv">3</span>)</span></code></pre></div>
+<h2 data-number="4.2" id="lbispr-proportion-of-large-fish-relative-to-the-spr-target"><span class="header-section-number">4.2</span> <code>LBIspr</code>: proportion
+of large fish relative to the SPR target</h2>
+<p>For each gear
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>g</mi><annotation encoding="application/x-tex">g</annotation></semantics></math>,
+the equilibrium numbers-at-length at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>
+are filtered through the gear’s fitted selectivity,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>v</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>=</mo><msub><mi>N</mi><mi>l</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">v_g(l) = N_l(F_{SPR_x})\, s_g(l)</annotation></semantics></math>.
+The reference length
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi><mo>,</mo><mi>g</mi></mrow></msub><annotation encoding="application/x-tex">L_{ref,g}</annotation></semantics></math>
+is the length at which the cumulative vulnerable numbers reach the
+fraction <code>thresh</code> (default 0.75), so about a quarter of the
+catch at the target lies above it. The indicator compares the observed
+proportion above
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi><mo>,</mo><mi>g</mi></mrow></msub><annotation encoding="application/x-tex">L_{ref,g}</annotation></semantics></math>
+with that expected proportion:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mi>B</mi><mi>I</mi><mi>s</mi><mi>p</mi><msub><mi>r</mi><mrow><mi>g</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mrow><mi>l</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi><mo>,</mo><mi>g</mi></mrow></msub></mrow></munder><msubsup><mi>C</mi><mrow><mi>g</mi><mo>,</mo><mi>l</mi><mo>,</mo><mi>y</mi></mrow><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup><mi minsize="1.2" maxsize="1.2">/</mi><munder><mo>∑</mo><mi>l</mi></munder><msubsup><mi>C</mi><mrow><mi>g</mi><mo>,</mo><mi>l</mi><mo>,</mo><mi>y</mi></mrow><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup></mrow><mrow><munder><mo>∑</mo><mrow><mi>l</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi><mo>,</mo><mi>g</mi></mrow></msub></mrow></munder><msub><mi>v</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi minsize="1.2" maxsize="1.2">/</mi><munder><mo>∑</mo><mi>l</mi></munder><msub><mi>v</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
+LBIspr_{g,y} = \frac{\sum_{l \geq L_{ref,g}} C^{obs}_{g,l,y} \big/ \sum_l C^{obs}_{g,l,y}}
+                    {\sum_{l \geq L_{ref,g}} v_g(l) \big/ \sum_l v_g(l)} .
+</annotation></semantics></math></p>
+<p>Values below one mean fewer large fish than at the target,
+i.e. fishing pressure above
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>.
+The reference is gear-specific because the same stock produces different
+length compositions in a trawl and a gillnet.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>lbi <span class="ot">&lt;-</span> <span class="fu">LBIspr</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">thresh =</span> <span class="fl">0.75</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">attr</span>(lbi, <span class="st">&quot;Lref&quot;</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(lbi, <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="fu">index</span>(x)))), <span class="dv">3</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_LBIspr</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">thresh =</span> <span class="fl">0.75</span>)</span></code></pre></div>
+<h2 data-number="4.3" id="lbimean-mean-length-relative-to-lmeanf-m"><span class="header-section-number">4.3</span> <code>LBImean</code>: mean
+length relative to Lmean(F = M)</h2>
+<p><code>LBImean()</code> is the model-based analogue of the ICES length
+indicator
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>f</mi><mo>=</mo><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>/</mi><msub><mi>L</mi><mrow><mi>F</mi><mo>=</mo><mi>M</mi></mrow></msub></mrow><annotation encoding="application/x-tex">f = \bar L / L_{F=M}</annotation></semantics></math>.
+The reference mean length is computed from the same filtered equilibrium
+numbers, but at a reference F:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>g</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msubsup><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mrow><mi>l</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>c</mi><mo>,</mo><mi>g</mi></mrow></msub></mrow></munder><mover><mi>l</mi><mo accent="true">‾</mo></mover><mspace width="0.167em"></mspace><msub><mi>N</mi><mi>l</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><mrow><munder><mo>∑</mo><mrow><mi>l</mi><mo>≥</mo><msub><mi>L</mi><mrow><mi>c</mi><mo>,</mo><mi>g</mi></mrow></msub></mrow></munder><msub><mi>N</mi><mi>l</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow></mfrac><mo>,</mo><mspace width="2.0em"></mspace><mi>L</mi><mi>B</mi><mi>I</mi><mi>m</mi><mi>e</mi><mi>a</mi><msub><mi>n</mi><mrow><mi>g</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>=</mo><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mrow><mi>g</mi><mo>,</mo><mi>y</mi></mrow><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup><mi>/</mi><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>g</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msubsup><mo>,</mo></mrow><annotation encoding="application/x-tex">
+\bar L^{ref}_g = \frac{\sum_{l \geq L_{c,g}} \bar l\, N_l(F_{ref})\, s_g(l)}
+                      {\sum_{l \geq L_{c,g}} N_l(F_{ref})\, s_g(l)}, \qquad
+LBImean_{g,y} = \bar L^{obs}_{g,y} / \bar L^{ref}_g ,
+</annotation></semantics></math></p>
+<p>with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo>=</mo><mtext mathvariant="normal">FM</mtext><mo>×</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">F_{ref} = \text{FM} \times M</annotation></semantics></math>
+(<code>ref = &quot;FM&quot;</code>, default <code>FM = 1</code>, i.e. Lmean at F =
+M) or
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>F</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo>=</mo><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub></mrow><annotation encoding="application/x-tex">F_{ref} = F_{SPR_x}</annotation></semantics></math>
+(<code>ref = &quot;spr&quot;</code>). The cut-off
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>c</mi><mo>,</mo><mi>g</mi></mrow></msub><annotation encoding="application/x-tex">L_{c,g}</annotation></semantics></math>
+(<code>lc = &quot;sel50&quot;</code>) is the first length at which the gear’s
+selectivity reaches 0.5, which excludes poorly selected small fish as in
+the ICES
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mi>c</mi></msub><annotation encoding="application/x-tex">L_c</annotation></semantics></math>
+convention.</p>
+<p>The ICES approximation
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>L</mi><mrow><mi>F</mi><mo>=</mo><mi>M</mi></mrow></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>L</mi><mi>∞</mi></msub><mo>+</mo><mn>2</mn><mo>⋅</mo><mn>1.5</mn><mspace width="0.167em"></mspace><msub><mi>L</mi><mi>c</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow><mi>/</mi><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>+</mo><mn>2</mn><mo>⋅</mo><mn>1.5</mn><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">L_{F=M} = (L_\infty + 2 \cdot 1.5\, L_c)/(1 + 2 \cdot 1.5)</annotation></semantics></math>
+assumes knife-edge selection and a single growth curve.
+<code>LBImean()</code> instead uses the fitted growth variability (GTG),
+M and gear selectivity, including dome-shaped curves, where the ICES
+formula is not defined.</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>lbm  <span class="ot">&lt;-</span> <span class="fu">LBImean</span>(fit, <span class="at">ref =</span> <span class="st">&quot;FM&quot;</span>, <span class="at">FM =</span> <span class="dv">1</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>lbms <span class="ot">&lt;-</span> <span class="fu">LBImean</span>(fit, <span class="at">ref =</span> <span class="st">&quot;spr&quot;</span>, <span class="at">spr =</span> <span class="dv">40</span>)</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">Lmean_FM =</span> <span class="fu">attr</span>(lbm, <span class="st">&quot;Lmean_ref&quot;</span>), <span class="at">Lmean_spr40 =</span> <span class="fu">attr</span>(lbms, <span class="st">&quot;Lmean_ref&quot;</span>),</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>      <span class="at">Lc =</span> <span class="fu">attr</span>(lbm, <span class="st">&quot;Lc&quot;</span>))</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">do.call</span>(rbind, <span class="fu">lapply</span>(lbm, <span class="cf">function</span>(x) <span class="fu">c</span>(<span class="fu">index</span>(x)))), <span class="dv">3</span>)</span></code></pre></div>
+<h2 data-number="4.4" id="levels-and-trends"><span class="header-section-number">4.4</span> Levels and trends</h2>
+<p>Both length indicators are ratios to a model reference. Their
+<strong>level</strong> depends on the model’s scale — M, Linf, CVL and
+the selectivity form all enter the reference — so a misspecified M
+shifts every year’s value by roughly the same factor. Their
+<strong>trend</strong> does not: a constant reference cancels in a ratio
+of recent to earlier years,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo>=</mo><mfrac><mrow><mfrac><mn>1</mn><msub><mi>n</mi><mn>1</mn></msub></mfrac><munder><mo>∑</mo><mrow><mi>y</mi><mo>∈</mo><mtext mathvariant="normal">recent</mtext></mrow></munder><msub><mi>I</mi><mi>y</mi></msub></mrow><mrow><mfrac><mn>1</mn><msub><mi>n</mi><mn>2</mn></msub></mfrac><munder><mo>∑</mo><mrow><mi>y</mi><mo>∈</mo><mtext mathvariant="normal">previous</mtext></mrow></munder><msub><mi>I</mi><mi>y</mi></msub></mrow></mfrac><mo>=</mo><mfrac><mrow><mfrac><mn>1</mn><msub><mi>n</mi><mn>1</mn></msub></mfrac><mo>∑</mo><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>y</mi><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup></mrow><mrow><mfrac><mn>1</mn><msub><mi>n</mi><mn>2</mn></msub></mfrac><mo>∑</mo><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>y</mi><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup></mrow></mfrac><mspace width="1.0em"></mspace><mrow><mtext mathvariant="normal">for </mtext><mspace width="0.333em"></mspace></mrow><msub><mi>I</mi><mi>y</mi></msub><mo>=</mo><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>y</mi><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup><mi>/</mi><msup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msup><mi>.</mi></mrow><annotation encoding="application/x-tex">
+r = \frac{\frac{1}{n_1}\sum_{y \in \text{recent}} I_y}
+         {\frac{1}{n_2}\sum_{y \in \text{previous}} I_y}
+  = \frac{\frac{1}{n_1}\sum \bar L^{obs}_y}{\frac{1}{n_2}\sum \bar L^{obs}_y}
+  \quad \text{for } I_y = \bar L^{obs}_y / \bar L^{ref}.
+</annotation></semantics></math></p>
+<p>This is the main design principle of the HCRs below: the trend
+component (<code>r</code>) is robust to the life-history assumptions,
+while any level component (<code>f</code>, the SPR status, the SPR
+safeguard <code>b</code>) inherits the model’s scale bias and is where
+the robustness set (mse-03) has to show that the MP is still
+precautionary. Between refits the reference can still move when
+selectivity or CVL are re-estimated; the tracked
+<code>Lref.&lt;gear&gt;</code> and <code>Lmeanref.&lt;gear&gt;</code>
+show by how much.</p>
+<h1 data-number="5" id="harvest-control-rules"><span class="header-section-number">5</span> Harvest control rules</h1>
+<h2 data-number="5.1" id="spr-status-rule-spr_rule"><span class="header-section-number">5.1</span> SPR status rule:
+<code>spr_rule()</code></h2>
+<p><code>spr_rule()</code> maps current SPR to a relative change with
+four triggers: a fixed reduction <code>dlow</code> below
+<code>b1</code>, a linear increase to the no-change plateau
+(<code>dopt</code>) between <code>b2</code> and <code>b3</code>, a
+linear increase to <code>dhi</code> at <code>b4</code>, and a fixed
+increase above <code>b4</code>. <code>plot_hcrspr()</code> shows the
+rule with the stock-status zones (<code>blim</code>, <code>bthr</code>)
+and, optionally, the fitted SPR series.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot_hcrspr</span>(<span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>, <span class="at">b3 =</span> <span class="fl">0.5</span>, <span class="at">b4 =</span> <span class="fl">0.75</span>, <span class="at">blim =</span> <span class="fl">0.1</span>, <span class="at">bthr =</span> <span class="fl">0.2</span>,</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>            <span class="at">dlow =</span> <span class="sc">-</span><span class="fl">0.2</span>, <span class="at">dopt =</span> <span class="dv">0</span>, <span class="at">dup =</span> <span class="fl">0.15</span>, <span class="at">spr_target =</span> <span class="fl">0.4</span>,</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>            <span class="at">obs =</span> <span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="at">years =</span> <span class="fu">dimnames</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr)<span class="sc">$</span>year)</span></code></pre></div>
+<h2 data-number="5.2" id="trend-and-status-lbi.hcr"><span class="header-section-number">5.2</span> Trend and status:
+<code>lbi.hcr()</code></h2>
+<p><code>lbi.hcr()</code> combines a trend ratio
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>r</mi><annotation encoding="application/x-tex">r</annotation></semantics></math>
+on one element of <code>ind</code> (recent <code>n1</code> years over
+the previous <code>n2</code>, default 2-over-3) with the SPR status
+multiplier
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>s</mi><annotation encoding="application/x-tex">s</annotation></semantics></math>
+from <code>spr_rule()</code>. The status change is applied only when
+both point in the same direction:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant="normal">mult</mtext><mo>=</mo><mrow><mo stretchy="true" form="prefix">{</mo><mtable><mtr><mtd columnalign="left" style="text-align: left"><mi>s</mi></mtd><mtd columnalign="left" style="text-align: left"><mrow><mtext mathvariant="normal">if </mtext><mspace width="0.333em"></mspace></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mi>r</mi><mo>&lt;</mo><mn>1</mn><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> and </mtext><mspace width="0.333em"></mspace></mrow><mi>s</mi><mo>&lt;</mo><mn>1</mn><mo stretchy="true" form="postfix">)</mo></mrow><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> or </mtext><mspace width="0.333em"></mspace></mrow><mrow><mo stretchy="true" form="prefix">(</mo><mi>r</mi><mo>&gt;</mo><mn>1</mn><mrow><mspace width="0.333em"></mspace><mtext mathvariant="normal"> and </mtext><mspace width="0.333em"></mspace></mrow><mi>s</mi><mo>&gt;</mo><mn>1</mn><mo stretchy="true" form="postfix">)</mo></mrow></mtd></mtr><mtr><mtd columnalign="left" style="text-align: left"><mn>1</mn></mtd><mtd columnalign="left" style="text-align: left"><mtext mathvariant="normal">otherwise.</mtext></mtd></mtr></mtable></mrow></mrow><annotation encoding="application/x-tex">
+\text{mult} = \begin{cases} s &amp; \text{if } (r &lt; 1 \text{ and } s &lt; 1)
+\text{ or } (r &gt; 1 \text{ and } s &gt; 1)\\ 1 &amp; \text{otherwise.}\end{cases}
+</annotation></semantics></math></p>
+<p>The rule does nothing while the stock is in the plateau or while
+trend and status disagree, which damps the response to noisy SPR
+estimates. The size of the change comes from the level (SPR), only its
+timing from the trend. <code>decision.hcr = 3</code> is set when SPR
+falls below <code>spr_trigger</code>, which makes
+<code>flicc.is()</code> apply its change limits (<code>dtaclow</code>,
+<code>dtacupp</code>, <code>Cmax</code>) in those iterations.</p>
+<p><code>hcr_sprlbi()</code> applies the same logic to a single fit,
+outside <code>mp()</code>:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>g <span class="ot">&lt;-</span> gears[<span class="dv">1</span>]</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="fu">round</span>(<span class="fu">c</span>(<span class="at">trend =</span> <span class="fu">r_rule</span>(lbi[[g]], <span class="at">n1 =</span> <span class="dv">2</span>, <span class="at">n2 =</span> <span class="dv">3</span>),</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>        <span class="at">status =</span> <span class="fu">spr_rule</span>(<span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>), <span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>                          <span class="at">b3 =</span> <span class="fl">0.5</span>, <span class="at">b4 =</span> <span class="fl">0.75</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        <span class="at">mult =</span> <span class="fu">hcr_sprlbi</span>(fit, <span class="at">gear =</span> g, <span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>, <span class="at">b3 =</span> <span class="fl">0.5</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>                          <span class="at">b4 =</span> <span class="fl">0.75</span>)), <span class="dv">3</span>)</span></code></pre></div>
+<h2 data-number="5.3" id="the-rfb-type-rule-rfb.flicc.hcr"><span class="header-section-number">5.3</span> The rfb-type rule:
+<code>rfb.flicc.hcr()</code></h2>
+<p><code>rfb.flicc.hcr()</code> adapts the ICES category-3 rfb rule to
+the FLicc indicators:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>A</mi><mrow><mi>y</mi><mo>+</mo><mn>1</mn></mrow></msub><mo>=</mo><msub><mi>A</mi><mi>y</mi></msub><mspace width="0.278em"></mspace><msup><mi>r</mi><mi>γ</mi></msup><mspace width="0.167em"></mspace><mi>f</mi><mspace width="0.167em"></mspace><mi>b</mi><mspace width="0.167em"></mspace><mi>m</mi><mi>.</mi></mrow><annotation encoding="application/x-tex">
+A_{y+1} = A_y \; r^{\gamma}\, f\, b\, m .
+</annotation></semantics></math></p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Component</th>
+<th><code>rfb.flicc.hcr()</code></th>
+<th>ICES rfb</th>
+<th>Bias</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>r</mi><annotation encoding="application/x-tex">r</annotation></semantics></math>
+trend</td>
+<td>ratio of <code>index</code> (any element of <code>ind</code>),
+<code>n1</code> over <code>n2</code>, exponent <code>gamma</code></td>
+<td>biomass index, 2-over-3</td>
+<td>cancels (trend)</td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>f</mi><annotation encoding="application/x-tex">f</annotation></semantics></math>
+fishing pressure</td>
+<td><code>f = NULL</code> (f = 1, rb rule);
+<code>&quot;LBImean&quot;</code>/<code>&quot;LBImean.&lt;gear&gt;&quot;</code>
+(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>/</mi><msub><mover><mi>L</mi><mo accent="true">‾</mo></mover><mrow><mi>F</mi><mo>=</mo><mi>M</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\bar L/\bar L_{F=M}</annotation></semantics></math>,
+the ICES-type f);
+<code>&quot;LBIspr&quot;</code>/<code>&quot;LBIspr.&lt;gear&gt;&quot;</code>;
+<code>&quot;Zrel&quot;</code> (used as
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi>/</mi><msup><mi>Z</mi><mrow><mi>r</mi><mi>e</mi><mi>l</mi></mrow></msup></mrow><annotation encoding="application/x-tex">1/Z^{rel}</annotation></semantics></math>)</td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>/</mi><msub><mi>L</mi><mrow><mi>F</mi><mo>=</mo><mi>M</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\bar L / L_{F=M}</annotation></semantics></math></td>
+<td>inherits level bias</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>b</mi><annotation encoding="application/x-tex">b</annotation></semantics></math>
+safeguard</td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>min</mo><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>,</mo><mspace width="0.167em"></mspace><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>y</mi></msub><mi>/</mi><mi>S</mi><mi>P</mi><msub><mi>R</mi><mrow><mi>t</mi><mi>r</mi><mi>i</mi><mi>g</mi><mi>g</mi><mi>e</mi><mi>r</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\min(1,\, SPR_y / SPR_{trigger})</annotation></semantics></math>,
+<code>spr_trigger</code> (default 0.25), <code>nspr</code> years</td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>min</mo><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>,</mo><msub><mi>I</mi><mi>y</mi></msub><mi>/</mi><msub><mi>I</mi><mrow><mi>t</mi><mi>r</mi><mi>i</mi><mi>g</mi><mi>g</mi><mi>e</mi><mi>r</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">\min(1, I_y/I_{trigger})</annotation></semantics></math></td>
+<td>inherits level bias</td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>m</mi><annotation encoding="application/x-tex">m</annotation></semantics></math>
+multiplier</td>
+<td><code>m</code> (default 0.95)</td>
+<td>0.95 for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>&lt;</mo><mn>0.2</mn></mrow><annotation encoding="application/x-tex">k &lt; 0.2</annotation></semantics></math>,
+0.90 otherwise</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>The SPR safeguard replaces the biomass-index trigger of the ICES
+rule, since no biomass index exists in a length-only MP. It is the only
+component that forces a reduction when the stock is depleted but stable.
+Because recruitment falls as SPR falls, a given SPR corresponds to a
+lower biomass ratio (<code>flicc2FLStockR(s = )</code>,
+<code>sprbrel_flicc()</code>), so <code>spr_trigger</code> should be
+chosen on that scale.</p>
+<p>As in the ICES rule, <code>decision.hcr = 3</code> when
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b = 1</annotation></semantics></math>,
+so the stability limits in <code>flicc.is()</code> (ICES: +20 %, −30 %,
+i.e. <code>dtacupp = 1.2</code>, <code>dtaclow = 0.7</code>) apply only
+while the safeguard is inactive. Note that this is the opposite
+convention to <code>lbi.hcr()</code>, where the limits apply
+<em>below</em> the trigger.</p>
+<p>The components can be computed from one fit to see what each choice
+of <code>f</code> implies:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>rfb_parts <span class="ot">&lt;-</span> <span class="cf">function</span>(fit, index, <span class="at">f =</span> <span class="cn">NULL</span>, <span class="at">n1 =</span> <span class="dv">2</span>, <span class="at">n2 =</span> <span class="dv">3</span>, <span class="at">gamma =</span> <span class="dv">1</span>,</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>                      <span class="at">spr_trigger =</span> <span class="fl">0.25</span>, <span class="at">m =</span> <span class="fl">0.95</span>) {</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  ind <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">lapply</span>(<span class="fu">LBIspr</span>(fit), index), <span class="fu">lapply</span>(<span class="fu">LBImean</span>(fit), index))</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">names</span>(ind) <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">paste0</span>(<span class="st">&quot;LBIspr.&quot;</span>, gears), <span class="fu">paste0</span>(<span class="st">&quot;LBImean.&quot;</span>, gears))</span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  M <span class="ot">&lt;-</span> <span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>lhpar[<span class="st">&quot;M&quot;</span>])</span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>  ind<span class="sc">$</span>Zrel <span class="ot">&lt;-</span> (fit<span class="sc">$</span>report<span class="sc">$</span>Fap <span class="sc">+</span> M) <span class="sc">/</span> (<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>) <span class="sc">+</span> M)</span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>  I  <span class="ot">&lt;-</span> <span class="fu">c</span>(ind[[index]])</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  r  <span class="ot">&lt;-</span> (<span class="fu">mean</span>(<span class="fu">tail</span>(I, n1)) <span class="sc">/</span> <span class="fu">mean</span>(<span class="fu">head</span>(<span class="fu">tail</span>(I, n1 <span class="sc">+</span> n2), n2)))<span class="sc">^</span>gamma</span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  fv <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="fu">is.null</span>(f)) <span class="dv">1</span> <span class="cf">else</span> <span class="fu">tail</span>(<span class="fu">c</span>(ind[[f]]), <span class="dv">1</span>)</span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="fu">identical</span>(f, <span class="st">&quot;Zrel&quot;</span>)) fv <span class="ot">&lt;-</span> <span class="dv">1</span> <span class="sc">/</span> fv</span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  b  <span class="ot">&lt;-</span> <span class="fu">min</span>(<span class="dv">1</span>, <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>) <span class="sc">/</span> spr_trigger)</span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">round</span>(<span class="fu">c</span>(<span class="at">r =</span> r, <span class="at">f =</span> fv, <span class="at">b =</span> b, <span class="at">m =</span> m, <span class="at">mult =</span> r <span class="sc">*</span> fv <span class="sc">*</span> b <span class="sc">*</span> m), <span class="dv">3</span>)</span>
+<span id="cb9-13"><a href="#cb9-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb9-14"><a href="#cb9-14" aria-hidden="true" tabindex="-1"></a>idx_g <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">&quot;LBIspr.&quot;</span>, gears[<span class="dv">1</span>])</span>
+<span id="cb9-15"><a href="#cb9-15" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">rb          =</span> <span class="fu">rfb_parts</span>(fit, idx_g),</span>
+<span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_LBImean   =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> <span class="fu">paste0</span>(<span class="st">&quot;LBImean.&quot;</span>, gears[<span class="dv">1</span>])),</span>
+<span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_LBIspr    =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> idx_g),</span>
+<span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_Zrel      =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> <span class="st">&quot;Zrel&quot;</span>))</span></code></pre></div>
+<h2 data-number="5.4" id="implementation-system-flicc.is"><span class="header-section-number">5.4</span> Implementation system:
+<code>flicc.is()</code></h2>
+<p><code>flicc.is()</code> converts the multiplier into a TAC,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>y</mi></msub><mo>=</mo><mi>T</mi><mi>A</mi><msub><mi>C</mi><mrow><mi>y</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>×</mo><mtext mathvariant="normal">mult</mtext></mrow><annotation encoding="application/x-tex">TAC_y = TAC_{y-1} \times \text{mult}</annotation></semantics></math>,
+for the iterations flagged by <code>decision.hcr &gt; 2</code> limits
+the change to <code>dtaclow</code>–<code>dtacupp</code> times the
+previous TAC and caps it at <code>Cmax</code>, and sets it for
+<code>ay + management_lag</code>. The first cycle needs
+<code>initac</code>, normally the last observed catch. With
+<code>catch_area</code> the TAC is split across units (areas) by fixed
+shares.</p>
+<h1 data-number="6" id="assembling-the-management-procedure"><span class="header-section-number">6</span> Assembling the management
+procedure</h1>
+<p>The OM <code>om</code> and the OEM <code>oem</code> (with
+<code>sampling.lfd.oem()</code>, <code>season = FALSE</code>) are built
+in mse-02. Given those, alternative MPs differ only in the
+<code>hcr</code> element:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mse)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>est <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.sa, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">lhpar =</span> lhpar, <span class="at">sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;dsnormal&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">settings =</span> <span class="fu">list</span>(<span class="at">pop_model =</span> <span class="st">&quot;gtg&quot;</span>, <span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>,</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">ngtg =</span> <span class="dv">13</span>, <span class="at">maxsd =</span> <span class="dv">2</span>,</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>),  <span class="co"># Section 7.3</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>                  <span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>,                  <span class="co"># Section 8</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>                  <span class="at">spr_ref =</span> <span class="dv">40</span>),</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">thresh =</span> <span class="fl">0.75</span>, <span class="at">ess.g =</span> <span class="dv">150</span>, <span class="at">nyrs =</span> <span class="dv">5</span>,</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi =</span> <span class="fu">c</span>(<span class="st">&quot;spr&quot;</span>, <span class="st">&quot;mean&quot;</span>), <span class="at">pool =</span> <span class="st">&quot;none&quot;</span>,</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">refit_sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_restart =</span> <span class="dv">1</span>, <span class="at">outer_parallel =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>isys <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">initac =</span> initac, <span class="at">dtaclow =</span> <span class="fl">0.7</span>, <span class="at">dtacupp =</span> <span class="fl">1.2</span>))</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>hcrs <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  <span class="co"># trend x status</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi    =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> lbi.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>             <span class="at">gear =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>, <span class="at">b3 =</span> <span class="fl">0.5</span>, <span class="at">b4 =</span> <span class="fl">0.75</span>,</span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>             <span class="at">dlow =</span> <span class="sc">-</span><span class="fl">0.2</span>, <span class="at">dopt =</span> <span class="dv">0</span>, <span class="at">dhi =</span> <span class="fl">0.15</span>, <span class="at">n1 =</span> <span class="dv">2</span>, <span class="at">n2 =</span> <span class="dv">3</span>)),</span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rb: trend and SPR safeguard only</span></span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">rb     =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with the ICES-type f = Lmean / Lmean(F = M)</span></span>
+<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Lm =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;LBImean.Gillnet&quot;</span>,</span>
+<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>             <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
+<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with f = Ztgt / Z</span></span>
+<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Z  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;Zrel&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)))</span>
+<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>mps <span class="ot">&lt;-</span> <span class="fu">lapply</span>(hcrs, <span class="cf">function</span>(h) <span class="fu">mpCtrl</span>(<span class="fu">list</span>(<span class="at">est =</span> est, <span class="at">hcr =</span> h, <span class="at">isys =</span> isys)))</span>
+<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>mseargs <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">iy =</span> <span class="dv">2024</span>, <span class="at">fy =</span> <span class="dv">2054</span>, <span class="at">y0 =</span> <span class="dv">2015</span>, <span class="at">data_lag =</span> <span class="dv">1</span>,</span>
+<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>                <span class="at">management_lag =</span> <span class="dv">1</span>, <span class="at">frq =</span> <span class="dv">2</span>, <span class="at">it =</span> nsim)</span>
+<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>runs <span class="ot">&lt;-</span> <span class="fu">lapply</span>(mps, <span class="cf">function</span>(ctrl)</span>
+<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mp</span>(om, <span class="at">oem =</span> oem, <span class="at">ctrl =</span> ctrl, <span class="at">args =</span> mseargs, <span class="at">parallel =</span> <span class="cn">TRUE</span>))</span></code></pre></div>
+<p><code>outer_parallel = TRUE</code> is set because <code>mp()</code>
+runs in parallel here; with <code>parallel = FALSE</code> in
+<code>mp()</code>, use <code>parallel = TRUE, workers = n</code> in
+<code>flicc.sa()</code> instead. The FLRef OEM currently requires
+<code>parallel = FALSE</code> in <code>mp()</code> (common random
+numbers are plain arrays that <code>mp()</code> does not split across
+workers; see the FLRef developer notes), so until that is fixed the
+parallel loop belongs inside <code>flicc.sa()</code>.</p>
+<h1 data-number="7" id="run-time"><span class="header-section-number">7</span> Run time</h1>
+<p>Inside <code>mp()</code> the cost of a run is approximately</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext mathvariant="normal">time</mtext><mo>≈</mo><msub><mi>n</mi><mrow><mi>c</mi><mi>y</mi><mi>c</mi><mi>l</mi><mi>e</mi><mi>s</mi></mrow></msub><mo>×</mo><mfrac><mrow><msub><mi>n</mi><mrow><mi>i</mi><mi>t</mi><mi>e</mi><mi>r</mi></mrow></msub><mo>×</mo><mrow><mo stretchy="true" form="prefix">(</mo><msub><mover><mi>t</mi><mo accent="true">‾</mo></mover><mrow><mi>f</mi><mi>i</mi><mi>t</mi></mrow></msub><mo>+</mo><msub><mover><mi>t</mi><mo accent="true">‾</mo></mover><mrow><mi>i</mi><mi>n</mi><mi>d</mi></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><msub><mi>n</mi><mrow><mi>w</mi><mi>o</mi><mi>r</mi><mi>k</mi><mi>e</mi><mi>r</mi><mi>s</mi></mrow></msub></mfrac><mo>,</mo></mrow><annotation encoding="application/x-tex">
+\text{time} \approx n_{cycles} \times \frac{n_{iter} \times
+(\bar t_{fit} + \bar t_{ind})}{n_{workers}},
+</annotation></semantics></math></p>
+<p>with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>n</mi><mrow><mi>c</mi><mi>y</mi><mi>c</mi><mi>l</mi><mi>e</mi><mi>s</mi></mrow></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mi>f</mi><mi>y</mi><mo>−</mo><mi>i</mi><mi>y</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>/</mi><mi>f</mi><mi>r</mi><mi>q</mi></mrow><annotation encoding="application/x-tex">n_{cycles} = (fy - iy)/frq</annotation></semantics></math>.
+The indicator time
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>t</mi><mo accent="true">‾</mo></mover><mrow><mi>i</mi><mi>n</mi><mi>d</mi></mrow></msub><annotation encoding="application/x-tex">\bar t_{ind}</annotation></semantics></math>
+is now negligible (Section 7.1), so run time is governed by the fit time
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mover><mi>t</mi><mo accent="true">‾</mo></mover><mrow><mi>f</mi><mi>i</mi><mi>t</mi></mrow></msub><annotation encoding="application/x-tex">\bar t_{fit}</annotation></semantics></math>,
+which depends on the data window, the model settings and how often the
+optimiser restarts. The example fit above took <em>x</em> (computed at
+render time) s on this machine.</p>
+<h2 data-number="7.1" id="reference-points-computed-in-tmb-flicc-1.0.9"><span class="header-section-number">7.1</span> Reference points computed in
+TMB (FLicc 1.0.9)</h2>
+<p>Before 1.0.9, every <code>LBIspr()</code> call solved for
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>
+in R with <code>uniroot()</code>, recomputing the unfished state at each
+step. The TMB template now has a per-recruit block that is evaluated
+only at report time (TMB’s double evaluation, never during
+optimisation). It computes
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>
+for the targets in <code>settings$spr_ref</code> and the
+numbers-at-length at those F, at the fitted parameters:</p>
+<ul>
+<li><code>fspr_flicc()</code> returns the stored value for these targets
+(no computation); other targets cost one TMB call
+(<code>brp_tmb_flicc()</code>).</li>
+<li><code>LBIspr()</code> takes its reference composition from the
+stored numbers.</li>
+<li><code>LBImean(ref = &quot;FM&quot;)</code> needs <code>nf_flicc()</code> at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>F</mi><mo>=</mo><mi>M</mi></mrow><annotation encoding="application/x-tex">F = M</annotation></semantics></math>,
+one TMB call.</li>
+</ul>
+<p>Keep <code>settings$spr_ref</code> equal to the <code>spr</code>
+argument of <code>flicc.sa()</code> (both default to 40). If they
+differ, every indicator call falls back to one extra TMB evaluation per
+iteration.</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">Fspr40_stored =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Fspr30_tmb    =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">30</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBIspr        =</span> <span class="fu">system.time</span>(<span class="fu">LBIspr</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBImean       =</span> <span class="fu">system.time</span>(<span class="fu">LBImean</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]])</span></code></pre></div>
+<h2 data-number="7.2" id="settings-that-control-fit-time"><span class="header-section-number">7.2</span> Settings that control fit
+time</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Setting</th>
+<th>Where</th>
+<th>Effect on time</th>
+<th>Effect on results</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>nyrs</code></td>
+<td><code>flicc.sa()</code></td>
+<td>fixed, short data window instead of a growing <code>y0:dy</code>;
+cost stays constant across cycles</td>
+<td>F random walk over fewer years;
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+weakly identified (Section 7.3)</td>
+</tr>
+<tr class="even">
+<td><code>n_restart</code></td>
+<td><code>flicc.sa()</code> / <code>fiticc()</code></td>
+<td>each restart is a full <code>nlminb()</code> run; 0–1 is usually
+enough inside <code>mp()</code></td>
+<td>more restarts reduce residual gradients</td>
+</tr>
+<tr class="odd">
+<td><code>grad_tol</code></td>
+<td><code>flicc.sa()</code> / <code>fiticc()</code></td>
+<td>restarts stop once the max gradient is below it</td>
+<td>also the convergence criterion</td>
+</tr>
+<tr class="even">
+<td><code>obs_model</code></td>
+<td><code>settings</code></td>
+<td><code>&quot;mn&quot;</code> fastest; <code>&quot;dm&quot;</code> adds one parameter</td>
+<td><code>&quot;dm&quot;</code> absorbs overdispersion of sampled
+compositions</td>
+</tr>
+<tr class="odd">
+<td><code>ngtg</code>, <code>maxsd</code></td>
+<td><code>settings</code></td>
+<td>cost scales with <code>ngtg</code>; little gain beyond 9–13
+groups</td>
+<td><code>maxsd</code> sets the actual Linf spread and the largest
+reachable length</td>
+</tr>
+<tr class="even">
+<td><code>ess.g</code></td>
+<td><code>flicc.sa()</code></td>
+<td>none directly; very large values make the likelihood sharp and
+convergence harder</td>
+<td>weight of the length data</td>
+</tr>
+<tr class="odd">
+<td><code>refit_sel_fun</code></td>
+<td><code>flicc.sa()</code></td>
+<td>one extra fit per boundary iteration</td>
+<td>rescues boundary fits</td>
+</tr>
+<tr class="even">
+<td><code>frq</code></td>
+<td><code>mp()</code> args</td>
+<td>halves the number of assessments for <code>frq = 2</code></td>
+<td>TAC held between assessments</td>
+</tr>
+<tr class="odd">
+<td><code>parallel</code>, <code>workers</code>,
+<code>outer_parallel</code></td>
+<td><code>flicc.sa()</code> / <code>mp()</code></td>
+<td>divides by the number of workers; one level only</td>
+<td>none</td>
+</tr>
+<tr class="even">
+<td><code>verbose = FALSE</code></td>
+<td><code>flicc.sa()</code></td>
+<td>avoids console output from every restart</td>
+<td>none</td>
+</tr>
+</tbody>
+</table>
+<h2 data-number="7.3" id="estimate-sigma_f-once-then-fix-it"><span class="header-section-number">7.3</span> Estimate
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+once, then fix it</h2>
+<p>FLicc smooths fishing mortality over years with a random walk on log
+F by gear,</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>log</mo><msub><mi>F</mi><mrow><mi>g</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>∼</mo><mi>N</mi><mrow><mo stretchy="true" form="prefix">(</mo><mo>log</mo><msub><mi>F</mi><mrow><mi>g</mi><mo>,</mo><mi>y</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><mspace width="0.167em"></mspace><msubsup><mi>σ</mi><mi>F</mi><mn>2</mn></msubsup><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo><mspace width="2.0em"></mspace><mo>log</mo><msub><mi>σ</mi><mi>F</mi></msub><mo>∼</mo><mi>N</mi><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>μ</mi><mi>σ</mi></msub><mo>,</mo><msubsup><mi>s</mi><mi>σ</mi><mn>2</mn></msubsup><mo stretchy="true" form="postfix">)</mo></mrow><mo>,</mo></mrow><annotation encoding="application/x-tex">
+\log F_{g,y} \sim N(\log F_{g,y-1},\, \sigma_F^2), \qquad
+\log \sigma_F \sim N(\mu_{\sigma}, s_{\sigma}^2),
+</annotation></semantics></math></p>
+<p>set by <code>settings$prior_sigmaF = c(mu, sd, use)</code>. Inside an
+MP with a short rolling window (<code>nyrs = 5</code>),
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+is poorly determined by each cycle’s data. Estimating it in every fit
+has three costs:</p>
+<ol type="1">
+<li>one more, weakly identified parameter, so <code>nlminb()</code>
+needs more iterations and more restarts, and more fits end flagged as
+not converged (and are dropped, freezing the TAC);</li>
+<li>the degree of smoothing changes from cycle to cycle and iteration to
+iteration, so part of the change in SPR seen by the HCR comes from the
+estimator rather than from the data;</li>
+<li>the smoothing is less stable in exactly the years the HCR relies on,
+the last one or two years of the window.</li>
+</ol>
+<p>A practical alternative is to estimate
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+once, in a conditioning step on the historical sampled data with the
+full time series, and then pass it to <code>flicc.sa()</code> with a
+tight prior, which holds it effectively fixed:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. conditioning fit: sigmaF estimated with the default prior</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>sigmaF_hat <span class="ot">&lt;-</span> <span class="fu">exp</span>(fit<span class="sc">$</span>par<span class="sc">$</span>mpd[fit<span class="sc">$</span>par<span class="sc">$</span>par <span class="sc">==</span> <span class="st">&quot;log_sigmaF&quot;</span>])</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sigmaF_hat</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. fits with sigmaF held at the estimate (tight prior on log sigmaF)</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>settings_fix <span class="ot">&lt;-</span> <span class="fu">modifyList</span>(settings,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">list</span>(<span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>)))</span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>t_fix <span class="ot">&lt;-</span> <span class="fu">system.time</span>(</span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  fit_fix <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>                    <span class="at">settings =</span> settings_fix)</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>)[[<span class="st">&quot;elapsed&quot;</span>]]</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">estimated =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fit, <span class="at">evals =</span> fit<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit<span class="sc">$</span>max_gradient,</span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)),</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">fixed     =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fix, <span class="at">evals =</span> fit_fix<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit_fix<span class="sc">$</span>max_gradient,</span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_fix<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)))</span></code></pre></div>
+<p>In the MSE, the conditioning step is done once per iteration on the
+historical OEM samples (or once on the median), before <code>mp()</code>
+is called, and the estimate is then passed in
+<code>flicc.sa(settings = ...)</code>. A per-iteration value needs a
+small change in <code>flicc.sa()</code> (a vector of <code>sigmaF</code>
+by iteration); with a single value it works with the current code.</p>
+<p>Three cautions:</p>
+<ul>
+<li>The tight prior holds
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+close to the estimate but does not remove the parameter from the
+optimisation; a true fix through the TMB <code>map</code> is proposed in
+the developer notes.</li>
+<li>The gain in fit time is largest for short windows and noisy samples,
+where
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
+is least identified; check it with the timing comparison above on the
+OM’s own samples rather than assuming it.</li>
+<li>Do not set the prior mean to exactly <code>log(1) = 0</code>:
+<code>fiticc()</code> currently treats any element of
+<code>prior_sigmaF</code> equal to <code>FALSE</code> (i.e. 0) as
+“random walk off” (developer notes).</li>
+</ul>
+<h1 data-number="8" id="robustness-options-for-repeated-fits"><span class="header-section-number">8</span> Robustness options for repeated
+fits</h1>
+<p>An MP fits the model hundreds of times to data that nobody inspects.
+The options below make the fits robust to the parts of a simulated
+length sample that the model cannot explain. They are off by default in
+<code>fiticc()</code> and are set through
+<code>flicc.sa(settings = ...)</code>.</p>
+<h2 data-number="8.1" id="tail-cut-of-the-growth-type-groups-maxsd-ngtg-tail_warning"><span class="header-section-number">8.1</span> Tail cut of the growth-type
+groups: <code>maxsd</code>, <code>ngtg</code>,
+<code>tail_warning</code></h2>
+<p>The GTG population model represents growth variation by
+<code>ngtg</code> growth curves with Linf spread over
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>±</mo><annotation encoding="application/x-tex">\pm</annotation></semantics></math>
+<code>maxsd</code> standard deviations
+(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi><mo>=</mo><mi>C</mi><msub><mi>V</mi><mi>L</mi></msub><msub><mi>L</mi><mi>∞</mi></msub></mrow><annotation encoding="application/x-tex">\sigma = CV_L L_\infty</annotation></semantics></math>).
+The truncation caps the largest length the model can produce at
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>L</mi><mi>∞</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>+</mo><mtext mathvariant="normal">maxsd</mtext><mspace width="0.167em"></mspace><mi>C</mi><msub><mi>V</mi><mi>L</mi></msub><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">L_\infty (1 + \text{maxsd}\, CV_L)</annotation></semantics></math>
+and makes the actual spread smaller than <code>CVL</code> (about 0.9 CVL
+at <code>maxsd = 2</code>, the LBSPR default). The OM, in contrast,
+typically samples lengths from a normal length-at-age distribution up to
+1.2 Linf or more. A few sampled fish beyond the largest GTG Linf get
+near-zero probability and can drive CVL, selectivity and SPR.
+<code>tail_warning = TRUE</code> reports how many observed fish fall in
+such bins (useful when setting up the MP, not inside <code>mp()</code>);
+<code>maxsd = 3, ngtg = 19</code> widens the reachable range and makes
+CVL close to the actual spread.</p>
+<h2 data-number="8.2" id="robust-composition-likelihood-rob_eps"><span class="header-section-number">8.2</span> Robust composition likelihood:
+<code>rob_eps</code></h2>
+<p><code>rob_eps</code> mixes the predicted proportions with a uniform,
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mover><mi>p</mi><mo accent="true">̃</mo></mover><mi>l</mi></msub><mo>=</mo><mrow><mo stretchy="true" form="prefix">(</mo><mn>1</mn><mo>−</mo><mi>ε</mi><mo stretchy="true" form="postfix">)</mo></mrow><msub><mi>p</mi><mi>l</mi></msub><mo>+</mo><mi>ε</mi><mi>/</mi><msub><mi>n</mi><mrow><mi>b</mi><mi>i</mi><mi>n</mi><mi>s</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\tilde p_l = (1 - \varepsilon) p_l + \varepsilon / n_{bins}</annotation></semantics></math>,
+which bounds the cost of a few fish in bins the model barely reaches.
+<code>rob_eps = 0.001</code> is safe; 0.01 already changes selectivity
+and F with clean data.</p>
+<h2 data-number="8.3" id="plus-group-lplus"><span class="header-section-number">8.3</span> Plus group:
+<code>Lplus</code></h2>
+<p><code>Lplus</code> pools observed and predicted counts in all bins
+with lower bound
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>≥</mo><annotation encoding="application/x-tex">\geq</annotation></semantics></math>
+<code>Lplus</code> into one plus group before the likelihood (tail
+compression, as in SS3). The likelihood then sees how many fish are at
+or above <code>Lplus</code>, not how they fall into bins. Choose
+<code>Lplus</code> where counts become sparse, typically near Linf.
+Negative log-likelihoods are comparable only between fits with the same
+<code>Lplus</code>. Note that <code>LBIspr()</code> and
+<code>LBImean()</code> use the unpooled observed compositions, so the
+indicators themselves are not affected by <code>Lplus</code>, only the
+fit.</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fit_rob <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>                  <span class="at">settings =</span> <span class="fu">modifyList</span>(settings,</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>                                        <span class="fu">list</span>(<span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>)))</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">default =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))),</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">Lplus50_rob0.001 =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_rob<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit_rob), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))))</span></code></pre></div>
+<h2 data-number="8.4" id="boundary-fits-and-selectivity-form"><span class="header-section-number">8.4</span> Boundary fits and selectivity
+form</h2>
+<p>The SPR boundary check (<code>spr_max</code>) and the rescue refit
+(<code>refit_sel_fun</code>) in <code>flicc.sa()</code> (Section 3.3)
+are the MP-level counterpart of these likelihood options: they catch
+fits in which a dome-shaped selectivity explains away the large fish.
+Both are cheap insurance. Together with the tracked
+<code>used.est</code>, <code>sprbound.est</code> and
+<code>refit.est</code>, they show whether the estimator is the weak
+point of an MP.</p>
+<h1 data-number="9" id="recommended-starting-values"><span class="header-section-number">9</span> Recommended starting values</h1>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Element</th>
+<th>Setting</th>
+<th>Starting value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Data window</td>
+<td><code>nyrs</code></td>
+<td>5</td>
+</tr>
+<tr class="even">
+<td>Data weight</td>
+<td><code>ess.g</code></td>
+<td>100–200 per gear</td>
+</tr>
+<tr class="odd">
+<td>Model</td>
+<td><code>pop_model</code>, <code>obs_model</code></td>
+<td><code>&quot;gtg&quot;</code>, <code>&quot;dm&quot;</code></td>
+</tr>
+<tr class="even">
+<td>GTG</td>
+<td><code>ngtg</code>, <code>maxsd</code></td>
+<td>13, 2 (or 19, 3 if large fish are common)</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math></td>
+<td><code>prior_sigmaF</code></td>
+<td>estimated once, then <code>c(log(sigmaF_hat), 0.01, 1)</code></td>
+</tr>
+<tr class="even">
+<td>Robustness</td>
+<td><code>Lplus</code>, <code>rob_eps</code></td>
+<td>near Linf, 0.001</td>
+</tr>
+<tr class="odd">
+<td>Reference</td>
+<td><code>spr</code>, <code>spr_ref</code>, <code>thresh</code></td>
+<td>40, 40, 0.75</td>
+</tr>
+<tr class="even">
+<td>Diagnostics</td>
+<td><code>drop_nonconv</code>, <code>spr_max</code>,
+<code>refit_sel_fun</code></td>
+<td><code>TRUE</code>, 0.99, asymptotic forms</td>
+</tr>
+<tr class="odd">
+<td>Optimiser</td>
+<td><code>n_restart</code>, <code>grad_tol</code></td>
+<td>1, 1e-3</td>
+</tr>
+<tr class="even">
+<td>HCR</td>
+<td><code>rfb.flicc.hcr()</code></td>
+<td><code>index</code> = LBIspr of the gear selecting large fish,
+<code>f = NULL</code> or <code>&quot;LBImean.&lt;gear&gt;&quot;</code>,
+<code>spr_trigger</code> 0.25, <code>m</code> 0.95</td>
+</tr>
+<tr class="odd">
+<td>Limits</td>
+<td><code>flicc.is()</code></td>
+<td><code>dtacupp = 1.2</code>, <code>dtaclow = 0.7</code></td>
+</tr>
+</tbody>
+</table>
+<p>These are starting values for tuning, not recommendations for a
+particular stock. The HCR triggers and the SPR safeguard in particular
+need to be calibrated against the OM and tested across the robustness
+set.</p>
+<h1 data-number="10" id="appendix-a-mp-related-functions-in-flicc"><span class="header-section-number">10</span> Appendix A: MP-related functions
+in FLicc</h1>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>flicc.sa()</code></td>
+<td><code>mp()</code> estimator: fits <code>fiticc()</code> per
+iteration, diagnostics, indicators</td>
+</tr>
+<tr class="even">
+<td><code>lbi.hcr()</code></td>
+<td><code>mp()</code> HCR: trend x SPR status, applied when both
+agree</td>
+</tr>
+<tr class="odd">
+<td><code>rfb.flicc.hcr()</code></td>
+<td><code>mp()</code> HCR:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>r</mi><mi>γ</mi></msup><mi>f</mi><mi>b</mi><mi>m</mi></mrow><annotation encoding="application/x-tex">r^{\gamma} f b m</annotation></semantics></math>
+(ICES rfb-type)</td>
+</tr>
+<tr class="even">
+<td><code>flicc.is()</code></td>
+<td><code>mp()</code> implementation system: TAC from multiplier,
+limits, area split</td>
+</tr>
+<tr class="odd">
+<td><code>LBIspr()</code></td>
+<td>proportion above
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><annotation encoding="application/x-tex">L_{ref}</annotation></semantics></math>
+relative to the SPR target, by gear</td>
+</tr>
+<tr class="even">
+<td><code>LBImean()</code></td>
+<td>mean length relative to Lmean(F = M) or
+Lmean(<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>),
+by gear</td>
+</tr>
+<tr class="odd">
+<td><code>spr_rule()</code></td>
+<td>four-trigger SPR change multiplier</td>
+</tr>
+<tr class="even">
+<td><code>r_rule()</code></td>
+<td>trend ratio of an index (<code>n1</code> over <code>n2</code>)</td>
+</tr>
+<tr class="odd">
+<td><code>hcr_sprlbi()</code></td>
+<td><code>lbi.hcr()</code> logic for a single fit</td>
+</tr>
+<tr class="even">
+<td><code>plot_hcrspr()</code></td>
+<td>plot of the SPR rule with status zones</td>
+</tr>
+<tr class="odd">
+<td><code>plot_LBIspr()</code>, <code>plot_LBIp()</code></td>
+<td>indicator and reference compositions</td>
+</tr>
+<tr class="even">
+<td><code>fspr_flicc()</code>, <code>brp_tmb_flicc()</code>,
+<code>nf_flicc()</code></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>,
+per-recruit quantities and numbers-at-length (TMB)</td>
+</tr>
+<tr class="odd">
+<td><code>need_refit_flicc()</code>,
+<code>flicc_convergence()</code></td>
+<td>convergence checks</td>
+</tr>
+<tr class="even">
+<td><code>lfdess()</code></td>
+<td>rescales compositions to an effective sample size</td>
+</tr>
+</tbody>
+</table>
+<h1 data-number="11" id="appendix-b-notation"><span class="header-section-number">11</span> Appendix B: notation</h1>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">s_g(l)</annotation></semantics></math></td>
+<td>selectivity-at-length of gear
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>g</mi><annotation encoding="application/x-tex">g</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mi>l</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>F</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">N_l(F)</annotation></semantics></math></td>
+<td>equilibrium numbers-at-length at apical F</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>v</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">v_g(l)</annotation></semantics></math></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>N</mi><mi>l</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><mo stretchy="true" form="postfix">)</mo></mrow><mspace width="0.167em"></mspace><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">N_l(F_{SPR_x})\, s_g(l)</annotation></semantics></math>,
+vulnerable numbers at the target</td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi><mo>,</mo><mi>g</mi></mrow></msub><annotation encoding="application/x-tex">L_{ref,g}</annotation></semantics></math></td>
+<td>length at which cumulative
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>v</mi><mi>g</mi></msub><annotation encoding="application/x-tex">v_g</annotation></semantics></math>
+reaches <code>thresh</code></td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>L</mi><mrow><mi>c</mi><mo>,</mo><mi>g</mi></mrow></msub><annotation encoding="application/x-tex">L_{c,g}</annotation></semantics></math></td>
+<td>first length with
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>s</mi><mi>g</mi></msub><mrow><mo stretchy="true" form="prefix">(</mo><mi>l</mi><mo stretchy="true" form="postfix">)</mo></mrow><mo>≥</mo><mn>0.5</mn></mrow><annotation encoding="application/x-tex">s_g(l) \geq 0.5</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msubsup><mover><mi>L</mi><mo accent="true">‾</mo></mover><mi>g</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msubsup><annotation encoding="application/x-tex">\bar L^{ref}_g</annotation></semantics></math></td>
+<td>reference mean length (F = M or
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math>)</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>a</mi><mi>p</mi></mrow></msub><annotation encoding="application/x-tex">F_{ap}</annotation></semantics></math></td>
+<td>apical fishing mortality</td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><annotation encoding="application/x-tex">F_{SPR_x}</annotation></semantics></math></td>
+<td>apical F giving SPR = x %</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msup><mi>Z</mi><mrow><mi>r</mi><mi>e</mi><mi>l</mi></mrow></msup><annotation encoding="application/x-tex">Z^{rel}</annotation></semantics></math></td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>a</mi><mi>p</mi></mrow></msub><mo>+</mo><mi>M</mi><mo stretchy="true" form="postfix">)</mo></mrow><mi>/</mi><mrow><mo stretchy="true" form="prefix">(</mo><msub><mi>F</mi><mrow><mi>S</mi><mi>P</mi><msub><mi>R</mi><mi>x</mi></msub></mrow></msub><mo>+</mo><mi>M</mi><mo stretchy="true" form="postfix">)</mo></mrow></mrow><annotation encoding="application/x-tex">(F_{ap} + M)/(F_{SPR_x} + M)</annotation></semantics></math></td>
+</tr>
+<tr class="even">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math></td>
+<td>standard deviation of the random walk on log F</td>
+</tr>
+<tr class="odd">
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo>,</mo><mi>f</mi><mo>,</mo><mi>b</mi><mo>,</mo><mi>m</mi></mrow><annotation encoding="application/x-tex">r, f, b, m</annotation></semantics></math></td>
+<td>trend, fishing pressure, safeguard and precautionary components of
+the rfb rule</td>
+</tr>
+</tbody>
+</table>
+<h1 data-number="12" id="session-information"><span class="header-section-number">12</span> Session information</h1>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
+</body>
+</html>

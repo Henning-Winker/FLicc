@@ -2,3 +2,7 @@
 ^LICENSE\.md$
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^docs$
+^rdata$
+^inst/rmd$
+^inst/scripts$

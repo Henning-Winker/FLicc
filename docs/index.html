@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FLicc</title>
+<style>
+  :root { --text: #1f2328; --muted: #57606a; --bg: #ffffff; --panel: #f6f8fa; --accent: #0b5d8a; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --text: #e6edf3; --muted: #9da7b3; --bg: #0d1117; --panel: #161b22; --accent: #58a6ff; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.6 "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 16px; }
+  h1 { margin-bottom: 4px; }
+  h2.section { font-size: 1.2rem; margin-top: 32px; }
+  p.sub { color: var(--muted); margin-top: 0; }
+  a { color: var(--accent); }
+  .card { background: var(--panel); border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
+  .card h3 { font-size: 1.05rem; margin: 0 0 4px; }
+  .card p { margin: 0; }
+  .planned h3 { color: var(--muted); }
+  .tag { font-size: 0.8rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<h1>FLicc</h1>
+<p class="sub">Length-interval catch-curve models in TMB, length-based indicators and management procedures</p>
+
+<h2 class="section">Management strategy evaluation</h2>
+
+<div class="card">
+  <h3><a href="mse-01-flicc-modules.html">1. FLicc management-procedure modules for mse: flow, indicators, harvest control rules and run time</a></h3>
+  <p>How <code>sampling.lfd.oem()</code>, <code>flicc.sa()</code>, <code>lbi.hcr()</code> /
+  <code>rfb.flicc.hcr()</code> and <code>flicc.is()</code> connect inside <code>mp()</code>;
+  the indicators SPR, Z/Z<sub>tgt</sub>, <code>LBIspr</code> and <code>LBImean</code>
+  (L<sub>mean</sub>/L<sub>mean</sub>(F&nbsp;=&nbsp;M)), levels versus trends; the trend&nbsp;&times;&nbsp;status
+  rule and the new rfb-type rule; run time (Fspr in TMB, fit settings, estimating
+  &sigma;<sub>F</sub> once and fixing it); GTG tail cut, <code>rob_eps</code> and
+  <code>Lplus</code> for robust repeated fits.</p>
+</div>
+
+<div class="card planned">
+  <h3>2. Splendid alfonsino FLicc MSE</h3>
+  <p><span class="tag">In preparation.</span> Length-selective operating model with a dome-shaped
+  trawl and a gillnet, length sampling with <code>sampling.lfd.oem()</code>, and full MSE runs of
+  the alternative FLicc management procedures.</p>
+</div>
+
+<div class="card planned">
+  <h3>3. Robustness set</h3>
+  <p><span class="tag">In preparation.</span> Misspecified M, Linf, CVL and selectivity form in the
+  estimator; which HCR components inherit the bias and which do not.</p>
+</div>
+
+<h2 class="section">Package guides</h2>
+
+<div class="card">
+  <h3><a href="FLicc_intro_vignette.html">Introduction to FLicc</a></h3>
+  <p>Data preparation, model fitting, diagnostics and reference points
+  (<a href="FLicc_Intro.pdf">PDF version</a>).</p>
+</div>
+
+<div class="card">
+  <h3><a href="FLicc_updates_1.0.9.html">FLicc 1.0.6 – 1.0.9 updates</a></h3>
+  <p>Growth-type groups, robust likelihood options, biomass-scale status under steepness,
+  fast reference points in TMB and the first MSE tools.</p>
+</div>
+
+<div class="card">
+  <h3><a href="FLicc_structural_uncertainty_framework.pdf">Structural uncertainty framework (PDF)</a></h3>
+  <p>Monte Carlo life-history draws with <code>mc_flicc()</code>, information-theoretic
+  weighting and likelihood-supported SPR ensembles.</p>
+</div>
+</main>
+</body>
+</html>

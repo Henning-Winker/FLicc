@@ -1,0 +1,5 @@
+rdata/
+inst/rmd/*.html
+inst/rmd/rdata/
+.Rproj.user
+.Rhistory
