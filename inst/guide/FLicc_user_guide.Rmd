@@ -662,8 +662,8 @@ weighted by AIC (`mc_aic_weights()`, `mc_spr_tab()`).
 Rules:
 
 - **Rescale the sample size first** (ESS about 150-200). With large sample sizes
-  the log-likelihood differences between draws are huge and AIC weights collapse
-  onto a few draws (compare below).
+  the log-likelihood differences between draws grow, which tends to concentrate
+  the AIC weights on few draws.
 - **CVL fixed in each refit** (the default; the ensemble varies it through the
   draws). A very tight prior such as `CVL.sd = 0.001` gives almost the same
   estimate but an ill-conditioned Hessian.
@@ -687,11 +687,15 @@ mc_tab
 `n_retained` is the number of draws within the dAIC cut and `n_eff` the effective
 number of draws after AIC weighting
 (here `r round(mc_tab["ess1000", "n_eff"], 1)` of 30 at ESS 1000 and
-`r round(mc_tab["ess200", "n_eff"], 1)` at ESS 200). The larger the sample size, the
-larger the log-likelihood differences between draws and the fewer draws carry
-the weight. Even at moderate ESS the AIC weights concentrate on a minority of
-draws, so report the unweighted ensemble (`mean_uw`) alongside the weighted one,
-and treat AIC weighting across life-history draws with caution.
+`r round(mc_tab["ess200", "n_eff"], 1)` at ESS 200). In this small example (30 draws,
+moderate sample sizes) the weights concentrate similarly at both ESS: in both
+cases a minority of draws carries most of the weight, and the weighted mean SPR
+lies well below the unweighted one. Report the unweighted ensemble (`mean_uw`)
+alongside the weighted one and treat AIC weighting across life-history draws with
+caution. How strongly the concentration depends on ESS (expected to increase
+with the sample size, and observed in larger applications with ESS of 1000 or
+more) needs systematic ensemble trials over ESS, observation models and draws;
+these are planned.
 
 ```{r mc-plots, fig.height = 4.5}
 plot_mcprofile(mc_200)
