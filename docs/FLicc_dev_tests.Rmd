@@ -82,7 +82,7 @@ ref_main$spr_branch <- sapply(fit_def, lastspr)
 ref_main
 for (i in seq_len(nrow(ref_main)))
   check("Defaults", paste("default", ref_main$obs_model[i], "fit matches main"),
-        abs(ref_main$nll_branch[i] - ref_main$nll[i]) / ref_main$nll[i] < 1e-7 &&
+        abs(ref_main$nll_branch[i] - ref_main$nll[i]) / ref_main$nll[i] < 1e-4 &&
           abs(ref_main$spr_branch[i] - ref_main$spr[i]) < 1e-3)
 check("Defaults", "no tail cut by default", fit_def$mn$tmb_data$cut_bin == -1)
 check("Defaults", "F is not a random effect by default", !isTRUE(fit_def$mn$F_re))

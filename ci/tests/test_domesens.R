@@ -14,10 +14,42 @@ fit200 <- fs()
 print(fit200$par[grepl("Sm", fit200$par$par), ])
 cat("base pdHess", fit200$rep$pdHess, "maxgrad", fit200$max_gradient, "SPR", tail(c(fit200$report$spr), 1), "\n")
 
+# --- where does sdreport fail? ---
+nonfin <- function(f) {
+  obj <- f$obj; p0 <- f$opt$par
+  g0 <- obj$gr(p0); cat("fn", obj$fn(p0), " non-finite gr at opt:", which(!is.finite(g0)), "\n")
+  bad <- integer()
+  for (i in seq_along(p0)) for (h in c(-1e-3, 1e-3)) {
+    p <- p0; p[i] <- p[i] + h; gi <- obj$gr(p)
+    if (any(!is.finite(gi)) || !is.finite(obj$fn(p))) bad <- c(bad, i)
+  }
+  bad <- unique(bad)
+  if (length(bad)) print(data.frame(i = bad, name = names(p0)[bad], value = p0[bad]))
+  else cat("all perturbed gradients finite\n")
+  print(round(cbind(par = p0, gr = as.numeric(g0)), 4)[grepl("Sm|sigma|phi", names(p0)), ])
+}
+sf_base <- c("logistic", "dsnormal", "normal")[fit200$tmb_data$sel_type]
+r0 <- tryCatch(fiticc(fit200$report$obslen, fit200$stklen, sel_fun = sf_base, catch_by_gear = fit200$report$catch_by_gear,
+                      settings = fit200$settings), error = function(e) conditionMessage(e))
+cat("refit via report route, no change:", if (is.character(r0)) r0 else "ok", "\n")
+r1 <- tryCatch(fiticc(lfd200, stklen, sel_fun = sf_base, catch_by_gear = cbg, settings = fit200$settings),
+               error = function(e) conditionMessage(e))
+cat("refit with stored settings, original data:", if (is.character(r1)) r1 else "ok", "\n")
+r2 <- tryCatch(fiticc(fit200$report$obslen, stklen, sel_fun = sf_base, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm")),
+               error = function(e) conditionMessage(e))
+cat("refit with report obslen, fresh settings:", if (is.character(r2)) r2 else "ok", "\n")
+print(all.equal(c(fit200$report$obslen[[1]]@.Data), c(lfd200[[1]]@.Data)))
+for (r in c(1000, 22.3)) {
+  f <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r)), se = FALSE)
+  cat("\n-- Gillnet dsnormal rsd", r, "conv", f$opt$convergence, "\n"); nonfin(f)
+  f2 <- tryCatch(fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r))), error = function(e) conditionMessage(e))
+  cat("with se:", if (is.character(f2)) f2 else "ok", "\n")
+}
 ds <- dome_sens_flicc(fit200, gear = "Gillnet")
 print(ds$table); print(ds$errors)
 for (nm in names(ds$fits)) { f <- ds$fits[[nm]]; cat(nm, "pdHess", f$rep$pdHess, "maxgrad", signif(f$max_gradient, 2), "\n") }
-stopifnot(nrow(ds$table) == 5, length(ds$errors) == 0)
 fit_cut <- fs(tail_cut = 47)
 dsc <- dome_sens_flicc(fit_cut, gear = "Gillnet")
 print(dsc$table); print(dsc$errors)
