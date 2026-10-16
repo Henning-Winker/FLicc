@@ -26,6 +26,19 @@ for (pm in c("gtg", "gamma")) {
   ggplot2::ggsave(file.path(od, paste0("selF_", pm, ".png")), p, width = 9, height = 8, dpi = 110)
   ggplot2::ggsave(file.path(od, paste0("selF_", pm, "_s075.png")), plot_contour_flicc(sf, s = 0.75),
                   width = 9, height = 8, dpi = 110)
+  if (pm == "gtg") {
+    for (vw in c("fleet", "share")) {
+      cv <- contour_flicc(fit, view = vw)
+      cat("view", vw, "\n"); print(cv$current)
+      # the current point is the same state in every view
+      stopifnot(all(abs(cv$current$SPR - spr_rep) < 1e-4), all(abs(cv$current$YPR / ypr_ref - 1) < 1e-3))
+      ggplot2::ggsave(file.path(od, paste0("selF_", pm, "_", vw, ".png")), plot_contour_flicc(cv),
+                      width = 9, height = 8, dpi = 110)
+    }
+    stopifnot(abs(sum(cv$current$Cshare) - 1) < 1e-8, abs(sum(cv$current$Fshare) - 1) < 1e-8)
+    ggplot2::ggsave(file.path(od, "selF_gtg_share_gillnet_s075.png"),
+                    plot_contour_flicc(cv, gear = "Gillnet", s = 0.75), width = 9, height = 4.4, dpi = 110)
+  }
 }
 
 # steepness: at s = 1 recruitment is constant, so SSB% = SPR%, Yield% = YPR%

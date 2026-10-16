@@ -2,31 +2,36 @@
 % Please edit documentation in R/flicc_selF.R
 \name{contour_flicc}
 \alias{contour_flicc}
-\title{Yield- and spawning-potential-per-recruit surfaces over selectivity and F}
+\title{Yield and spawning-potential surfaces over selectivity, F and F shares}
 \usage{
-contour_flicc(fit, gear = NULL, n = 40, Fmax = NULL, Lrange = NULL, nyears = 1)
+contour_flicc(fit, gear = NULL, view = c("gear", "fleet", "share"), n = 40,
+  Fmax = NULL, Lrange = NULL, nyears = 1)
 }
 \arguments{
 \item{fit}{A fitted FLicc object (from \code{fiticc()}, with \code{FLRreport = TRUE}).}
 \item{gear}{Gear names (or indices) to compute; default all gears.}
+\item{view}{\code{"gear"}, \code{"fleet"} or \code{"share"} (see Details).}
 \item{n}{Grid size in each dimension.}
-\item{Fmax}{Upper limit of F; default per gear \code{2 * max(Fcur, F at SPR 20\%)}. A single value or one per gear.}
-\item{Lrange}{Range of the selectivity location; default from the first length bin to Linf.}
+\item{Fmax}{Upper limit of the F axis; default \code{2 * max(current F, F at SPR 20\%)} along the view's F direction. A single value or one per gear.}
+\item{Lrange}{Range of the selectivity location; default from the first length bin to Linf (not used for \code{view = "share"}).}
 \item{nyears}{Number of terminal years for current F, M, weight and maturity.}
 }
-\value{A list of class \code{"flicc_contour"} with \code{surface} (gear, type, loc, F, SPR, YPR, YPRrel), \code{current} (the fitted state per gear) and \code{Lmat}.}
+\value{A list of class \code{"flicc_contour"} with \code{surface} (gear, type, F = x-axis value, loc = y-axis value, SPR, YPR, YPRrel), \code{current} (the current state per gear on the same axes, with its current F share \code{Fshare} and catch share \code{Cshare}), \code{view}, \code{Lmat} and \code{linf}.}
 \description{
-For each gear, computes equilibrium YPR and SPR over a grid of the gear's
-selectivity location (\code{SL50} for logistic, the mode for dome-shaped
-selectivity; the curve is shifted along the length axis keeping its shape) and
-the gear's apical fishing mortality. The other gears are held at their fitted
-selectivity and current F. Life history, growth-type groups and natural
-mortality are those of the fit.
+Computes equilibrium yield per recruit (YPR) and SPR over a grid for each gear.
+}
+\details{
+\itemize{
+\item \code{view = "gear"} (default): the gear's apical F (x) against its selectivity location (y; \code{SL50} for logistic, the mode for dome-shaped selectivity, the curve shifted along the length axis with its shape kept). The other gears stay at their current F and selectivity, so the catch split changes along the F axis.
+\item \code{view = "fleet"}: total F (x; sum of the apical F of all gears) with the gears' F shares fixed at their current values, against the gear's selectivity location (y).
+\item \code{view = "share"}: total F (x) against the gear's share of the total F (y, 0-100\%); the rest of the total F is split among the other gears in their current proportions. All selectivities are as fitted.
+}
+Life history, growth-type groups and natural mortality are those of the fit.
 }
 \examples{
 \dontrun{
-cf <- contour_flicc(fit)
-plot_contour_flicc(cf)
-plot_contour_flicc(cf, s = 0.75)
+plot_contour_flicc(contour_flicc(fit))
+plot_contour_flicc(contour_flicc(fit, view = "fleet"))
+plot_contour_flicc(contour_flicc(fit, view = "share"))
 }
 }
