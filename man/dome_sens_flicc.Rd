@@ -12,7 +12,7 @@ dome_sens_flicc(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
 \item{se}{Passed to \code{fiticc()}.}
 \item{...}{Further arguments passed to \code{fiticc()}.}
 }
-\value{A list with \code{fits} (\code{base} = \code{fit}, then one fit per \code{rsd}), \code{table} (scenario, rsd, convergence, log-likelihood, AIC, dAIC, last-year SPR, Fspr, last-year apical F), \code{gear} and \code{rsd}.}
+\value{A list with \code{fits} (\code{base} = \code{fit}, then one fit per \code{rsd}), \code{table} (scenario, rsd, convergence, log-likelihood, AIC, dAIC, last-year SPR, Fspr, last-year apical F), \code{gear}, \code{rsd} and \code{errors} (messages of refits that failed).}
 \description{Refits \code{fit} with one gear's selectivity as a double-sided normal whose right-hand standard deviation is fixed at a sequence of values, from no doming to mild and moderate doming; mode and left-hand SD are estimated, all other settings and data as in \code{fit}. Recommended as a standard sensitivity for gears assumed logistic.}
 \examples{
 \dontrun{

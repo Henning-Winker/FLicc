@@ -107,7 +107,8 @@ plot_selfun <- function(sel_fun = c("dsnormal", "logistic", "normal"), pars, len
 #' @param ... Further arguments passed to [fiticc()].
 #' @return A list with `fits` (named list: `base` = `fit`, then one fit per
 #'   `rsd`), `table` (data frame: scenario, rsd, convergence, log-likelihood,
-#'   AIC, last-year SPR, Fspr, apical F in the last year), `gear` and `rsd`.
+#'   AIC, last-year SPR, Fspr, apical F in the last year), `gear`, `rsd` and
+#'   `errors` (messages of refits that failed).
 #' @examples
 #' \dontrun{
 #' ds <- dome_sens_flicc(fit, gear = "Gillnet")
@@ -126,13 +127,16 @@ dome_sens_flicc <- function(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
   sel_fun[g] <- "dsnormal"
   cbg <- fit$report$catch_by_gear
   fits <- list(base = fit)
+  errs <- character()
   for (r in rsd) {
     sf <- list(c(list(rsd = r), fixed)); names(sf) <- gears[g]
     nm <- paste0("rsd", r)
     fits[[nm]] <- tryCatch(
       fiticc(fit$report$obslen, fit$stklen, sel_fun = sel_fun, catch_by_gear = cbg,
              settings = fit$settings, sel_fixed = sf, se = se, ...),
-      error = function(e) { warning("rsd = ", r, ": ", conditionMessage(e), call. = FALSE); NULL })
+      error = function(e) {
+        errs[[nm]] <<- conditionMessage(e)
+        warning("rsd = ", r, ": ", conditionMessage(e), call. = FALSE); NULL })
   }
   fits <- fits[!vapply(fits, is.null, logical(1))]
   tab <- do.call(rbind, lapply(names(fits), function(nm) {
@@ -144,7 +148,7 @@ dome_sens_flicc <- function(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
                Fap_last = round(tail(c(f$report$Fap), 1), 4))
   }))
   tab$dAIC <- round(tab$AIC - min(tab$AIC), 2)
-  list(fits = fits, table = tab, gear = gears[g], rsd = rsd)
+  list(fits = fits, table = tab, gear = gears[g], rsd = rsd, errors = errs)
 }
 
 #' Plot a dome-shaped selectivity sensitivity

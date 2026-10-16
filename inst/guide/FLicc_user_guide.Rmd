@@ -537,7 +537,7 @@ $\sigma_F$ is treated.
 
 ```{r f-options}
 fit_with <- function(..., se = TRUE) fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                                            settings = c(list(CVL = 0.1, obs_model = "dm"), list(...)), se = se)
+                                            settings = modifyList(list(CVL = 0.1, obs_model = "dm"), list(...)), se = se)
 tF <- list()
 tF$fixed_0.3 <- system.time(f1 <- fit_with())[["elapsed"]]
 tF$prior     <- system.time(f2 <- fit_with(prior_sigmaF = c(log(0.5), 0.3, 1)))[["elapsed"]]
