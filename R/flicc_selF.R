@@ -201,8 +201,9 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
   pal <- grDevices::colorRampPalette(c("#A50F15", "#E34A33", "#FC8D59", "#FDD49E",
                                        "#E0F3F8", "#ABD9E9", "#74ADD1"))(length(breaks) - 1)
   band_lab <- paste0(100 * utils::head(breaks, -1), "-", 100 * breaks[-1], "%")
-  fill_spr <- ggplot2::scale_fill_manual(values = stats::setNames(pal, band_lab), drop = FALSE,
-                                         name = "SPR", guide = ggplot2::guide_legend(nrow = 1, reverse = TRUE))
+  fill_spr <- ggplot2::scale_fill_manual(values = stats::setNames(pal, band_lab), limits = band_lab,
+                                         breaks = rev(band_lab), drop = FALSE, name = "SPR",
+                                         guide = ggplot2::guide_legend(nrow = 1))
   ref_lev <- spr_ref / 100
   ref_lt <- c("solid", rep("22", max(0, length(ref_lev) - 1)))
 

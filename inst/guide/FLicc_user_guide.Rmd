@@ -824,6 +824,39 @@ plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
 
 `eqstklen(fit, s = )` gives the equilibrium curves and MSY proxies.
 
+## Status over selectivity and F: YPR and SPR isopleths
+
+`plot_selF_flicc()` shows, for each gear, how yield per recruit (left) and SPR
+(right) change with the gear's selectivity location and its F, with the other
+gears held at their current state. The location is `SL50` for a logistic gear
+and the mode for a dome; the curve is shifted along the length axis with its
+shape kept. Both panels are shaded by depletion, from light blue (lightly
+depleted) to red (strongly depleted); the left panel adds YPR isopleths
+relative to the maximum over the grid. The bold line is SPR 40%, the dashed
+line SPR 20%, the point the current state and the dotted line the length at 50%
+maturity.
+
+```{r selF, fig.height = 8.5, fig.width = 9}
+sf <- selF_surface_flicc(fit)
+sf$current
+plot_selF_flicc(sf)
+```
+
+How to read it:
+
+- Moving down from the point (less F) or to the right (larger fish first caught)
+  raises SPR; the isopleths show what that costs in yield per recruit.
+- Here the gillnet catches at `SL50` = `r round(sf$current$loc[sf$current$gear == "Gillnet"], 1)`,
+  below Lmat (`r round(sf$Lmat, 1)`): at its current F, raising `SL50` to about Lmat
+  gives an SPR near 40% at little loss of YPR, while reaching 40% through F alone
+  needs a large cut.
+- The surfaces are equilibrium per-recruit results at the fitted life history;
+  they ignore recruitment changes and are a guide to direction and scale, not a
+  forecast.
+
+`gear =` selects gears (rows), `n` the grid resolution, `Fmax` and `Lrange` the
+axes, and `ypr_fill = "ypr"` shades the left panel by YPR instead of SPR.
+
 # Length-based indicators
 
 ## LBIspr
@@ -970,6 +1003,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | Sample size | ESS about 150-200 per gear-year; never raw thousands |
 | Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
+| Management options | `plot_selF_flicc()`: YPR and SPR over selectivity and F by gear |
 | F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate) |
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
 | Missing data | keep zeros, rely on the random walk; not without random walk |
