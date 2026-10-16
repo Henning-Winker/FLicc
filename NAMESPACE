@@ -109,6 +109,8 @@ export(plot_LBIp)
 export(plot_lfdn)
 export(sel_curve_flicc)
 export(plot_selfun)
+export(selF_surface_flicc)
+export(plot_selF_flicc)
 export(dome_sens_flicc)
 export(plot_dome_sens)
 
