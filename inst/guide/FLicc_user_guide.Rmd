@@ -827,14 +827,15 @@ plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
 ## Status over selectivity and F: YPR and SPR isopleths
 
 `plot_selF_flicc()` shows, for each gear, how yield per recruit (left) and SPR
-(right) change with the gear's selectivity location and its F, with the other
-gears held at their current state. The location is `SL50` for a logistic gear
-and the mode for a dome; the curve is shifted along the length axis with its
-shape kept. Both panels are shaded by depletion, from light blue (lightly
-depleted) to red (strongly depleted); the left panel adds YPR isopleths
-relative to the maximum over the grid. The bold line is SPR 40%, the dashed
-line SPR 20%, the point the current state and the dotted line the length at 50%
-maturity.
+(right) change with the gear's F (x-axis) and its selectivity location (y-axis),
+with the other gears held at their current state. The location is `SL50` for a
+logistic gear and the mode for a dome; the curve is shifted along the length
+axis with its shape kept. The style follows the FLSelex isopleth plots: a
+continuous fill from dark blue (high) to red (low), YPR relative to its maximum
+over the grid on the left and SPR on the right, labelled grey isopleths, SPR 40%
+as a solid and SPR 20% as a dashed black line, the current state as a point with
+dotted guides to the axes, and the length at 50% maturity as a dotted horizontal
+line.
 
 ```{r selF, fig.height = 8.5, fig.width = 9}
 sf <- selF_surface_flicc(fit)
@@ -861,8 +862,8 @@ gn_cut <- if (is.na(f40)) "more than 100" else round(100 * (1 - f40 / gn_cur$F))
 
 How to read it:
 
-- Moving down from the point (less F) or to the right (larger fish first caught)
-  raises SPR; the isopleths show what that costs in yield per recruit.
+- Moving left from the point (less F) or up (larger fish first caught) raises
+  SPR; the YPR isopleths show what that costs, or gains, in yield per recruit.
 - Here the gillnet catches at `SL50` = `r round(gn_cur$loc, 1)`, below Lmat
   (`r round(sf$Lmat, 1)`). At its current F, raising `SL50` to Lmat gives an SPR
   of about `r round(100 * gn_lmat$SPR)`% and `r round(100 * gn_lmat$YPRrel)`% of
@@ -873,7 +874,8 @@ How to read it:
   forecast.
 
 `gear =` selects gears (rows), `n` the grid resolution, `Fmax` and `Lrange` the
-axes, and `ypr_fill = "ypr"` shades the left panel by YPR instead of SPR.
+axes, and `ypr_fill = "spr"` shades the left panel by SPR instead of YPR, so
+both panels show depletion.
 
 # Length-based indicators
 
