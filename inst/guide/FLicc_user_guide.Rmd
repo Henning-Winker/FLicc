@@ -206,9 +206,26 @@ ess_runs$max_grad <- sapply(ess_fits, function(f) signif(f$opt$max_gradient, 2))
 ess_runs[, c("obs_model", "label", "SPR_last", "se_logSPR", "max_grad")]
 ```
 
-The point estimate changes little, but the standard error shrinks roughly with
-$1/\sqrt{n}$; at raw counts the intervals reflect sampling of individual fish,
-not of the fishery. The ensemble section (12) shows the effect on AIC weights.
+Three things change with the effective sample size:
+
+- **Precision**: the standard error of log SPR shrinks roughly with $1/\sqrt{n}$;
+  with large ESS the intervals reflect the sampling of individual fish, not of
+  the fishery.
+- **Convergence**: the maximum gradient grows at large ESS (here up to
+  `r max(ess_runs$max_grad[ess_runs$ess %in% 1000])` at ESS 1000), a sign that the
+  likelihood surface becomes sharp and ragged.
+- **The estimate itself, for `dm`**: with the multinomial the last-year SPR changes
+  little (`r paste(range(ess_runs$SPR_last[ess_runs$obs_model == "mn"]), collapse = " to ")`),
+  but with the Dirichlet-multinomial it ranges from
+  `r ess_runs$SPR_last[ess_runs$obs_model == "dm" & ess_runs$ess %in% 50]` at ESS 50 to
+  `r ess_runs$SPR_last[ess_runs$obs_model == "dm" & ess_runs$ess %in% 1000]` at ESS 1000.
+  At low ESS the compositions carry little weight against the random walk and
+  the catch-share constraint; estimates stabilise from about ESS 150-200 upward.
+
+The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
+moderate; with the thousands of fish per year common in market sampling the
+effects above are much stronger. The ensemble section (12) shows the effect on
+AIC weights.
 
 ```{r ess-plot, fig.height = 4}
 dm <- ess_runs$obs_model == "dm"
@@ -644,8 +661,8 @@ weighted by AIC (`mc_aic_weights()`, `mc_spr_tab()`).
 
 Rules:
 
-- **Rescale the sample size first** (ESS about 150-200). With raw counts the
-  log-likelihood differences between draws are huge and AIC weights collapse
+- **Rescale the sample size first** (ESS about 150-200). With large sample sizes
+  the log-likelihood differences between draws are huge and AIC weights collapse
   onto a few draws (compare below).
 - **CVL fixed in each refit** (the default; the ensemble varies it through the
   draws). A very tight prior such as `CVL.sd = 0.001` gives almost the same
@@ -657,17 +674,24 @@ Rules:
 - **Fixed sigmaF** for speed.
 
 ```{r mc}
-fit_raw_cut <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+fit_cut1000 <- fiticc(lfdess(lfd, ess.g = 1000), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                       settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))
-mc_raw <- mc_flicc(fit_raw_cut, nsim = 30, verbose = FALSE, seed = 1)
-mc_200 <- mc_flicc(fit_cut,     nsim = 30, verbose = FALSE, seed = 1)
+mc_1000 <- mc_flicc(fit_cut1000, nsim = 30, verbose = FALSE, seed = 1)
+mc_200  <- mc_flicc(fit_cut,     nsim = 30, verbose = FALSE, seed = 1)
 last <- function(tab) tab[nrow(tab), c("year", "mle", "mean_uw", "mean_w", "n_retained", "n_eff")]
-rbind(raw = last(mc_spr_tab(mc_raw, dAIC_cut = 20)), ess200 = last(mc_spr_tab(mc_200, dAIC_cut = 20)))
+mc_tab <- rbind(ess1000 = last(mc_spr_tab(mc_1000, dAIC_cut = 20)),
+                ess200  = last(mc_spr_tab(mc_200, dAIC_cut = 20)))
+mc_tab
 ```
 
-`n_eff` is the effective number of draws after AIC weighting. With raw counts
-few draws carry the weight; with ESS 200 the weights spread and the weighted and
-unweighted summaries agree more closely.
+`n_retained` is the number of draws within the dAIC cut and `n_eff` the effective
+number of draws after AIC weighting
+(here `r round(mc_tab["ess1000", "n_eff"], 1)` of 30 at ESS 1000 and
+`r round(mc_tab["ess200", "n_eff"], 1)` at ESS 200). The larger the sample size, the
+larger the log-likelihood differences between draws and the fewer draws carry
+the weight. Even at moderate ESS the AIC weights concentrate on a minority of
+draws, so report the unweighted ensemble (`mean_uw`) alongside the weighted one,
+and treat AIC weighting across life-history draws with caution.
 
 ```{r mc-plots, fig.height = 4.5}
 plot_mcprofile(mc_200)
