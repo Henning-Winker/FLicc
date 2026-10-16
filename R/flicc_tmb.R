@@ -506,8 +506,7 @@ fiticc_core <- function(lfd, stklen,
                      settings = list(
                        CVL = 0.1,
                        GL = 50,
-                       catch.sd = 0.05,
-                       prior_sigmaF = c(log(0.5), 0.3, 1)
+                       catch.sd = 0.05
                      ),
                      years = NULL,
                      iter = 1,
@@ -555,6 +554,13 @@ fiticc_core <- function(lfd, stklen,
   if (is.null(settings)) settings <- list()
 
   if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
+
+  # Default (FLicc >= 1.0.10): random walk on log F with sigmaF fixed at 0.3
+  # (fast, no collapse of sigmaF). sigmaF is estimated only if a prior_sigmaF
+  # is given (penalised) or with F_re = TRUE (random effects).
+  if (is.null(settings$sigmaF) && is.null(settings$prior_sigmaF) && !isTRUE(settings$F_re)) {
+    settings$sigmaF <- 0.3
+  }
 
   # F as random effects: weak default prior on sigmaF (median 0.3, sd 0.5 on
   # the log scale), so sigmaF cannot collapse to 0 when the length data carry
@@ -913,6 +919,12 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
 #'
+#'     \item{\code{sigmaF}, default}{By default log F follows a random walk by gear
+#'       with sigmaF fixed at 0.3 (fast and stable). sigmaF is estimated only
+#'       when \code{prior_sigmaF} is given (penalised fixed effect with that
+#'       prior) or with \code{F_re = TRUE} (random effects). The random walk is
+#'       switched off with \code{prior_sigmaF = FALSE}.}
+#'
 #'     \item{\code{prior_sigmaF}}{Random walk on log F by gear and its
 #'       standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
 #'       log(sigmaF) with \code{use = 1} switching the random walk on. With
@@ -1053,7 +1065,6 @@ fiticc <- function(lfd, stklen,
                      ngtg = 13,
                      maxsd = 2,
                      Mpow = 0,
-                     prior_sigmaF = c(log(0.5), 0.3, 1),
                      linf.sd = NULL,
                      Mk.sd = NULL,
                      CVL.sd = NULL
