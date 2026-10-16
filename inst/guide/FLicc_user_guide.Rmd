@@ -187,23 +187,55 @@ Monte-Carlo profiling. Practical rules:
 - Prefer `obs_model = "dm"` with real data; remember it halves the nominal ESS.
 - Never fit raw counts of several thousand fish per year without rescaling.
 
+The demonstration below fits the alfonsino data at five effective sample sizes
+(`ess_values`), once with the multinomial and once with the Dirichlet-multinomial,
+and once more with the raw counts. `lfdess()` rescales the compositions to the
+given ESS; `Map()` runs one fit per value. For each fit the table shows the
+last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
+`spr_ci_flicc()`) and the largest absolute gradient at the optimum.
+
 ```{r ess-demo}
-cbg <- c(0.7, 0.3); sel_fun <- c("dsnormal", "logistic")
+sel_fun <- c("dsnormal", "logistic")
+cbg <- c(0.7, 0.3)
 stklen <- stocklen(lfd, lhpar, m_model = "constant")
-se_last <- function(f) { s <- summary(f$rep, "report"); tail(s[rownames(s) == "log_spr_y", 2], 1) }
-raw_n <- round(mean(sapply(lfd, function(x) mean(apply(x@.Data, 2, sum)))))
-ess_runs <- expand.grid(ess = c(50, 100, 200, 500, 1000, NA), obs_model = c("mn", "dm"),
-                        stringsAsFactors = FALSE)
-ess_fits <- lapply(seq_len(nrow(ess_runs)), function(i) {
-  x <- if (is.na(ess_runs$ess[i])) lfd else lfdess(lfd, ess.g = ess_runs$ess[i])
-  fiticc(x, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = ess_runs$obs_model[i]))
-})
-ess_runs$label <- ifelse(is.na(ess_runs$ess), paste0("raw (~", raw_n, ")"), ess_runs$ess)
-ess_runs$SPR_last <- sapply(ess_fits, function(f) round(tail(c(f$report$spr), 1), 3))
-ess_runs$se_logSPR <- sapply(ess_fits, function(f) round(se_last(f), 3))
-ess_runs$max_grad <- sapply(ess_fits, function(f) signif(f$opt$max_gradient, 2))
-ess_runs[, c("obs_model", "label", "SPR_last", "se_logSPR", "max_grad")]
+
+ess_values <- c(50, 100, 200, 500, 1000)
+
+# multinomial: one fit per ESS
+fits_mn <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "mn"))
+}, ess_values)
+names(fits_mn) <- paste0("mn_", ess_values)
+
+# Dirichlet-multinomial: one fit per ESS
+fits_dm <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm"))
+}, ess_values)
+names(fits_dm) <- paste0("dm_", ess_values)
+
+# raw counts (no rescaling)
+fit_raw_mn <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "mn"))
+fit_raw_dm <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm"))
+raw_n <- round(mean(quantSums(lfd[["Trawl"]])))   # fish per year, trawl
+
+fits_mn <- c(fits_mn, raw = list(fit_raw_mn))
+fits_dm <- c(fits_dm, raw = list(fit_raw_dm))
+
+# standard error of log SPR in the last year
+se_logspr <- function(fit) tail(spr_ci_flicc(fit)$se_log, 1)
+ess_table <- data.frame(
+  ESS        = c(ess_values, paste0("raw (~", raw_n, ")")),
+  SPR_mn     = round(sapply(fits_mn, sprcur_flicc), 3),
+  SPR_dm     = round(sapply(fits_dm, sprcur_flicc), 3),
+  se_mn      = round(sapply(fits_mn, se_logspr), 3),
+  se_dm      = round(sapply(fits_dm, se_logspr), 3),
+  maxgrad_dm = signif(sapply(fits_dm, function(fit) fit$max_gradient), 2),
+  row.names  = NULL)
+ess_table
 ```
 
 Three things change with the effective sample size:
@@ -212,13 +244,12 @@ Three things change with the effective sample size:
   with large ESS the intervals reflect the sampling of individual fish, not of
   the fishery.
 - **Convergence**: the maximum gradient grows at large ESS (here up to
-  `r max(ess_runs$max_grad[ess_runs$ess %in% 1000])` at ESS 1000), a sign that the
+  `r ess_table$maxgrad_dm[5]` at ESS 1000 with `dm`), a sign that the
   likelihood surface becomes sharp and ragged.
 - **The estimate itself, for `dm`**: with the multinomial the last-year SPR changes
-  little (`r paste(range(ess_runs$SPR_last[ess_runs$obs_model == "mn"]), collapse = " to ")`),
+  little (`r paste(range(ess_table$SPR_mn), collapse = " to ")`),
   but with the Dirichlet-multinomial it ranges from
-  `r ess_runs$SPR_last[ess_runs$obs_model == "dm" & ess_runs$ess %in% 50]` at ESS 50 to
-  `r ess_runs$SPR_last[ess_runs$obs_model == "dm" & ess_runs$ess %in% 1000]` at ESS 1000.
+  `r ess_table$SPR_dm[1]` at ESS 50 to `r ess_table$SPR_dm[5]` at ESS 1000.
   At low ESS the compositions carry little weight against the random walk and
   the catch-share constraint; estimates stabilise from about ESS 150-200 upward.
 
@@ -227,9 +258,11 @@ moderate; with the thousands of fish per year common in market sampling the
 effects above are much stronger. The ensemble section (12) shows the effect on
 AIC weights.
 
+SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
+for the raw counts:
+
 ```{r ess-plot, fig.height = 4}
-dm <- ess_runs$obs_model == "dm"
-plot_spr(setNames(ess_fits[dm], paste0("dm_", ess_runs$label[dm]))[c(1, 3, 5, 6)], ci = TRUE)
+plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
 ```
 
 *Open issue*: estimating the DM precision (overdispersion) instead of fixing
@@ -520,18 +553,27 @@ plot_len(fit)
 
 ## Check 9: retrospective consistency
 
-Refit with the last years removed and compare the terminal estimates:
+The model is refitted with the last one, two and three years removed (`peels`);
+`Map()` runs one fit per peel. Mohn's rho compares the terminal SPR of each peel
+with the SPR of the same year in the full fit.
 
 ```{r check-retro, fig.height = 4}
 yrs <- as.numeric(dimnames(lfd200[[1]])$year)
-retro <- c(list(full = fit), lapply(setNames(1:3, paste0("peel", 1:3)), function(p)
+peels <- 1:3
+
+retro <- Map(function(p) {
   fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm"), years = head(yrs, -p), se = FALSE)))
-plot_spr(retro)
+         settings = list(CVL = 0.1, obs_model = "dm"),
+         years = head(yrs, -p), se = FALSE)
+}, peels)
+names(retro) <- paste0("peel", peels)
+plot_spr(c(list(full = fit), retro))
+
 spr_full <- c(fit$report$spr)
-rho <- sapply(1:3, function(p) { s <- c(retro[[p + 1]]$report$spr)
-  (tail(s, 1) - spr_full[length(spr_full) - p]) / spr_full[length(spr_full) - p] })
-round(c(mohn_rho = mean(rho)), 3)
+spr_peel <- sapply(retro, sprcur_flicc)               # terminal SPR of each peel
+spr_same <- spr_full[length(spr_full) - peels]        # same years in the full fit
+mohn_rho <- mean((spr_peel - spr_same) / spr_same)
+round(mohn_rho, 3)
 ```
 
 | | |
@@ -550,23 +592,68 @@ It links the years, so selectivity and F are estimated jointly from all
 compositions, and it bridges years without data. The options differ in how
 $\sigma_F$ is treated.
 
+The four options for $\sigma_F$ are fitted below to the same data (ESS 200,
+Dirichlet-multinomial). Only the F settings differ, so each option has its own
+`settings` list; `Map()` fits them in turn.
+
 ```{r f-options}
-fit_with <- function(..., se = TRUE) fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                                            settings = modifyList(list(CVL = 0.1, obs_model = "dm"), list(...)), se = se)
-tF <- list()
-tF$fixed_0.3 <- system.time(f1 <- fit_with())[["elapsed"]]
-tF$prior     <- system.time(f2 <- fit_with(prior_sigmaF = c(log(0.5), 0.3, 1)))[["elapsed"]]
-tF$F_re      <- system.time(f3 <- fit_with(F_re = TRUE))[["elapsed"]]
-tF$no_RW     <- system.time(f4 <- fit_with(prior_sigmaF = FALSE))[["elapsed"]]
-fits_F <- list(fixed_0.3 = f1, prior = f2, F_re = f3, no_RW = f4)
-data.frame(option = names(fits_F), sigmaF = round(sapply(fits_F, sigmaF_flicc), 3),
-           seconds = round(unlist(tF), 1), SPR_last = sapply(fits_F, function(f) round(tail(c(f$report$spr), 1), 3)),
-           se_logSPR_last = sapply(fits_F, function(f) round(se_last(f), 3)), row.names = NULL)
+f_settings <- list(
+  fixed_0.3 = list(CVL = 0.1, obs_model = "dm", sigmaF = 0.3),                       # default
+  prior     = list(CVL = 0.1, obs_model = "dm", prior_sigmaF = c(log(0.5), 0.3, 1)), # penalised
+  F_re      = list(CVL = 0.1, obs_model = "dm", F_re = TRUE),                        # random effects
+  no_RW     = list(CVL = 0.1, obs_model = "dm", prior_sigmaF = FALSE))               # no random walk
+
+fits_F <- Map(function(set) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+}, f_settings)
+
+data.frame(option   = names(fits_F),
+           sigmaF   = round(sapply(fits_F, sigmaF_flicc), 3),
+           SPR_last = round(sapply(fits_F, sprcur_flicc), 3),
+           se_log   = round(sapply(fits_F, se_logspr), 3),
+           row.names = NULL)
 ```
+
+`sigmaF_flicc()` returns the fixed or estimated $\sigma_F$ (NA without a random
+walk). The SPR trajectories with 95% intervals, and the apical F by year
+(`report$Fap`):
 
 ```{r f-options-plot, fig.height = 4}
 plot_spr(fits_F, ci = TRUE)
+
+F_by_option <- FLQuants(fixed_0.3 = fits_F$fixed_0.3$report$Fap,
+                        prior     = fits_F$prior$report$Fap,
+                        F_re      = fits_F$F_re$report$Fap,
+                        no_RW     = fits_F$no_RW$report$Fap)
+ggplot(F_by_option, aes(year, data, colour = qname)) +
+  geom_line(linewidth = 0.8) + geom_point(size = 1.5) +
+  labs(x = "Year", y = "Apical F", colour = NULL) + theme_bw()
 ```
+
+The estimated $\sigma_F$ of the penalised and random-effects options is much
+smaller than 0.3, so their F trajectories are smoother; without a random walk F
+follows each year's composition. To see what $\sigma_F$ does, the next runs fix it
+at a range of values (`sigmaF_values`):
+
+```{r sigmaF-range, fig.height = 4}
+sigmaF_values <- c(0.05, 0.1, 0.3, 0.6, 1)
+
+fits_sigmaF <- Map(function(sF) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", sigmaF = sF), se = FALSE)
+}, sigmaF_values)
+names(fits_sigmaF) <- paste0("sigmaF_", sigmaF_values)
+
+plot_spr(fits_sigmaF)
+data.frame(sigmaF   = sigmaF_values,
+           SPR_last = round(sapply(fits_sigmaF, sprcur_flicc), 3),
+           neg_logL = round(sapply(fits_sigmaF, function(fit) fit$opt$objective), 1))
+```
+
+Small values force F (and SPR) towards a flat line; from about 0.3 upward the
+trajectories change little. The objective (`neg_logL`) includes the random-walk
+penalty, which is why it cannot be used to choose $\sigma_F$ directly: it always
+favours the smallest value that the compositions tolerate.
 
 ## Default: sigmaF fixed
 
@@ -586,7 +673,7 @@ $$
 $$
 Each random-walk term contributes $-\log \sigma_F$, so the joint maximum favours
 small $\sigma_F$ with flat F whenever the data do not resist: the estimate is
-pulled down (here `r round(sigmaF_flicc(f2), 3)`), and only the prior keeps it
+pulled down (here `r round(sigmaF_flicc(fits_F$prior), 3)`), and only the prior keeps it
 away from 0. Without a prior (`prior_sigmaF = c(NA, NA, 1)`) it collapses; FLicc
 warns.
 
@@ -601,11 +688,16 @@ $\theta$ (selectivity, $\sigma_F$), the F path is optimised and the curvature
 around it enters the marginal likelihood. Consequences:
 
 - $\sigma_F$ is estimated from the marginal likelihood, which properly accounts for
-  the uncertainty of the F path (here `r round(sigmaF_flicc(f3), 3)`). It can still
+  the uncertainty of the F path (here `r round(sigmaF_flicc(fits_F$F_re), 3)`). It can still
   go to small values when the compositions carry little year-to-year
   information; a weak prior `c(log(0.3), 0.5, 1)` is used unless another is given.
 - Standard errors (e.g. of log SPR) include the uncertainty of the F process.
-- Fitting is slower (here `r round(tF$F_re / tF$fixed_0.3, 1)` times the default).
+- Fitting is slower:
+
+```{r f-re-time}
+system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$fixed_0.3))
+system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$F_re))
+```
 
 Use it for a final assessment and to estimate $\sigma_F$ once; then fix it for
 repeated fits: `sigmaF = sigmaF_flicc(fit_re)`. `F_re = TRUE` with `sigmaF` given
@@ -654,20 +746,36 @@ far individual growth spreads the length composition, mostly in the tail: the
 fastest-growing groups determine how many fish occur near and beyond Linf. It is
 fixed at its input value unless `CVL.sd` is given; typical values are 0.07-0.15.
 
-```{r cvl-sens}
-cvl_grid <- expand.grid(CVL = c(0.07, 0.10, 0.13), cut = c("none", "47"), stringsAsFactors = FALSE)
-cvl_grid$SPR_last <- mapply(function(cv, ct) {
-  f <- if (ct == "none") fit_with(CVL = cv, se = FALSE) else fit_with(CVL = cv, tail_cut = 47, se = FALSE)
-  round(tail(c(f$report$spr), 1), 3)
-}, cvl_grid$CVL, cvl_grid$cut)
-reshape(cvl_grid, idvar = "CVL", timevar = "cut", direction = "wide")
+The sensitivity below refits the model for three CVL values (`cvl_values`),
+without and with a tail cut at 47 cm; `Map()` runs one fit per value.
+
+```{r cvl-sens, fig.height = 4}
+cvl_values <- c(0.07, 0.10, 0.13)
+
+fits_cvl <- Map(function(cvl) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm"), se = FALSE)
+}, cvl_values)
+names(fits_cvl) <- paste0("CVL_", cvl_values)
+
+fits_cvl_cut <- Map(function(cvl) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm", tail_cut = 47), se = FALSE)
+}, cvl_values)
+names(fits_cvl_cut) <- paste0("CVL_", cvl_values, "_cut47")
+
+cvl_table <- data.frame(CVL       = cvl_values,
+                        SPR_no_cut = round(sapply(fits_cvl, sprcur_flicc), 3),
+                        SPR_cut47  = round(sapply(fits_cvl_cut, sprcur_flicc), 3),
+                        row.names = NULL)
+cvl_table
+plot_spr(c(fits_cvl, fits_cvl_cut))
 ```
 
 Status is sensitive to CVL because CVL shapes the tail: here SPR ranges
-`r min(cvl_grid$SPR_last[cvl_grid$cut == "none"])`-`r max(cvl_grid$SPR_last[cvl_grid$cut == "none"])`
-over CVL 0.07-0.13 without a cut and
-`r min(cvl_grid$SPR_last[cvl_grid$cut == "47"])`-`r max(cvl_grid$SPR_last[cvl_grid$cut == "47"])`
-with a cut at 47 cm.
+`r min(cvl_table$SPR_no_cut)`-`r max(cvl_table$SPR_no_cut)` over CVL 0.07-0.13
+without a cut and `r min(cvl_table$SPR_cut47)`-`r max(cvl_table$SPR_cut47)` with a
+cut at 47 cm.
 
 ## maxsd and ngtg
 
@@ -675,27 +783,48 @@ The growth groups are placed at $z_h$ on `seq(-maxsd, maxsd, length = ngtg)` wit
 normal weights. Truncating the normal at `maxsd` reduces the realised CV of the
 groups below CVL and caps the largest group at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$:
 
+The realised spread can be computed directly from the group positions `z` and
+their normal weights `w`; the factor multiplies CVL:
+
 ```{r maxsd-cv}
-eff_cv <- function(maxsd, ngtg) { z <- seq(-maxsd, maxsd, length.out = ngtg); w <- dnorm(z); w <- w / sum(w)
-  sqrt(sum(w * z^2)) }
-data.frame(maxsd = c(2, 2, 3, 3), ngtg = c(13, 19, 13, 19),
-           effective_CV_factor = round(mapply(eff_cv, c(2, 2, 3, 3), c(13, 19, 13, 19)), 3),
-           largest_Linf = round(55.7 * (1 + c(2, 2, 3, 3) * 0.1), 1))
+z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (default)
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))                        # realised CV factor
+
+z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))
+
+55.7 * (1 + c(2, 3) * 0.1)                # largest group Linf for maxsd 2 and 3
 ```
 
 With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
 CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
 groups matters little beyond about 13.
 
+The fits below compare the two settings (`maxsd_values` with matching
+`ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
+parallel.
+
 ```{r maxsd-sens}
-ms <- data.frame(setting = c("maxsd2_ngtg13", "maxsd3_ngtg19", "maxsd2_cut47", "maxsd3_cut47"))
-ms$SPR_last <- c(
-  tail(c(fit_with(se = FALSE)$report$spr), 1),
-  tail(c(fit_with(maxsd = 3, ngtg = 19, se = FALSE)$report$spr), 1),
-  tail(c(fit_with(tail_cut = 47, se = FALSE)$report$spr), 1),
-  tail(c(fit_with(maxsd = 3, ngtg = 19, tail_cut = 47, se = FALSE)$report$spr), 1))
-ms$SPR_last <- round(ms$SPR_last, 3)
-ms
+maxsd_values <- c(2, 3)
+ngtg_values  <- c(13, 19)
+
+fits_maxsd <- Map(function(maxsd, ngtg) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", maxsd = maxsd, ngtg = ngtg), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+fits_maxsd_cut <- Map(function(maxsd, ngtg) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", maxsd = maxsd, ngtg = ngtg,
+                         tail_cut = 47), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+data.frame(maxsd      = maxsd_values,
+           ngtg       = ngtg_values,
+           SPR_no_cut = round(sapply(fits_maxsd, sprcur_flicc), 3),
+           SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
 ```
 
 Recommendation: keep the LBSPR default for comparability and treat `maxsd = 3`
@@ -715,17 +844,27 @@ $$
 $$
 so each sd is approximately a CV (e.g. `linf.sd = 0.05`: about ±10% at 95%).
 
-```{r priors}
-fit_pri <- fit_with(linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25)
-pp <- function(nm, col = "mpd") fit_pri$par[[col]][fit_pri$par$par == nm][1]
-lh <- fit_pri$tmb_data
-data.frame(parameter = c("Linf", "M/k", "CVL"),
-           input = round(c(lh$Linf_init, lh$Mk_init, lh$CVL_init), 3),
-           estimate = round(c(exp(pp("log_Linf")), exp(pp("log_Mk")), 1 / sqrt(exp(pp("log_Galpha")))), 3),
-           prior_cv = c(0.05, 0.1, 0.25),
-           posterior_cv = round(c(pp("log_Linf", "se"), pp("log_Mk", "se"), pp("log_Galpha", "se") / 2), 3))
-c(SPR_last_fixed = round(tail(c(fit$report$spr), 1), 3),
-  SPR_last_priors = round(tail(c(fit_pri$report$spr), 1), 3))
+The fit below estimates all three with priors. The estimates are on the log
+scale: $L_\infty$ = `exp(log_Linf)`, $M/k$ = `exp(log_Mk)` and CVL =
+`1 / sqrt(exp(log_Galpha))`; the column `se` is approximately the posterior CV
+(for `log_Galpha` divide by 2).
+
+```{r priors, fig.height = 4}
+fit_pri <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm",
+                                  linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25))
+
+est <- fit_pri$par[fit_pri$par$par %in% c("log_Linf", "log_Mk", "log_Galpha"), ]
+est
+exp(est$mpd[est$par == "log_Linf"])            # Linf (input 55.7)
+exp(est$mpd[est$par == "log_Mk"])              # M/k  (input 0.162 / 0.08 = 2.03)
+1 / sqrt(exp(est$mpd[est$par == "log_Galpha"])) # CVL  (input 0.1)
+
+plot_spr(list(fixed = fit, priors = fit_pri), ci = TRUE)
+```
+
+```{r priors-numbers, include = FALSE}
+pp <- function(nm, col = "mpd") est[[col]][est$par == nm][1]
 ```
 
 Here the length data pull Linf up to about `r round(exp(pp("log_Linf")), 1)`
@@ -766,7 +905,8 @@ runs and ensemble draws use the same bins. (Values <= 1.5 are read as a fraction
 of Linf, with a warning.)
 
 ```{r tailcut, fig.height = 4}
-fit_cut <- fit_with(tail_cut = 47)                                 # ~0.85 x Linf
+fit_cut <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))  # ~0.85 x Linf
 fit_cut$tmb_data$LLB[fit_cut$tmb_data$cut_bin + 1]
 plot_spr(list(no_cut = fit, cut_47 = fit_cut), ci = TRUE)
 ```
