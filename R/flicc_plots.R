@@ -2219,3 +2219,47 @@ spr_ci_flicc <- function(fit, level = 0.95) {
              lwr = exp(s[, 1] - z * s[, 2]), upr = exp(s[, 1] + z * s[, 2]),
              row.names = NULL)
 }
+
+#' Sample size of length-frequency data by year and gear
+#'
+#' Diagnostic of the information in the length compositions: the number of
+#' fish measured per year and gear (stacked, so the bar height is the
+#' combined sample size), optionally next to the effective sample sizes after
+#' [lfdess()] rescaling. Gear-years without samples show as gaps; the labels
+#' give the number of non-empty length bins, a rough indicator of how well a
+#' composition is resolved.
+#'
+#' @param lfd `FLQuants` of length frequencies by gear (raw counts).
+#' @param ess Optional `FLQuants` after [lfdess()], or a scalar / named vector
+#'   of effective sample sizes per gear (passed to [lfdess()]).
+#' @param bins Logical; label bars with the number of non-empty bins.
+#' @return A `ggplot` object.
+#' @examples
+#' \dontrun{
+#' plot_lfdn(lfd)
+#' plot_lfdn(lfd, ess = c(Trawl = 200, Gillnet = 150))
+#' }
+#' @export
+plot_lfdn <- function(lfd, ess = NULL, bins = TRUE) {
+  if (!inherits(lfd, "FLQuants")) stop("lfd must be FLQuants (one element per gear)")
+  tab <- function(x, what) do.call(rbind, lapply(names(x), function(g) {
+    q <- x[[g]]
+    n <- apply(q@.Data, 2, sum, na.rm = TRUE)
+    nb <- apply(q@.Data, 2, function(v) sum(v > 0, na.rm = TRUE))
+    data.frame(year = as.numeric(dimnames(q)$year), gear = g, n = n, bins = nb, what = what)
+  }))
+  d <- tab(lfd, "raw counts")
+  if (!is.null(ess)) {
+    if (!inherits(ess, "FLQuants")) ess <- lfdess(lfd, ess.g = ess)
+    d <- rbind(d, tab(ess, "effective sample size"))
+    d$what <- factor(d$what, levels = c("raw counts", "effective sample size"))
+  }
+  p <- ggplot2::ggplot(d, ggplot2::aes(year, n, fill = gear)) +
+    ggplot2::geom_col(position = "stack", width = 0.8, colour = "white", linewidth = 0.2) +
+    ggplot2::labs(x = "Year", y = "Sample size (fish)", fill = "Gear") +
+    ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+  if (bins) p <- p + ggplot2::geom_text(ggplot2::aes(label = ifelse(n > 0, bins, "")),
+                                        position = ggplot2::position_stack(vjust = 0.5), size = 2.6, colour = "white")
+  if (!is.null(ess)) p <- p + ggplot2::facet_wrap(~what, scales = "free_y", ncol = 1)
+  p
+}

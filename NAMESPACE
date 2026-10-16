@@ -106,6 +106,7 @@ export(plot_sel)
 export(plot_mat)
 export(plot_lw)
 export(plot_LBIp)
+export(plot_lfdn)
 
 
 #---Monte-Carlo Ensemble---
