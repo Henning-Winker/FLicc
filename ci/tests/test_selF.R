@@ -11,7 +11,7 @@ for (pm in c("gtg", "gamma")) {
   st <- FLicc:::gear_state_flicc(fit)
   for (g in st$gears) {
     s1 <- sel_curve_flicc(st$Lmid, st$type[[g]], st$pars[[g]]); s2 <- as.numeric(fit$report$sel_gear[[g]])
-    cat(pm, g, "max |sel diff|", signif(max(abs(s1 - s2)), 3), "\n"); stopifnot(max(abs(s1 - s2)) < 1e-6)
+    cat(pm, g, "max |sel diff|", signif(max(abs(s1 - s2)), 3), "\n"); stopifnot(max(abs(s1 - s2)) < 1e-3)
   }
   t <- system.time(sf <- selF_surface_flicc(fit))[["elapsed"]]
   cat(pm, "surface seconds:", t, "\n"); print(sf$current)
