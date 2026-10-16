@@ -380,9 +380,15 @@ plot_dome_sens(ds)
 plot_dome_sens(ds, "spr", ci = TRUE)
 ```
 
-Read the table as a sensitivity, not a model selection: AIC differences between
-dome shapes are usually small and say little about the true shape. Report the
-range of status across mild to moderate domes. With a tail cut the scenarios
+The run with `rsd = 1000` reproduces the logistic base fit (SPR
+`r ds$table$SPR_last[2]` vs `r ds$table$SPR_last[1]`), which is the check that the
+scenarios are comparable. For the gillnet, no, mild and moderate domes fit
+equally well (dAIC `r paste(ds$table$dAIC[2:4], collapse = ", ")`), while the
+strong dome is worse (dAIC `r ds$table$dAIC[5]`). The data therefore cannot tell
+whether large fish are fully selected or mildly less so, and over that range the
+last-year SPR goes from `r ds$table$SPR_last[2]` to `r ds$table$SPR_last[4]`.
+Read the table as a sensitivity, not a model selection: report the range of
+status across the domes the data cannot reject. With a tail cut the scenarios
 differ less, because the bins where the dome acts are excluded:
 
 ```{r dome-sens-cut}
@@ -392,6 +398,15 @@ ds_cut <- dome_sens_flicc(fit200_cut, gear = "Gillnet", se = FALSE)
 data.frame(scenario = ds$table$scenario, SPR_no_cut = ds$table$SPR_last,
            SPR_cut47 = ds_cut$table$SPR_last)
 ```
+
+Here the cut narrows the range across no to moderate doming from
+`r ds$table$SPR_last[2]`-`r ds$table$SPR_last[4]` to
+`r ds_cut$table$SPR_last[2]`-`r ds_cut$table$SPR_last[4]`.
+
+The sensitivity is meant for gears assumed asymptotic. For a gear already fitted
+as a dome (here the trawl, estimated right-hand SD about
+`r round(exp(fit200$par$mpd[fit200$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
+wide right-hand SD forces a shape the data reject, which shows as very large dAIC.
 
 ## Choosing selectivity
 
@@ -648,8 +663,11 @@ cvl_grid$SPR_last <- mapply(function(cv, ct) {
 reshape(cvl_grid, idvar = "CVL", timevar = "cut", direction = "wide")
 ```
 
-Status is sensitive to CVL because CVL shapes the tail; the tail cut reduces
-this sensitivity (*simulation*: about halved).
+Status is sensitive to CVL because CVL shapes the tail: here SPR ranges
+`r min(cvl_grid$SPR_last[cvl_grid$cut == "none"])`-`r max(cvl_grid$SPR_last[cvl_grid$cut == "none"])`
+over CVL 0.07-0.13 without a cut and
+`r min(cvl_grid$SPR_last[cvl_grid$cut == "47"])`-`r max(cvl_grid$SPR_last[cvl_grid$cut == "47"])`
+with a cut at 47 cm.
 
 ## maxsd and ngtg
 
@@ -709,6 +727,14 @@ data.frame(parameter = c("Linf", "M/k", "CVL"),
 c(SPR_last_fixed = round(tail(c(fit$report$spr), 1), 3),
   SPR_last_priors = round(tail(c(fit_pri$report$spr), 1), 3))
 ```
+
+Here the length data pull Linf up to about `r round(exp(pp("log_Linf")), 1)`
+(posterior CV `r round(pp("log_Linf", "se"), 3)` against a prior CV of 0.05), and
+because a larger Linf means the fish in the catch are relatively younger, SPR
+drops markedly. The posterior CVs of M/k and CVL stay close to their prior CVs:
+the data say little about them. A shift of this size in Linf is a finding to
+check against growth studies, not a result to accept; run the assessment with
+Linf fixed at the alternative values as a sensitivity.
 
 Notes:
 
