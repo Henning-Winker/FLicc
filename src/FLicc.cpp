@@ -28,13 +28,12 @@ vector<Type> calc_sel(const vector<Type>& L,
     Type rsd  = exp(pars(2)) * Linf;
     Type two  = Type(2);
 
+    // AD-safe branch: the mode is estimated, so a plain if() would be frozen
+    // at the side of the mode each bin had when the tape was recorded.
     for(int i = 0; i < n; i++) {
       Type d = L(i) - mode;
-      if(L(i) < mode) {
-        sel(i) = exp(-(d * d) / (two * lsd * lsd));
-      } else {
-        sel(i) = exp(-(d * d) / (two * rsd * rsd));
-      }
+      Type sd_i = CppAD::CondExpLt(L(i), mode, lsd, rsd);
+      sel(i) = exp(-(d * d) / (two * sd_i * sd_i));
     }
 
   } else if(sel_type == 3) {
@@ -482,23 +481,18 @@ Type objective_function<Type>::operator() ()
 
       Fk_l(l,y) = fsum;
 
-      if(fsum > fmax) {
-        fmax = fsum;
-        M_at_fmax = M(l);
-      }
+      // AD-safe running maximum (which bin is apical depends on parameters)
+      M_at_fmax = CppAD::CondExpGt(fsum, fmax, M(l), M_at_fmax);
+      fmax      = CppAD::CondExpGt(fsum, fmax, fsum, fmax);
     }
 
     if (FMpen_sd > Type(0)) {
 
       Type FM_y = fmax / (M_at_fmax + Type(1e-12)) + Type(1e-12);
 
-      if (FM_y < FM_min) {
-        nll += Type(1e6) * pow(log(FM_y) - log(FM_min), 2);
-      }
-
-      if (FM_y > FM_max) {
-        nll += Type(1e6) * pow(log(FM_y) - log(FM_max), 2);
-      }
+      // AD-safe one-sided penalties (zero inside [FM_min, FM_max])
+      nll += CppAD::CondExpLt(FM_y, FM_min, Type(1e6) * pow(log(FM_y) - log(FM_min), 2), Type(0));
+      nll += CppAD::CondExpGt(FM_y, FM_max, Type(1e6) * pow(log(FM_y) - log(FM_max), 2), Type(0));
     }
 
 
@@ -607,8 +601,8 @@ Type objective_function<Type>::operator() ()
         // obs is already ESS-scaled by lfdess()
         if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
           for(int k = 0; k < nb; k++) {
-            Type p_pred = p(k);
-            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
+            // AD-safe floor (a plain if() would be frozen at tape time)
+            Type p_pred = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
             nll -= o(k) * log(p_pred);
           }
         }
@@ -622,8 +616,8 @@ Type objective_function<Type>::operator() ()
           nll -= lgamma(alpha0);
           nll += lgamma(o_tot + alpha0);
           for(int k = 0; k < nb; k++) {
-            Type p_pred = p(k);
-            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
+            // AD-safe floor (a plain if() would be frozen at tape time)
+            Type p_pred = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
             Type a = alpha0 * p_pred;
             nll -= lgamma(o(k) + a);
             nll += lgamma(a);
