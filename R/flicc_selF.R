@@ -258,5 +258,6 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
     if (!keep) plots[[i]] <- plots[[i]] + ggplot2::theme(legend.position = "none")
   }
   patchwork::wrap_plots(plots, ncol = 2, byrow = TRUE) +
-    patchwork::plot_layout(guides = "collect")
+    patchwork::plot_layout(guides = "collect") +
+    patchwork::plot_annotation(theme = ggplot2::theme(legend.position = "bottom"))
 }
