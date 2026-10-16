@@ -48,10 +48,26 @@ for (r in c(1000, 22.3)) {
   print(names(f$obj$env$last.par.best)[!names(f$obj$env$last.par.best) %in% names(f$opt$par)])
   h <- tryCatch(optimHess(f$opt$par, f$obj$fn, f$obj$gr), error = function(e) conditionMessage(e))
   cat("optimHess at opt$par:", if (is.character(h)) h else paste("ok, min eigen", signif(min(eigen(h)$values), 3)), "\n")
+  # replicate optimHess and stop at the first non-finite gradient
+  dp <- f$opt$par; hit <- FALSE
+  for (i in seq_along(dp)) {
+    for (h in c(1e-3, -2e-3)) {
+      dp[i] <- dp[i] + h; gi <- as.numeric(f$obj$gr(dp))
+      if (any(!is.finite(gi))) {
+        cat("non-finite gradient at i =", i, names(dp)[i], "step", h, "; fn =", f$obj$fn(dp),
+            "; bad components:", which(!is.finite(gi)), "\n")
+        rp <- f$obj$report(dp)
+        for (nm in names(rp)) if (any(!is.finite(unlist(rp[[nm]])))) cat("  non-finite in report:", nm, "\n")
+        print(range(rp$Sel)); hit <- TRUE; break
+      }
+    }
+    if (hit) break
+    dp[i] <- dp[i] + 1e-3
+  }
+  if (!hit) cat("replicated optimHess: no non-finite gradient\n")
   sdr <- withCallingHandlers(tryCatch(TMB::sdreport(f$obj), error = function(e) { cat("sdreport error:", conditionMessage(e), "\n"); NULL }),
                              error = function(e) print(tail(sys.calls(), 6)))
   if (!is.null(sdr)) cat("sdreport ok, pdHess", sdr$pdHess, "\n")
-  cat("fn at par.fixed:", f$obj$fn(f$obj$env$last.par.best[names(f$obj$env$last.par.best) != "" ]), "\n")
   f2 <- tryCatch(fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
               settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r))), error = function(e) conditionMessage(e))
   cat("with se:", if (is.character(f2)) f2 else "ok", "\n")
