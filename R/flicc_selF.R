@@ -149,38 +149,74 @@ selF_surface_flicc <- function(fit, gear = NULL, n = 40, Fmax = NULL, Lrange = N
             class = "flicc_selF")
 }
 
-# contour line labels: one label per line, at the point of the line nearest its middle
-contour_labels_flicc <- function(d, z, levels, fmt = function(x) x) {
+
+#' FLSelex colour palette
+#'
+#' Subset of `rich.colors` (Arni Magnusson), as used by FLSelex for isopleth
+#' plots. Reversed (`rev()`), it runs from dark blue (high) to red (low).
+#'
+#' @param n Number of colours.
+#' @param alpha Transparency.
+#' @return Character vector of colour codes.
+#' @keywords internal
+r4col_flicc <- function(n, alpha = 1) {
+  x <- seq(0, 1, length.out = n)
+  r <- 1 / (1 + exp(20 - 35 * x))
+  g <- pmin(pmax(0, -0.8 + 6 * x - 5 * x^2), 1)
+  b <- stats::dnorm(x, 0.25, 0.15) / max(stats::dnorm(x, 0.25, 0.15))
+  grDevices::rgb(r, g, b, alpha = alpha)
+}
+
+# Contour line labels: one label per contour line, placed at the point that is
+# farthest from the panel edges and from labels already placed, so labels do
+# not stack up on steep line ends or get clipped at the borders.
+contour_labels_flicc <- function(d, z, levels, fmt = function(x) x, placed = NULL) {
   x <- sort(unique(d$loc)); y <- sort(unique(d$F))
   zm <- matrix(d[[z]][order(d$F, d$loc)], nrow = length(x))
   cl <- grDevices::contourLines(x, y, zm, levels = levels)
   if (!length(cl)) return(NULL)
-  do.call(rbind, lapply(cl, function(l) { j <- ceiling(length(l$x) / 2)
-    data.frame(loc = l$x[j], F = l$y[j], label = fmt(l$level)) }))
+  rx <- range(x); ry <- range(y)
+  nx <- function(v) (v - rx[1]) / diff(rx)
+  ny <- function(v) (v - ry[1]) / diff(ry)
+  out <- NULL
+  for (l in cl) {
+    xs <- nx(l$x); ys <- ny(l$y)
+    score <- pmin(xs, 1 - xs, ys, 1 - ys)
+    prev <- rbind(placed, out)
+    if (!is.null(prev) && nrow(prev)) {
+      dmin <- apply(cbind(xs, ys), 1, function(p)
+        min(sqrt((nx(prev$loc) - p[1])^2 + (ny(prev$F) - p[2])^2)))
+      score <- pmin(score, dmin)
+    }
+    j <- which.max(score)
+    out <- rbind(out, data.frame(loc = l$x[j], F = l$y[j], label = fmt(l$level)))
+  }
+  out
 }
 
 #' Plot YPR and SPR isopleths over selectivity and F by gear
 #'
 #' Draws, for each gear (rows), yield per recruit (left) and spawning potential
-#' ratio (right) as functions of the gear's selectivity location (`SL50` or
-#' mode) and its apical F, with the other gears at their current state. Both
-#' panels are shaded by depletion (SPR bands, from light blue = lightly
-#' depleted to red = strongly depleted); the left panel adds YPR isopleths
-#' (relative to the maximum YPR over the grid). The SPR reference levels
-#' (`spr_ref`) are drawn as lines on both panels, the current state as a point,
-#' and the length at 50% maturity as a dotted vertical line.
+#' ratio (right) as functions of the gear's apical F and its selectivity
+#' location (`SL50` or mode), with the other gears at their current state.
+#' Styled after the FLSelex isopleth plots: a continuous `rich.colors` fill
+#' (dark blue = high, red = low), labelled grey isopleths, the SPR reference
+#' levels (`spr_ref`) as black lines, the current state as a black point with
+#' dotted guides to the axes, and the length at 50% maturity as a dotted
+#' horizontal line.
 #'
 #' @param x Output of [selF_surface_flicc()] or a fitted FLicc object (then
 #'   passed to [selF_surface_flicc()] with `...`).
 #' @param gear Gears to show (rows); default all in `x`.
-#' @param spr_ref SPR reference levels (percent) drawn as lines; the first is
-#'   drawn solid (target), others dashed.
-#' @param breaks SPR band limits (proportions).
-#' @param ypr_levels Relative YPR levels of the isopleths.
-#' @param ypr_fill `"spr"` (default): left panel shaded by SPR; `"ypr"`: shaded
-#'   by relative YPR.
+#' @param spr_ref SPR reference levels (percent) drawn as black lines; the
+#'   first is drawn solid (target), others dashed.
+#' @param breaks SPR isopleth levels (proportions); 0 and 1 are ignored.
+#' @param ypr_levels Relative YPR isopleth levels.
+#' @param ypr_fill `"ypr"` (default): left panel shaded by relative YPR;
+#'   `"spr"`: shaded by SPR.
 #' @param ... Passed to [selF_surface_flicc()] when `x` is a fit.
-#' @return A `patchwork` object (rows = gears, columns = YPR, SPR).
+#' @return A `patchwork` object (rows = gears, columns = YPR, SPR), or a list
+#'   of `ggplot`s if patchwork is not installed.
 #' @examples
 #' \dontrun{
 #' plot_selF_flicc(fit)
@@ -188,76 +224,103 @@ contour_labels_flicc <- function(d, z, levels, fmt = function(x) x) {
 #' }
 #' @export
 plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
-                            breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1),
+                            breaks = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8),
                             ypr_levels = c(0.2, 0.4, 0.6, 0.8, 0.9, 0.95),
-                            ypr_fill = c("spr", "ypr"), ...) {
+                            ypr_fill = c("ypr", "spr"), ...) {
   ypr_fill <- match.arg(ypr_fill)
   if (!inherits(x, "flicc_selF")) x <- selF_surface_flicc(x, gear = gear, ...)
   gears <- if (is.null(gear)) unique(x$surface$gear) else gear
   bad <- setdiff(gears, unique(x$surface$gear))
   if (length(bad)) stop("Gear(s) not in the surface: ", paste(bad, collapse = ", "))
 
-  # depletion palette: strongly depleted (red) to lightly depleted (light blue)
-  pal <- grDevices::colorRampPalette(c("#A50F15", "#E34A33", "#FC8D59", "#FDD49E",
-                                       "#E0F3F8", "#ABD9E9", "#74ADD1"))(length(breaks) - 1)
-  band_lab <- paste0(100 * utils::head(breaks, -1), "-", 100 * breaks[-1], "%")
-  fill_spr <- ggplot2::scale_fill_manual(values = stats::setNames(pal, band_lab), limits = band_lab,
-                                         breaks = rev(band_lab), drop = FALSE, name = "SPR",
-                                         guide = ggplot2::guide_legend(nrow = 1))
+  spr_lev <- breaks[breaks > 0 & breaks < 1]
   ref_lev <- spr_ref / 100
   ref_lt <- c("solid", rep("22", max(0, length(ref_lev) - 1)))
+
+  # FLSelex fill scales: uneven breaks give more colour resolution near the top
+  colbr_y <- c(0, 0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 0.95, 1)
+  fill_ypr <- ggplot2::scale_fill_gradientn(
+    colours = rev(r4col_flicc(length(colbr_y) + 3))[-c(10:11, 13)],
+    limits = c(-0.03, 1), breaks = colbr_y, name = "YPR")
+  colbr_s <- c(0, 0.05, seq(0.1, 1, 0.1))
+  fill_spr <- ggplot2::scale_fill_gradientn(
+    colours = rev(r4col_flicc(length(colbr_s) + 4))[-c(4:7)],
+    limits = c(-0.03, 1), breaks = colbr_s, name = "SPR")
+
+  lab_layer <- function(lab, size = 2.6, face = "plain") {
+    if (is.null(lab)) return(NULL)
+    ggplot2::geom_label(data = lab, ggplot2::aes(F, loc, label = label),
+                        size = size, fontface = face, label.size = 0,
+                        fill = "white", alpha = 0.75,
+                        label.padding = ggplot2::unit(0.06, "lines"))
+  }
 
   panel <- function(g, what) {
     d <- x$surface[x$surface$gear == g, ]
     cp <- x$current[x$current$gear == g, ]
-    xlab <- if (d$type[1] == "logistic") "SL50 (length at 50% selectivity)" else "Selectivity mode"
-    p <- ggplot2::ggplot(d, ggplot2::aes(loc, F))
-    if (what == "SPR" || ypr_fill == "spr") {
-      p <- p + ggplot2::geom_contour_filled(ggplot2::aes(z = SPR, fill = ggplot2::after_stat(
-        factor(band_lab[as.integer(level)], levels = band_lab))), breaks = breaks) + fill_spr
-    } else {
-      p <- p + ggplot2::geom_contour_filled(ggplot2::aes(z = YPRrel), breaks = c(0, ypr_levels, 1.0001)) +
-        ggplot2::scale_fill_brewer(palette = "Greens", name = "YPR / max")
-    }
-    if (what == "SPR") {
-      p <- p + ggplot2::geom_contour(ggplot2::aes(z = SPR), breaks = breaks, colour = "white", linewidth = 0.25)
-    } else {
-      p <- p + ggplot2::geom_contour(ggplot2::aes(z = YPRrel), breaks = ypr_levels, colour = "grey15", linewidth = 0.45)
+    ylab <- if (d$type[1] == "logistic") "SL50 (length at 50% selectivity)" else "Selectivity mode"
+    fill_ypr_here <- what == "YPR" && ypr_fill == "ypr"
+
+    d$zfill <- if (fill_ypr_here) d$YPRrel else d$SPR
+
+    p <- ggplot2::ggplot(d, ggplot2::aes(F, loc)) +
+      ggplot2::geom_raster(ggplot2::aes(fill = zfill), interpolate = TRUE) +
+      (if (fill_ypr_here) fill_ypr else fill_spr)
+
+    # grey isopleths with labels
+    if (what == "YPR") {
+      p <- p + ggplot2::geom_contour(ggplot2::aes(z = YPRrel), breaks = ypr_levels,
+                                     colour = grDevices::grey(0.4), linewidth = 0.35)
       lab <- contour_labels_flicc(d, "YPRrel", ypr_levels)
-      if (!is.null(lab)) p <- p + ggplot2::geom_label(data = lab, ggplot2::aes(loc, F, label = label),
-                                                      size = 2.6, label.size = 0, fill = "white", alpha = 0.8,
-                                                      label.padding = ggplot2::unit(0.08, "lines"))
+    } else {
+      p <- p + ggplot2::geom_contour(ggplot2::aes(z = SPR), breaks = spr_lev,
+                                     colour = grDevices::grey(0.4), linewidth = 0.35)
+      lab <- contour_labels_flicc(d, "SPR", setdiff(spr_lev, ref_lev))
     }
+
+    # SPR reference levels as black lines, labelled away from the grey labels
+    ref_lab <- NULL
     for (j in seq_along(ref_lev)) {
       p <- p + ggplot2::geom_contour(ggplot2::aes(z = SPR), breaks = ref_lev[j], colour = "black",
-                                     linewidth = if (j == 1) 0.9 else 0.6, linetype = ref_lt[j])
-      lab <- contour_labels_flicc(d, "SPR", ref_lev[j], function(v) paste0("SPR", 100 * v))
-      if (!is.null(lab)) p <- p + ggplot2::geom_text(data = lab[1, ], ggplot2::aes(loc, F, label = label),
-                                                     size = 2.8, fontface = "bold", vjust = -0.5)
+                                     linewidth = if (j == 1) 0.8 else 0.55, linetype = ref_lt[j])
+      rl <- contour_labels_flicc(d, "SPR", ref_lev[j], function(v) paste0("SPR", 100 * v),
+                                 placed = rbind(lab, ref_lab))
+      if (!is.null(rl)) ref_lab <- rbind(ref_lab, rl[1, ])
     }
-    if (is.finite(x$Lmat)) p <- p + ggplot2::geom_vline(xintercept = x$Lmat, linetype = 3, colour = "grey20") +
-      ggplot2::annotate("text", x = x$Lmat, y = max(d$F), label = "Lmat", hjust = -0.1, vjust = 1, size = 2.8)
-    p + ggplot2::geom_point(data = cp, ggplot2::aes(loc, F), shape = 21, size = 3.2, fill = "black",
-                            colour = "white", stroke = 1) +
-      ggplot2::coord_cartesian(expand = FALSE) +
-      ggplot2::labs(x = xlab, y = paste0("F (", g, ")"),
-                    title = paste0(if (what == "YPR") "YPR" else "SPR", ": ", g),
+    p <- p + lab_layer(lab) + lab_layer(ref_lab, size = 2.7, face = "bold")
+
+    if (is.finite(x$Lmat)) {
+      p <- p + ggplot2::geom_hline(yintercept = x$Lmat, linetype = "dotted", colour = "grey20") +
+        ggplot2::annotate("text", x = max(d$F), y = x$Lmat, label = "Lmat",
+                          hjust = 1.1, vjust = -0.4, size = 2.7)
+    }
+
+    # current state: black point with dotted guides to the axes (as FLSelex)
+    p + ggplot2::annotate("segment", x = cp$F, xend = cp$F, y = min(d$loc), yend = cp$loc,
+                          linetype = "dotted", linewidth = 0.3) +
+      ggplot2::annotate("segment", x = 0, xend = cp$F, y = cp$loc, yend = cp$loc,
+                        linetype = "dotted", linewidth = 0.3) +
+      ggplot2::annotate("point", x = cp$F, y = cp$loc, size = 2.5) +
+      ggplot2::coord_cartesian(expand = FALSE, clip = "off") +
+      ggplot2::labs(x = paste0("Fishing Mortality (", g, ")"), y = ylab,
+                    title = paste0(what, ": ", g),
                     subtitle = if (what == "YPR") sprintf("current YPR = %.0f%% of max", 100 * cp$YPRrel)
                                else sprintf("current SPR = %.0f%%", 100 * cp$SPR)) +
       ggplot2::theme_bw() +
-      ggplot2::theme(legend.position = "bottom", plot.title = ggplot2::element_text(face = "bold", size = 11),
+      ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", size = 11),
                      plot.subtitle = ggplot2::element_text(size = 9, colour = "grey30"),
-                     panel.grid = ggplot2::element_blank())
+                     axis.title = ggplot2::element_text(size = 10),
+                     panel.grid = ggplot2::element_blank(),
+                     legend.key.height = ggplot2::unit(1, "cm"),
+                     legend.key.width = ggplot2::unit(0.6, "cm"),
+                     legend.text = ggplot2::element_text(size = 7),
+                     legend.title = ggplot2::element_text(size = 9),
+                     plot.margin = ggplot2::margin(5.5, 10, 5.5, 5.5))
   }
+
   plots <- unlist(lapply(gears, function(g) list(panel(g, "YPR"), panel(g, "SPR"))), recursive = FALSE)
   if (!requireNamespace("patchwork", quietly = TRUE)) return(plots)
-  # one SPR legend (from the last SPR panel); a YPR-shaded legend is kept too
-  np <- length(plots)
-  for (i in seq_len(np)) {
-    keep <- i == np || (ypr_fill == "ypr" && i == np - 1)
-    if (!keep) plots[[i]] <- plots[[i]] + ggplot2::theme(legend.position = "none")
-  }
+  # identical colour bars across gears are merged into one YPR and one SPR legend
   patchwork::wrap_plots(plots, ncol = 2, byrow = TRUE) +
-    patchwork::plot_layout(guides = "collect") +
-    patchwork::plot_annotation(theme = ggplot2::theme(legend.position = "bottom"))
+    patchwork::plot_layout(guides = "collect")
 }

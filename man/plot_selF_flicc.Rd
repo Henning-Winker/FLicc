@@ -4,28 +4,47 @@
 \alias{plot_selF_flicc}
 \title{Plot YPR and SPR isopleths over selectivity and F by gear}
 \usage{
-plot_selF_flicc(x, gear = NULL, spr_ref = c(40, 20),
-  breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1),
-  ypr_levels = c(0.2, 0.4, 0.6, 0.8, 0.9, 0.95), ypr_fill = c("spr", "ypr"), ...)
+plot_selF_flicc(
+  x,
+  gear = NULL,
+  spr_ref = c(40, 20),
+  breaks = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8),
+  ypr_levels = c(0.2, 0.4, 0.6, 0.8, 0.9, 0.95),
+  ypr_fill = c("ypr", "spr"),
+  ...
+)
 }
 \arguments{
-\item{x}{Output of \code{selF_surface_flicc()} or a fitted FLicc object.}
-\item{gear}{Gears to show (rows); default all.}
-\item{spr_ref}{SPR reference levels (percent) drawn as lines; the first solid, others dashed.}
-\item{breaks}{SPR band limits (proportions).}
-\item{ypr_levels}{Relative YPR levels of the isopleths.}
-\item{ypr_fill}{\code{"spr"}: left panel shaded by SPR; \code{"ypr"}: shaded by relative YPR.}
-\item{...}{Passed to \code{selF_surface_flicc()} when \code{x} is a fit.}
+\item{x}{Output of \code{\link[=selF_surface_flicc]{selF_surface_flicc()}} or a fitted FLicc object (then
+passed to \code{\link[=selF_surface_flicc]{selF_surface_flicc()}} with \code{...}).}
+
+\item{gear}{Gears to show (rows); default all in \code{x}.}
+
+\item{spr_ref}{SPR reference levels (percent) drawn as black lines; the
+first is drawn solid (target), others dashed.}
+
+\item{breaks}{SPR isopleth levels (proportions); 0 and 1 are ignored.}
+
+\item{ypr_levels}{Relative YPR isopleth levels.}
+
+\item{ypr_fill}{\code{"ypr"} (default): left panel shaded by relative YPR;
+\code{"spr"}: shaded by SPR.}
+
+\item{...}{Passed to \code{\link[=selF_surface_flicc]{selF_surface_flicc()}} when \code{x} is a fit.}
 }
-\value{A \code{patchwork} object (rows = gears, columns = YPR, SPR).}
+\value{
+A \code{patchwork} object (rows = gears, columns = YPR, SPR), or a list
+of \code{ggplot}s if patchwork is not installed.
+}
 \description{
-For each gear (rows), yield per recruit (left) and spawning potential ratio
-(right) as functions of the gear's selectivity location and apical F, with the
-other gears at their current state. Both panels are shaded by depletion (SPR
-bands from light blue, lightly depleted, to red, strongly depleted); the left
-panel adds YPR isopleths relative to the maximum over the grid. SPR reference
-levels are drawn as lines, the current state as a point and the length at 50\%
-maturity as a dotted line.
+Draws, for each gear (rows), yield per recruit (left) and spawning potential
+ratio (right) as functions of the gear's apical F and its selectivity
+location (\code{SL50} or mode), with the other gears at their current state.
+Styled after the FLSelex isopleth plots: a continuous \code{rich.colors} fill
+(dark blue = high, red = low), labelled grey isopleths, the SPR reference
+levels (\code{spr_ref}) as black lines, the current state as a black point with
+dotted guides to the axes, and the length at 50\% maturity as a dotted
+horizontal line.
 }
 \examples{
 \dontrun{
