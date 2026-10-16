@@ -43,6 +43,15 @@ for (r in c(1000, 22.3)) {
   f <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
               settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r)), se = FALSE)
   cat("\n-- Gillnet dsnormal rsd", r, "conv", f$opt$convergence, "\n"); nonfin(f)
+  pb <- f$obj$env$last.par.best
+  cat("last.par.best length", length(pb), "opt length", length(f$opt$par), "same", isTRUE(all.equal(unname(pb), unname(f$opt$par))), "\n")
+  print(names(f$obj$env$last.par.best)[!names(f$obj$env$last.par.best) %in% names(f$opt$par)])
+  h <- tryCatch(optimHess(f$opt$par, f$obj$fn, f$obj$gr), error = function(e) conditionMessage(e))
+  cat("optimHess at opt$par:", if (is.character(h)) h else paste("ok, min eigen", signif(min(eigen(h)$values), 3)), "\n")
+  sdr <- withCallingHandlers(tryCatch(TMB::sdreport(f$obj), error = function(e) { cat("sdreport error:", conditionMessage(e), "\n"); NULL }),
+                             error = function(e) print(tail(sys.calls(), 6)))
+  if (!is.null(sdr)) cat("sdreport ok, pdHess", sdr$pdHess, "\n")
+  cat("fn at par.fixed:", f$obj$fn(f$obj$env$last.par.best[names(f$obj$env$last.par.best) != "" ]), "\n")
   f2 <- tryCatch(fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
               settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r))), error = function(e) conditionMessage(e))
   cat("with se:", if (is.character(f2)) f2 else "ok", "\n")
@@ -71,7 +80,7 @@ for (s in list(list(linf.sd = 0.05), list(Mk.sd = 0.1), list(CVL.sd = 0.25),
 }
 # profile of the objective in Linf (all else re-estimated)
 prof <- sapply(c(54, 54.5, 55, 55.5, 56, 57), function(li) {
-  st <- stklen; st@lhpar["linf"] <- li
+  lh2 <- lhpar; lh2["linf"] <- li; st <- stocklen(lfd, lh2, m_model = "constant")
   f <- fiticc(lfd200, st, sel_fun = sel_fun, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm"), se = FALSE)
   c(Linf = li, nll = f$opt$objective)
 })
