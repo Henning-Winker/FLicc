@@ -251,6 +251,12 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
   }
   plots <- unlist(lapply(gears, function(g) list(panel(g, "YPR"), panel(g, "SPR"))), recursive = FALSE)
   if (!requireNamespace("patchwork", quietly = TRUE)) return(plots)
+  # one SPR legend (from the last SPR panel); a YPR-shaded legend is kept too
+  np <- length(plots)
+  for (i in seq_len(np)) {
+    keep <- i == np || (ypr_fill == "ypr" && i == np - 1)
+    if (!keep) plots[[i]] <- plots[[i]] + ggplot2::theme(legend.position = "none")
+  }
   patchwork::wrap_plots(plots, ncol = 2, byrow = TRUE) +
     patchwork::plot_layout(guides = "collect") & ggplot2::theme(legend.position = "bottom")
 }
