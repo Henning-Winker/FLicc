@@ -13,7 +13,7 @@ for (pm in c("gtg", "gamma")) {
     s1 <- sel_curve_flicc(st$Lmid, st$type[[g]], st$pars[[g]]); s2 <- as.numeric(fit$report$sel_gear[[g]])
     cat(pm, g, "max |sel diff|", signif(max(abs(s1 - s2)), 3), "\n"); stopifnot(max(abs(s1 - s2)) < 1e-3)
   }
-  t <- system.time(sf <- selF_surface_flicc(fit))[["elapsed"]]
+  t <- system.time(sf <- contour_flicc(fit))[["elapsed"]]
   cat(pm, "surface seconds:", t, "\n"); print(sf$current)
   spr_rep <- tail(c(fit$report$spr), 1)
   ypr_ref <- ypr_flicc(fit, F = as.numeric(tail(c(fit$report$Fap), 1)))
@@ -21,9 +21,14 @@ for (pm in c("gtg", "gamma")) {
   stopifnot(abs(sf$current$SPR[1] - spr_rep) < 1e-4, abs(sf$current$SPR[2] - spr_rep) < 1e-4,
             abs(sf$current$YPR[1] / ypr_ref - 1) < 1e-3)
   print(summary(sf$surface[, c("loc", "F", "SPR", "YPRrel")]))
-  p <- plot_selF_flicc(sf)
+  p <- plot_contour_flicc(sf)
   od <- if (dir.exists("out/tests")) "out/tests" else "."
   ggplot2::ggsave(file.path(od, paste0("selF_", pm, ".png")), p, width = 9, height = 8, dpi = 110)
-  ggplot2::ggsave(file.path(od, paste0("selF_", pm, "_gillnet.png")), plot_selF_flicc(sf, gear = "Gillnet"),
-                  width = 9, height = 4.4, dpi = 110)
+  ggplot2::ggsave(file.path(od, paste0("selF_", pm, "_s075.png")), plot_contour_flicc(sf, s = 0.75),
+                  width = 9, height = 8, dpi = 110)
 }
+
+# steepness: at s = 1 recruitment is constant, so SSB% = SPR%, Yield% = YPR%
+d <- sf$surface; s1 <- 1
+b <- 100 * pmax(4 * s1 * d$SPR - (1 - s1), 0) / (5 * s1 - 1)
+stopifnot(max(abs(b - 100 * d$SPR)) < 1e-8)

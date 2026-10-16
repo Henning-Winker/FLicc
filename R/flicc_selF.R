@@ -95,17 +95,18 @@ sel_loc_flicc <- function(type, pars) if (type == "logistic") pars$SL50 else par
 #' @param Lrange Range of the selectivity location; default from the first
 #'   length bin to Linf.
 #' @param nyears Number of terminal years for current F, M, weight and maturity.
-#' @return A list of class `"flicc_selF"` with `surface` (data frame: gear,
+#' @return A list of class `"flicc_contour"` with `surface` (data frame: gear,
 #'   type, loc, F, SPR, YPR, YPRrel = YPR relative to the maximum over the
 #'   gear's grid), `current` (gear, type, loc, F, SPR, YPR, YPRrel) and `Lmat`
 #'   (length at 50% maturity, if available).
 #' @examples
 #' \dontrun{
-#' sf <- selF_surface_flicc(fit)
-#' plot_selF_flicc(sf)
+#' cf <- contour_flicc(fit)
+#' plot_contour_flicc(cf)
+#' plot_contour_flicc(cf, s = 0.75)
 #' }
 #' @export
-selF_surface_flicc <- function(fit, gear = NULL, n = 40, Fmax = NULL, Lrange = NULL, nyears = 1) {
+contour_flicc <- function(fit, gear = NULL, n = 40, Fmax = NULL, Lrange = NULL, nyears = 1) {
   if (is.null(fit$report$selpars)) stop("fit needs FLRreport = TRUE (the default of fiticc()).")
   eng <- pr_engine_flicc(fit, nyears)
   st <- gear_state_flicc(fit, nyears)
@@ -146,7 +147,7 @@ selF_surface_flicc <- function(fit, gear = NULL, n = 40, Fmax = NULL, Lrange = N
   Lmat <- if ("L50" %in% dimnames(fit$report$lhpar)[[1]]) as.numeric(fit$report$lhpar["L50"]) else NA_real_
   structure(list(surface = do.call(rbind, surf), current = do.call(rbind, cur), Lmat = Lmat,
                  linf = linf, nyears = nyears),
-            class = "flicc_selF")
+            class = "flicc_contour")
 }
 
 
@@ -194,58 +195,74 @@ contour_labels_flicc <- function(d, z, levels, fmt = function(x) x, placed = NUL
   out
 }
 
-#' Plot YPR and SPR isopleths over selectivity and F by gear
+#' Contour plots of yield and spawning potential over selectivity and F
 #'
-#' Draws, for each gear (rows), yield per recruit (left) and spawning potential
-#' ratio (right) as functions of the gear's apical F and its selectivity
-#' location (`SL50` or mode), with the other gears at their current state.
+#' Draws, for each gear (rows), yield (left) and spawning potential (right) as
+#' functions of the gear's apical F and its selectivity location (`SL50` or
+#' mode), with the other gears at their current state. Both panels are on the
+#' same 0-100% scale:
+#'
+#' * without `s`: YPR% = 100 x YPR / max(YPR over the grid) and SPR% = 100 x SPR;
+#' * with steepness `s` (Beverton-Holt): Yield% = 100 x Y / max(Y over the
+#'   grid), with Y = YPR x R/R0, and SSB% = 100 x B/B0, with
+#'   R/R0 = (4 s SPR - (1 - s)) / ((5 s - 1) SPR) and
+#'   B/B0 = (4 s SPR - (1 - s)) / (5 s - 1) (both 0 when negative).
+#'
 #' Styled after the FLSelex isopleth plots: a continuous `rich.colors` fill
-#' (dark blue = high, red = low), labelled grey isopleths, the SPR reference
-#' levels (`spr_ref`) as black lines, the current state as a black point with
-#' dotted guides to the axes, and the length at 50% maturity as a dotted
-#' horizontal line.
+#' (dark blue = high, red = low), labelled grey isopleths, reference levels of
+#' the right-hand quantity (`ref`, e.g. SPR 40% or SSB 40%) as black lines on
+#' both panels, the current state as a black point with dotted guides to the
+#' axes, and the length at 50% maturity as a dotted horizontal line.
 #'
-#' @param x Output of [selF_surface_flicc()] or a fitted FLicc object (then
-#'   passed to [selF_surface_flicc()] with `...`).
+#' @param x Output of [contour_flicc()] or a fitted FLicc object (then passed to
+#'   [contour_flicc()] with `...`).
 #' @param gear Gears to show (rows); default all in `x`.
-#' @param spr_ref SPR reference levels (percent) drawn as black lines; the
-#'   first is drawn solid (target), others dashed.
-#' @param breaks SPR isopleth levels (proportions); 0 and 1 are ignored.
-#' @param ypr_levels Relative YPR isopleth levels.
-#' @param ypr_fill `"ypr"` (default): left panel shaded by relative YPR;
-#'   `"spr"`: shaded by SPR.
-#' @param ... Passed to [selF_surface_flicc()] when `x` is a fit.
-#' @return A `patchwork` object (rows = gears, columns = YPR, SPR), or a list
-#'   of `ggplot`s if patchwork is not installed.
+#' @param s Optional steepness of a Beverton-Holt stock-recruitment
+#'   relationship; gives Yield% and SSB% instead of YPR% and SPR%.
+#' @param ref Reference levels (%) of SPR (or SSB with `s`) drawn as black lines;
+#'   the first solid, others dashed.
+#' @param levels Isopleth levels (%), the same on both panels.
+#' @param ... Passed to [contour_flicc()] when `x` is a fit.
+#' @return A `patchwork` object (rows = gears, columns = yield, spawning
+#'   potential), or a list of `ggplot`s if patchwork is not installed.
 #' @examples
 #' \dontrun{
-#' plot_selF_flicc(fit)
-#' plot_selF_flicc(fit, gear = "Gillnet", n = 60)
+#' plot_contour_flicc(fit)
+#' plot_contour_flicc(fit, s = 0.75)
+#' plot_contour_flicc(fit, gear = "Gillnet", n = 60)
 #' }
 #' @export
-plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
-                            breaks = c(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8),
-                            ypr_levels = c(0.2, 0.4, 0.6, 0.8, 0.9, 0.95),
-                            ypr_fill = c("ypr", "spr"), ...) {
-  ypr_fill <- match.arg(ypr_fill)
-  if (!inherits(x, "flicc_selF")) x <- selF_surface_flicc(x, gear = gear, ...)
+plot_contour_flicc <- function(x, gear = NULL, s = NULL, ref = c(40, 20),
+                               levels = c(10, 20, 30, 50, 60, 80, 90, 95), ...) {
+  if (!inherits(x, "flicc_contour")) x <- contour_flicc(x, gear = gear, ...)
   gears <- if (is.null(gear)) unique(x$surface$gear) else gear
   bad <- setdiff(gears, unique(x$surface$gear))
   if (length(bad)) stop("Gear(s) not in the surface: ", paste(bad, collapse = ", "))
+  if (!is.null(s)) check_steep_flicc(s, 40)
 
-  spr_lev <- breaks[breaks > 0 & breaks < 1]
-  ref_lev <- spr_ref / 100
-  ref_lt <- c("solid", rep("22", max(0, length(ref_lev) - 1)))
+  # yield and spawning potential in % (0-100) on a common scale
+  to_pct <- function(d, ymax) {
+    if (is.null(s)) {
+      d$left  <- 100 * d$YPR / ymax
+      d$right <- 100 * d$SPR
+    } else {
+      rr0 <- (4 * s * d$SPR - (1 - s)) / ((5 * s - 1) * d$SPR)
+      rr0[!is.finite(rr0) | rr0 < 0] <- 0
+      d$left  <- 100 * d$YPR * rr0 / ymax
+      d$right <- 100 * pmax(4 * s * d$SPR - (1 - s), 0) / (5 * s - 1)
+    }
+    d
+  }
+  nm_left  <- if (is.null(s)) "YPR%" else "Yield%"
+  nm_right <- if (is.null(s)) "SPR%" else "SSB%"
+  ref_nm   <- if (is.null(s)) "SPR" else "SSB"
+  ref_lt <- c("solid", rep("22", max(0, length(ref) - 1)))
 
-  # FLSelex fill scales: uneven breaks give more colour resolution near the top
-  colbr_y <- c(0, 0.2, 0.4, 0.6, 0.7, 0.8, 0.9, 0.95, 1)
-  fill_ypr <- ggplot2::scale_fill_gradientn(
-    colours = rev(r4col_flicc(length(colbr_y) + 3))[-c(10:11, 13)],
-    limits = c(-0.03, 1), breaks = colbr_y, name = "YPR")
-  colbr_s <- c(0, 0.05, seq(0.1, 1, 0.1))
-  fill_spr <- ggplot2::scale_fill_gradientn(
-    colours = rev(r4col_flicc(length(colbr_s) + 4))[-c(4:7)],
-    limits = c(-0.03, 1), breaks = colbr_s, name = "SPR")
+  # one FLSelex fill scale for both panels: uneven breaks give more resolution
+  colbr <- c(0, 5, seq(10, 100, 10))
+  fill_pct <- ggplot2::scale_fill_gradientn(
+    colours = rev(r4col_flicc(length(colbr) + 4))[-c(4:7)],
+    limits = c(-3, 100), breaks = colbr, name = "%")
 
   lab_layer <- function(lab, size = 2.6, face = "plain") {
     if (is.null(lab)) return(NULL)
@@ -258,32 +275,24 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
   panel <- function(g, what) {
     d <- x$surface[x$surface$gear == g, ]
     cp <- x$current[x$current$gear == g, ]
+    # maximum yield over the grid (YPR without s, YPR x R/R0 with s)
+    ymax <- max(to_pct(d, 1)$left, na.rm = TRUE) / 100
+    d <- to_pct(d, ymax); cp <- to_pct(cp, ymax)
+    d$z <- if (what == "left") d$left else d$right
     ylab <- if (d$type[1] == "logistic") "SL50 (length at 50% selectivity)" else "Selectivity mode"
-    fill_ypr_here <- what == "YPR" && ypr_fill == "ypr"
-
-    d$zfill <- if (fill_ypr_here) d$YPRrel else d$SPR
 
     p <- ggplot2::ggplot(d, ggplot2::aes(F, loc)) +
-      ggplot2::geom_raster(ggplot2::aes(fill = zfill), interpolate = TRUE) +
-      (if (fill_ypr_here) fill_ypr else fill_spr)
+      ggplot2::geom_raster(ggplot2::aes(fill = z), interpolate = TRUE) + fill_pct +
+      ggplot2::geom_contour(ggplot2::aes(z = z), breaks = setdiff(levels, ref),
+                            colour = grDevices::grey(0.4), linewidth = 0.35)
+    lab <- contour_labels_flicc(d, "z", setdiff(levels, ref))
 
-    # grey isopleths with labels
-    if (what == "YPR") {
-      p <- p + ggplot2::geom_contour(ggplot2::aes(z = YPRrel), breaks = ypr_levels,
-                                     colour = grDevices::grey(0.4), linewidth = 0.35)
-      lab <- contour_labels_flicc(d, "YPRrel", ypr_levels)
-    } else {
-      p <- p + ggplot2::geom_contour(ggplot2::aes(z = SPR), breaks = spr_lev,
-                                     colour = grDevices::grey(0.4), linewidth = 0.35)
-      lab <- contour_labels_flicc(d, "SPR", setdiff(spr_lev, ref_lev))
-    }
-
-    # SPR reference levels as black lines, labelled away from the grey labels
+    # reference levels of the right-hand quantity as black lines on both panels
     ref_lab <- NULL
-    for (j in seq_along(ref_lev)) {
-      p <- p + ggplot2::geom_contour(ggplot2::aes(z = SPR), breaks = ref_lev[j], colour = "black",
+    for (j in seq_along(ref)) {
+      p <- p + ggplot2::geom_contour(ggplot2::aes(z = right), breaks = ref[j], colour = "black",
                                      linewidth = if (j == 1) 0.8 else 0.55, linetype = ref_lt[j])
-      rl <- contour_labels_flicc(d, "SPR", ref_lev[j], function(v) paste0("SPR", 100 * v),
+      rl <- contour_labels_flicc(d, "right", ref[j], function(v) paste0(ref_nm, v),
                                  placed = rbind(lab, ref_lab))
       if (!is.null(rl)) ref_lab <- rbind(ref_lab, rl[1, ])
     }
@@ -291,10 +300,12 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
 
     if (is.finite(x$Lmat)) {
       p <- p + ggplot2::geom_hline(yintercept = x$Lmat, linetype = "dotted", colour = "grey20") +
-        ggplot2::annotate("text", x = max(d$F), y = x$Lmat, label = "Lmat",
-                          hjust = 1.1, vjust = -0.4, size = 2.7)
+        ggplot2::annotate("text", x = 0, y = x$Lmat, label = "Lmat",
+                          hjust = -0.15, vjust = -0.4, size = 2.7)
     }
 
+    sub <- if (what == "left") sprintf("current %s = %.0f%%", sub("%", "", nm_left), cp$left)
+           else sprintf("current %s = %.0f%%", sub("%", "", nm_right), cp$right)
     # current state: black point with dotted guides to the axes (as FLSelex)
     p + ggplot2::annotate("segment", x = cp$F, xend = cp$F, y = min(d$loc), yend = cp$loc,
                           linetype = "dotted", linewidth = 0.3) +
@@ -303,9 +314,8 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
       ggplot2::annotate("point", x = cp$F, y = cp$loc, size = 2.5) +
       ggplot2::coord_cartesian(expand = FALSE, clip = "off") +
       ggplot2::labs(x = paste0("Fishing Mortality (", g, ")"), y = ylab,
-                    title = paste0(what, ": ", g),
-                    subtitle = if (what == "YPR") sprintf("current YPR = %.0f%% of max", 100 * cp$YPRrel)
-                               else sprintf("current SPR = %.0f%%", 100 * cp$SPR)) +
+                    title = paste0(if (what == "left") nm_left else nm_right, ": ", g),
+                    subtitle = sub) +
       ggplot2::theme_bw() +
       ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", size = 11),
                      plot.subtitle = ggplot2::element_text(size = 9, colour = "grey30"),
@@ -318,9 +328,9 @@ plot_selF_flicc <- function(x, gear = NULL, spr_ref = c(40, 20),
                      plot.margin = ggplot2::margin(5.5, 10, 5.5, 5.5))
   }
 
-  plots <- unlist(lapply(gears, function(g) list(panel(g, "YPR"), panel(g, "SPR"))), recursive = FALSE)
+  plots <- unlist(lapply(gears, function(g) list(panel(g, "left"), panel(g, "right"))), recursive = FALSE)
   if (!requireNamespace("patchwork", quietly = TRUE)) return(plots)
-  # identical colour bars across gears are merged into one YPR and one SPR legend
+  # all panels share one colour bar, collected into a single legend
   patchwork::wrap_plots(plots, ncol = 2, byrow = TRUE) +
     patchwork::plot_layout(guides = "collect")
 }

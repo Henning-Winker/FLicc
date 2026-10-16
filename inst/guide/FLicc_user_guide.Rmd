@@ -255,8 +255,8 @@ Three things change with the effective sample size:
 
 The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
 moderate; with the thousands of fish per year common in market sampling the
-effects above are much stronger. The ensemble section (12) shows the effect on
-AIC weights.
+effects above are much stronger, also for the AIC weights of an ensemble
+(section 12).
 
 SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
 for the raw counts:
@@ -964,28 +964,43 @@ plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
 
 `eqstklen(fit, s = )` gives the equilibrium curves and MSY proxies.
 
-## Status over selectivity and F: YPR and SPR isopleths
+## Status over selectivity and F: contour plots
 
-`plot_selF_flicc()` shows, for each gear, how yield per recruit (left) and SPR
-(right) change with the gear's F (x-axis) and its selectivity location (y-axis),
-with the other gears held at their current state. The location is `SL50` for a
-logistic gear and the mode for a dome; the curve is shifted along the length
-axis with its shape kept. The style follows the FLSelex isopleth plots: a
-continuous fill from dark blue (high) to red (low), YPR relative to its maximum
-over the grid on the left and SPR on the right, labelled grey isopleths, SPR 40%
-as a solid and SPR 20% as a dashed black line, the current state as a point with
-dotted guides to the axes, and the length at 50% maturity as a dotted horizontal
-line.
+`contour_flicc()` computes, for each gear, yield per recruit and SPR over a grid
+of the gear's F and its selectivity location, with the other gears held at their
+current state. The location is `SL50` for a logistic gear and the mode for a
+dome; the curve is shifted along the length axis with its shape kept.
+`plot_contour_flicc()` draws the result with one row per gear: yield on the
+left, spawning potential on the right, both in % on the same colour scale
+(dark blue = 100%, red = 0%):
 
-```{r selF, fig.height = 8.5, fig.width = 9}
-sf <- selF_surface_flicc(fit)
-sf$current
-plot_selF_flicc(sf)
+- **YPR%**: yield per recruit as a percentage of its maximum over the grid;
+- **SPR%**: spawning potential ratio in %.
+
+The black lines are SPR 40% (solid) and 20% (dashed), the point is the current
+state with dotted guides to the axes, and the dotted horizontal line is the
+length at 50% maturity (Lmat).
+
+```{r contour, fig.height = 8.5, fig.width = 9}
+cf <- contour_flicc(fit)
+cf$current
+plot_contour_flicc(cf)
+```
+
+Per-recruit results assume constant recruitment. With a steepness `s`, the same
+surfaces are converted under a Beverton-Holt relationship to **SSB%**
+(spawning biomass in % of unfished, $B/B_0$) and **Yield%** (equilibrium yield
+in % of its maximum over the grid), with
+$R/R_0 = \frac{4s\,SPR - (1-s)}{(5s-1)\,SPR}$ and
+$B/B_0 = \frac{4s\,SPR - (1-s)}{5s-1}$. The black lines are then SSB 40% and 20%:
+
+```{r contour-s, fig.height = 8.5, fig.width = 9}
+plot_contour_flicc(cf, s = 0.75)
 ```
 
 ```{r selF-numbers, include = FALSE}
-gn_cur <- sf$current[sf$current$gear == "Gillnet", ]
-gn_s <- sf$surface[sf$surface$gear == "Gillnet", ]
+gn_cur <- cf$current[cf$current$gear == "Gillnet", ]
+gn_s <- cf$surface[cf$surface$gear == "Gillnet", ]
 eng <- FLicc:::pr_engine_flicc(fit); st <- FLicc:::gear_state_flicc(fit)
 pr_gn <- function(loc, Fg) {
   S <- function(g, p) sel_curve_flicc(st$Lmid, st$type[[g]], p)
@@ -993,7 +1008,7 @@ pr_gn <- function(loc, Fg) {
       Fg * S("Gillnet", FLicc:::shift_sel_flicc(st$type[["Gillnet"]], st$pars[["Gillnet"]], loc)))
 }
 ymax <- max(gn_s$YPR)
-v <- pr_gn(sf$Lmat, gn_cur$F)
+v <- pr_gn(cf$Lmat, gn_cur$F)
 gn_lmat <- list(SPR = v[["SPR"]], YPRrel = v[["YPR"]] / ymax)
 f40 <- tryCatch(uniroot(function(f) pr_gn(gn_cur$loc, f)[["SPR"]] - 0.4, c(0, gn_cur$F))$root,
                 error = function(e) NA)
@@ -1005,17 +1020,17 @@ How to read it:
 - Moving left from the point (less F) or up (larger fish first caught) raises
   SPR; the YPR isopleths show what that costs, or gains, in yield per recruit.
 - Here the gillnet catches at `SL50` = `r round(gn_cur$loc, 1)`, below Lmat
-  (`r round(sf$Lmat, 1)`). At its current F, raising `SL50` to Lmat gives an SPR
+  (`r round(cf$Lmat, 1)`). At its current F, raising `SL50` to Lmat gives an SPR
   of about `r round(100 * gn_lmat$SPR)`% and `r round(100 * gn_lmat$YPRrel)`% of
   the maximum YPR (now `r round(100 * gn_cur$YPRrel)`%); reaching SPR 40% at the
   current `SL50` instead needs the gillnet F cut by about `r gn_cut`%.
-- The surfaces are equilibrium per-recruit results at the fitted life history;
-  they ignore recruitment changes and are a guide to direction and scale, not a
-  forecast.
+- Without `s` the surfaces are per-recruit results; with `s` they include the
+  loss of recruitment at low spawning biomass, so yield falls off more steeply
+  at high F. Both are equilibrium results at the fitted life history, a guide to
+  direction and scale, not a forecast.
 
 `gear =` selects gears (rows), `n` the grid resolution, `Fmax` and `Lrange` the
-axes, and `ypr_fill = "spr"` shades the left panel by SPR instead of YPR, so
-both panels show depletion.
+axes, `ref` the black reference levels and `levels` the grey isopleths.
 
 # Length-based indicators
 
@@ -1072,52 +1087,64 @@ indicator and the likelihood use the same bins; `tail_cut = FALSE` uses all bins
 
 # Monte-Carlo ensembles
 
-`mc_flicc()` refits the model for draws of Linf, k, M, L50 and CVL (correlated)
-and keeps each fit's SPR, F, selectivity and log-likelihood; draws can be
-weighted by AIC (`mc_aic_weights()`, `mc_spr_tab()`).
+`mc_flicc()` propagates uncertainty in the life-history inputs. It draws Linf,
+k, M and L50 (correlated, from FishLife) and CVL, refits the model for each draw
+and keeps each fit's SPR, F, selectivity and log-likelihood. Within each refit
+the drawn values are fixed; they are not estimated. The coefficients of
+variation of the draws are set with `cv`; the default is
+`cv = list(linf = 0.10, k = 0.1, M = 0.15, L50 = 0.10, CVL = 0.1)`.
 
-Rules:
+**Drawing CVL or not.** CVL shapes the tail of the predicted composition. When
+it varies between draws together with Linf, the largest growth group moves
+across bin boundaries, and fish in those bins switch between near-zero and
+positive probability. This produces jumps in the log-likelihood between draws
+and can make the profile over draws look bimodal. Setting `CVL = 0` in `cv`
+keeps CVL at its input value in every draw, so the ensemble reflects Linf, k, M
+and L50 only; CVL can then be examined as a separate sensitivity (section 11).
+The tail cut has a similar effect, because it removes the bins concerned; as a
+length, it is the same for every draw.
 
-- **Rescale the sample size first** (ESS about 150-200). With large sample sizes
-  the log-likelihood differences between draws grow, which tends to concentrate
-  the AIC weights on few draws.
-- **CVL fixed in each refit** (the default; the ensemble varies it through the
-  draws). A very tight prior such as `CVL.sd = 0.001` gives almost the same
-  estimate but an ill-conditioned Hessian.
-- **Tail cut** against jumps in the likelihood: as Linf or CVL changes between
-  draws, the largest growth group crosses bin boundaries and fish in those bins
-  switch between near-zero and positive probability. A cut removes those bins,
-  and because it is a length, every draw uses the same bins.
-- **Fixed sigmaF** for speed.
+The example runs two ensembles of 30 draws on the fit with the tail cut
+(ESS 200): one with CVL drawn (the default) and one with CVL fixed. The same
+`seed` gives the same Linf, k, M and L50 draws in both.
 
 ```{r mc}
-fit_cut1000 <- fiticc(lfdess(lfd, ess.g = 1000), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                      settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))
-mc_1000 <- mc_flicc(fit_cut1000, nsim = 30, verbose = FALSE, seed = 1)
-mc_200  <- mc_flicc(fit_cut,     nsim = 30, verbose = FALSE, seed = 1)
-last <- function(tab) tab[nrow(tab), c("year", "mle", "mean_uw", "mean_w", "n_retained", "n_eff")]
-mc_tab <- rbind(ess1000 = last(mc_spr_tab(mc_1000, dAIC_cut = 20)),
-                ess200  = last(mc_spr_tab(mc_200, dAIC_cut = 20)))
-mc_tab
+mc_cvl_drawn <- mc_flicc(fit_cut, nsim = 30, seed = 1, verbose = FALSE)
+
+mc_cvl_fixed <- mc_flicc(fit_cut, nsim = 30, seed = 1, verbose = FALSE,
+                         cv = list(linf = 0.10, k = 0.1, M = 0.15, L50 = 0.10, CVL = 0))
 ```
 
-`n_retained` is the number of draws within the dAIC cut and `n_eff` the effective
-number of draws after AIC weighting
-(here `r round(mc_tab["ess1000", "n_eff"], 1)` of 30 at ESS 1000 and
-`r round(mc_tab["ess200", "n_eff"], 1)` at ESS 200). In this small example (30 draws,
-moderate sample sizes) the weights concentrate similarly at both ESS: in both
-cases a minority of draws carries most of the weight, and the weighted mean SPR
-lies well below the unweighted one. Report the unweighted ensemble (`mean_uw`)
-alongside the weighted one and treat AIC weighting across life-history draws with
-caution. How strongly the concentration depends on ESS (expected to increase
-with the sample size, and observed in larger applications with ESS of 1000 or
-more) needs systematic ensemble trials over ESS, observation models and draws;
-these are planned.
+`mc_spr_tab()` summarises the SPR by year over the draws: the base fit (`mle`),
+the unweighted mean (`mean_uw`), the AIC-weighted mean (`mean_w`), the number of
+draws within 20 AIC units of the best (`n_retained`) and the effective number of
+draws after weighting (`n_eff`). The last year:
+
+```{r mc-tab}
+tab_drawn <- mc_spr_tab(mc_cvl_drawn)
+tab_fixed <- mc_spr_tab(mc_cvl_fixed)
+rbind(CVL_drawn = tail(tab_drawn, 1),
+      CVL_fixed = tail(tab_fixed, 1))
+```
+
+The profile plots show SPR against the log-likelihood of each draw:
 
 ```{r mc-plots, fig.height = 4.5}
-plot_mcprofile(mc_200)
-plot_mcsprdist(mc_200, dAIC_cut = 20)
+plot_mcprofile(mc_cvl_drawn)
+plot_mcprofile(mc_cvl_fixed)
+plot_mcsprdist(mc_cvl_fixed)
 ```
+
+Recommendations:
+
+- Rescale the sample size first (ESS about 150-200). With large sample sizes the
+  log-likelihood differences between draws grow, and the AIC weights concentrate
+  on few draws.
+- Use the tail cut and fixed sigmaF in the base fit; every draw inherits its
+  settings.
+- Report the unweighted ensemble (`mean_uw`) alongside the weighted one; AIC
+  weighting across life-history draws mixes data fit with prior uncertainty and
+  should be treated with caution.
 
 # Use in an MSE
 
@@ -1163,12 +1190,12 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | Sample size | ESS about 150-200 per gear-year; never raw thousands |
 | Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
-| Management options | `plot_selF_flicc()`: YPR and SPR over selectivity and F by gear |
+| Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |
 | F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate) |
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
 | Missing data | keep zeros, rely on the random walk; not without random walk |
 | Status | SPR at the year's F; `s` for $B/B_{tgt}$ under Beverton-Holt |
-| Ensembles | ESS rescaled, CVL fixed per draw, tail cut, fixed sigmaF |
+| Ensembles | ESS rescaled; CVL not drawn (`cv$CVL = 0`) and examined separately; tail cut; fixed sigmaF |
 | MSE | fixed sigmaF, absolute tail cut, `se = FALSE`; tune with the HCR |
 
 *Planned: a worked example of a rebuilding stock, refitted year by year, to show
