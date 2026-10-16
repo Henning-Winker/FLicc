@@ -470,18 +470,52 @@ $F_{g,y}(L) = F_{g,y} S_g(L)$, $Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Gear shares 
 are informed by `catch_by_gear` through a soft constraint on the predicted
 catch shares (`catch.sd`, default 0.05).
 
+## Expected catch and length composition
+
+FLicc separates the **population model** (expected numbers at length under
+growth, M, F and selectivity) from the **observation model** (the likelihood
+that links the observed counts to the expected composition), so either can be
+changed without the other. With $N_i$ the expected number of fish entering
+length bin $i$, the expected catch of gear $g$ in bin $i$ is
+$$
+C_{i,g} = \frac{F_{i,g}}{Z_i}\left(N_i - N_{i+1}\right), \qquad Z_i = M_i + \sum_g F_{i,g},
+$$
+and the expected composition of gear $g$ is $\pi_{i,g} = C_{i,g} / \sum_i C_{i,g}$.
+
 ## Population model
 
-`pop_model = "gtg"` (default, LBSPR): growth-type groups
+`pop_model = "gtg"` (default, as LBSPR): growth-type groups
 $L_{\infty,h} = L_\infty(1 + \mathrm{CVL}\, z_h)$, $z_h$ on
 `seq(-maxsd, maxsd, length = ngtg)` (13 groups, `maxsd = 2`), weights
-$\propto \phi(z_h)$, and survival across bin $i$:
+$\omega_h \propto \phi(z_h)$. Within a group, survival across bin $i$ follows from
+the time needed to grow through it under von Bertalanffy growth:
 $$
-N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right)^{Z_i/k}.
+N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right)^{Z_i/k},
+\qquad N_i = \sum_h \omega_h N_{i,h}.
 $$
-`pop_model = "gamma"` follows fishblicc (gamma-distributed Linf, numerical
-integration; slower). Both are equilibrium models: each year is explained by
-the equilibrium at that year's F (section *Lag under changing F* on the consequences).
+
+`pop_model = "gamma"` follows fishblicc: Linf is gamma-distributed among
+individuals, and the numbers at length integrate survival over that distribution,
+$$
+N_i = \int f(L_\infty)\, S_i(L_\infty)\, dL_\infty ,
+$$
+evaluated by Gauss-Laguerre quadrature (slower). Both are equilibrium models:
+each year is explained by the equilibrium at that year's F (section *Lag under
+changing F* on the consequences).
+
+## Observation model
+
+For gear $g$ in year $y$, with counts $\mathbf y_{g,y}$ and total $n_{g,y}$:
+
+- `obs_model = "mn"` (default): $\mathbf y_{g,y} \sim \text{Multinomial}(n_{g,y}, \boldsymbol\pi_{g,y})$.
+- `"nb"`: $y_{i,g,y} \sim \text{NB}(\mu, \phi)$ with $\mu = n_{g,y}\pi_{i,g,y}$ and
+  $\text{Var} = \mu + \mu^2/\phi$; $\phi$ is estimated.
+- `"dm"`: $\mathbf y_{g,y} \sim \text{Dirichlet-multinomial}(n_{g,y}, \alpha_0 \boldsymbol\pi_{g,y})$
+  with $\alpha_0 = n_{g,y}$.
+
+How the sample size enters each of them is explained in section *Effective
+sample size*; the three are compared on the same data in section *Population
+and observation models compared*.
 
 ## Status: SPR
 
@@ -589,8 +623,27 @@ Log F by gear follows a random walk,
 $$
 \log F_{g,y} = \log F_{g,y-1} + \varepsilon_{g,y}, \qquad \varepsilon_{g,y} \sim N(0, \sigma_F^2).
 $$
-It links the years, so selectivity and F are estimated jointly from all
-compositions, and it bridges years without data. The options differ in how
+With selectivity $S_g(L)$ shared by all years, the model is fitted to all
+compositions at once; the objective is
+$$
+-\log L = -\sum_{y} \log L_y\!\left(F_{\cdot,y}, S\right)
+          - \sum_{g,y>1} \log \phi\!\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right).
+$$
+Compared with fitting each year on its own (as LBSPR does), this has four
+advantages:
+
+- **Selectivity from all years.** The left limb of the compositions is
+  informed by every year, so selectivity is better determined and does not
+  absorb year-to-year sampling noise.
+- **Borrowing strength.** A year with few fish is fitted close to its
+  neighbours instead of producing an extreme F.
+- **Missing years.** A year without data of a gear still gets an F, bridged by
+  the random walk (section *Missing data*).
+- **Separation of signal and noise.** $\sigma_F$ sets how much of the
+  year-to-year change in the compositions is read as a change in F.
+
+The price is smoothing: with small $\sigma_F$ a real change in F is spread over
+several years (section *Lag under changing F*). The options below differ in how
 $\sigma_F$ is treated.
 
 The four options for $\sigma_F$ are fitted below to the same data (ESS 200,
@@ -718,6 +771,27 @@ completely separately (including selectivity).
 | random effects | `F_re = TRUE` | marginal likelihood | final assessment; estimate sigmaF once |
 | no random walk | `prior_sigmaF = FALSE` | – | complete data, maximum responsiveness |
 | separate years | `by_year = TRUE` | – | checks of selectivity change |
+
+## Joint fit versus each year separately
+
+`by_year = TRUE` fits every year on its own and re-estimates all parameters,
+including selectivity, for each year: the LBSPR-style approach. The comparison
+below uses the same data and settings as the reference fit `fit`.
+
+```{r by-year, fig.height = 4}
+fit_by_year <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                      settings = list(CVL = 0.1, obs_model = "dm"), by_year = TRUE)
+
+plot_spr(list(joint = fit, by_year = fit_by_year))
+plot_sel(flicc_stklen(fit_by_year))
+```
+
+The by-year selectivities differ between years although the gears did not
+change; these differences are sampling noise taken up by selectivity, and they
+pass on to F and SPR. The joint fit estimates one selectivity per gear and gives
+a smoother, more precise SPR series. Use `by_year = TRUE` as a check for real
+changes in selectivity (a new mesh size, a change of fishing grounds), not as
+the main assessment.
 
 ## Lag under changing F
 
@@ -947,6 +1021,32 @@ fspr_flicc(fit, spr = 30)       # computed
 fcur_flicc(fit); sprcur_flicc(fit)
 ```
 
+## Equilibrium curves and MSY proxies
+
+`eqstklen()` computes equilibrium per-recruit quantities over a range of F at the
+fitted selectivity (mean of the last `nyears`), and converts them with steepness
+`s` to equilibrium SSB, recruitment and yield under Beverton-Holt:
+$$
+\frac{R}{R_0} = \frac{4s\,\mathrm{SPR}(F) - (1-s)}{(5s-1)\,\mathrm{SPR}(F)}, \qquad
+Y(F) = \mathrm{YPR}(F)\, R(F), \qquad B(F) = \mathrm{SBPR}(F)\, R(F).
+$$
+`@refpts` lists the reference points derived from these curves (F and the
+equilibrium quantities at the SPR target and at maximum yield).
+
+```{r eqcurves, fig.height = 5}
+eqstk <- eqstklen(fit, s = 0.75)
+eqstk@refpts
+plot_eqcurves(eqstk)
+```
+
+The same quantities without steepness, as per-recruit curves:
+
+```{r prbrp}
+prbrp <- prbrp_flicc(fit)
+fmsy_flicc(prbrp, s = 0.75)
+fspr_flicc(fit, spr = 35)
+```
+
 ## From SPR to relative spawning biomass
 
 With Beverton-Holt recruitment of steepness $s$,
@@ -963,7 +1063,37 @@ plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
                        relB_s0.75 = flicc2FLStockR(fit, rel = TRUE, s = 0.75)), panel = 1)
 ```
 
-`eqstklen(fit, s = )` gives the equilibrium curves and MSY proxies.
+## Stock status and advice plots
+
+`plot_spr()` shows the SPR trajectory with its interval, and `plot_lbfao()` the
+same against the FAO status bands (overfished below the SPR target, sustainable
+above):
+
+```{r status-plots, fig.height = 4}
+plot_spr(fit, ci = TRUE)
+plot_lbfao(fit)
+```
+
+`flicc2FLStockR()` converts the fit into an `FLStockR` object for advice plots:
+SPR (or $B/B_{tgt}$ with `s`) as the biomass indicator and F relative to Fspr,
+with reference points from the SPR target (`spr.btgt = 0.4`), `bpa` and `blim`:
+
+```{r advice, fig.height = 5}
+stk <- flicc2FLStockR(fit)
+stk@refpts
+plot_LBAdvice(stk)
+```
+
+With `rel = TRUE` the indicators are relative to the target (1 = at target), the
+usual form for advice:
+
+```{r advice-rel, fig.height = 4}
+stk_rel <- flicc2FLStockR(fit, rel = TRUE)
+plot_LBAdvice(stk_rel, panels = 1) + ylim(0, 1.5)
+```
+
+`flicc_stklen(fit)` returns the fitted `FLStockLen` (numbers, catch and F at
+length by year) for further FLR workflows.
 
 ## Status over F, selectivity and gear shares: contour plots
 
@@ -1133,6 +1263,88 @@ est <- mseCtrl(method = flicc.sa, args = list(
 - Expect the equilibrium model to be pessimistic during a rebuild and optimistic
   while F increases.
 
+# Population and observation models compared
+
+The population model (`gtg` or `gamma`) and the observation model (`mn`, `dm`,
+`nb`) can be combined freely. The four fits below differ only in these two
+settings; `Map()` runs one fit per list of settings.
+
+```{r model-compare, fig.height = 4}
+model_settings <- list(
+  gtg_mn   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "mn"),
+  gtg_dm   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "dm"),
+  gtg_nb   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "nb"),
+  gamma_nb = list(CVL = 0.1, pop_model = "gamma", obs_model = "nb"))   # as fishblicc
+
+fits_model <- Map(function(set) {
+  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+}, model_settings)
+
+data.frame(model    = names(fits_model),
+           SPR_last = round(sapply(fits_model, sprcur_flicc), 3),
+           se_log   = round(sapply(fits_model, se_logspr), 3),
+           row.names = NULL)
+plot_spr(fits_model, ci = TRUE)
+```
+
+The gamma model integrates over Linf numerically and is slower:
+
+```{r model-time}
+system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = model_settings$gtg_nb))
+system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = model_settings$gamma_nb))
+```
+
+Log-likelihoods and AIC are not comparable between observation models (they are
+likelihoods of different things); compare the estimates, their precision and the
+fit to the compositions (`plot_len`). Differences between `gtg` and `gamma` show
+the sensitivity to the approximation of growth variability, differences between
+`mn`, `dm` and `nb` the weight and robustness given to the compositions.
+
+| Purpose | `pop_model` | `obs_model` | Comment |
+|---|---|---|---|
+| Routine assessment, MSE | `"gtg"` | `"dm"` | fast; robust with real data |
+| LBSPR-style | `"gtg"` | `"mn"` | fastest; sensitive to the ESS |
+| fishblicc replication | `"gamma"` | `"nb"` | slower; closest to fishblicc |
+
+# Reproducing fishblicc: the Bombay duck example
+
+FLicc includes the Bombay duck example of fishblicc (three gears) to check
+consistency with fishblicc. Natural mortality decreases with length
+(`m_model = "inverse"`, $M(L) = M\, L_{ref} / L$ with $L_{ref} = 21.9$), and
+Linf, M/k and CVL are estimated with priors as in fishblicc:
+
+```{r fishblicc-data}
+data("fishblicc_example")
+lhpar_fishblicc <- rbind(lhpar_fishblicc,
+                         FLPar(M = lhpar_fishblicc["k"] * lhpar_fishblicc["Mk"]))
+stklen_fishblicc <- stocklen(lfd_fishblicc, lhpar_fishblicc,
+                             m_model = "inverse", reflen = 21.9)
+```
+
+```{r fishblicc-fit}
+fit_fishblicc <- fiticc(lfd_fishblicc, stklen_fishblicc,
+                        sel_fun = c("dsnormal", "dsnormal", "dsnormal"),
+                        catch_by_gear = c(0.1802070, 0.2101353, 0.6096577),
+                        settings = list(pop_model = "gamma", obs_model = "nb",
+                                        CVL = 0.14, CVL.sd = 0.1,
+                                        linf.sd = 2 / 40, Mk.sd = 0.1))
+flicc_convergence(fit_fishblicc)
+sprcur_flicc(fit_fishblicc)
+```
+
+```{r fishblicc-plots, fig.height = 4.5}
+plot_sel(fit_fishblicc)
+plot_len(fit_fishblicc, by_gear = TRUE)
+```
+
+```{r fishblicc-eq, fig.height = 5}
+eqstk_fishblicc <- eqstklen(fit_fishblicc, s = 0.7)
+eqstk_fishblicc@refpts
+plot_eqcurves(eqstk_fishblicc)
+```
+
 # Summary of checks and recommendations
 
 | # | Check | Red flag | Action |
@@ -1141,7 +1353,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | 2 | composition consistency (`plot_lfd`) | shifts in mode or left limb | split gears/periods; restrict years |
 | 3 | largest fish vs Linf | > 1% at or above Linf | revisit Linf; tail cut |
 | 4 | empirical catch curves (`plot_zlcc`) | curved limbs, jumping slopes | dome or tail cut; keep random walk |
-| 5 | life-history inputs | Linf inconsistent with data; odd M/k | Linf sensitivity and ensemble |
+| 5 | life-history inputs | Linf inconsistent with data; odd M/k | Linf sensitivity; priors (`linf.sd`) as a check |
 | 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data; dome sensitivity (`dome_sens_flicc`) |
 | 7 | convergence (`flicc_convergence`) | gradient, Hessian, bounds | restarts; simplify; tail cut |
 | 8 | fit to compositions (`plot_len`) | systematic misfit | selectivity, Linf, tail cut |
@@ -1155,10 +1367,11 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
 | Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |
-| F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate) |
+| F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate); `by_year = TRUE` only as a check |
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
 | Missing data | keep zeros, rely on the random walk; not without random walk |
-| Status | SPR at the year's F; `s` for $B/B_{tgt}$ under Beverton-Holt |
+| Status | SPR at the year's F; `s` for $B/B_{tgt}$ under Beverton-Holt; `plot_LBAdvice(flicc2FLStockR(fit))` |
+| Models | `gtg` + `dm` routinely; `gamma` + `nb` to replicate fishblicc |
 | MSE | fixed sigmaF, absolute tail cut, `se = FALSE`; tune with the HCR |
 
 *Planned: a worked example of a rebuilding stock, refitted year by year, to show
