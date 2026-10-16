@@ -343,6 +343,56 @@ fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
 # normal:   list(mode = 24, sd = 4)
 ```
 
+## Exploring selectivity shapes
+
+`plot_selfun()` draws a selectivity function for a range of parameter values,
+over the observed composition of a gear and with reference lengths. It helps to
+choose values for `sel_fixed` and the dome scenarios below:
+
+```{r selfun, fig.height = 4.5}
+gn <- lfd[["Gillnet"]]
+Lmid_g <- as.numeric(dimnames(gn)$len) + 0.5
+Lmean_g <- round(sum(Lmid_g * apply(gn@.Data, 1, sum)) / sum(gn@.Data), 1)
+ref_L <- c(L50mat = 31.2, Lmean = Lmean_g, Linf = 55.7)
+plot_selfun("dsnormal", list(mode = 34, lsd = 4, rsd = c(1000, 33, 22, 14)), lfd = gn, ref = ref_L)
+plot_selfun("logistic", list(SL50 = c(28, 31, 34), SL95 = 37), lfd = gn, ref = ref_L)
+```
+
+A double-sided normal with a very large right-hand SD (`rsd = 1000`) has a flat
+right limb, i.e. no dome; smaller values give mild (about 0.6 Linf), moderate
+(0.4 Linf) and strong (0.25 Linf) doming. `sel_curve_flicc()` returns the
+values of a curve.
+
+## Dome sensitivity: a recommended standard run
+
+Slight doming (large fish less selected or less available) is hard to detect
+from length data, and an unmodelled dome is read as higher F. A sensitivity over
+fixed dome shapes is therefore recommended for every gear assumed logistic.
+`dome_sens_flicc()` refits the model with that gear as a double-sided normal
+whose right-hand SD is fixed at a sequence of values (default
+`c(1000, 0.6, 0.4, 0.25) x Linf`); the mode and left-hand SD are estimated, all
+other settings and data as in the base fit.
+
+```{r dome-sens, fig.height = 4.5}
+ds <- dome_sens_flicc(fit200, gear = "Gillnet")
+ds$table
+plot_dome_sens(ds)
+plot_dome_sens(ds, "spr", ci = TRUE)
+```
+
+Read the table as a sensitivity, not a model selection: AIC differences between
+dome shapes are usually small and say little about the true shape. Report the
+range of status across mild to moderate domes. With a tail cut the scenarios
+differ less, because the bins where the dome acts are excluded:
+
+```{r dome-sens-cut}
+fit200_cut <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))
+ds_cut <- dome_sens_flicc(fit200_cut, gear = "Gillnet", se = FALSE)
+data.frame(scenario = ds$table$scenario, SPR_no_cut = ds$table$SPR_last,
+           SPR_cut47 = ds_cut$table$SPR_last)
+```
+
 ## Choosing selectivity
 
 - Use logistic unless gear knowledge (gillnet mesh, hook size, availability of
@@ -353,6 +403,7 @@ fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
 - A tail cut (section 11) reduces the cost of an unmodelled mild dome
   (*simulation*: a strong dome fitted as logistic, -17% bias in SPR; with a cut at
   0.8 Linf, +1%).
+- Always run the dome sensitivity for gears assumed logistic, and report it.
 
 ## Check 6: selectivity plausibility
 
@@ -476,35 +527,89 @@ round(c(mohn_rho = mean(rho)), 3)
 
 # Fishing mortality over time
 
-## Options
+Log F by gear follows a random walk,
+$$
+\log F_{g,y} = \log F_{g,y-1} + \varepsilon_{g,y}, \qquad \varepsilon_{g,y} \sim N(0, \sigma_F^2).
+$$
+It links the years, so selectivity and F are estimated jointly from all
+compositions, and it bridges years without data. The options differ in how
+$\sigma_F$ is treated.
 
-Log F by gear follows a random walk, $\log F_{y} = \log F_{y-1} + \varepsilon_y$,
-$\varepsilon_y \sim N(0, \sigma_F^2)$. It links the years, so selectivity and F are
-estimated jointly from all compositions, and it bridges years without data.
+```{r f-options}
+fit_with <- function(..., se = TRUE) fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                                            settings = c(list(CVL = 0.1, obs_model = "dm"), list(...)), se = se)
+tF <- list()
+tF$fixed_0.3 <- system.time(f1 <- fit_with())[["elapsed"]]
+tF$prior     <- system.time(f2 <- fit_with(prior_sigmaF = c(log(0.5), 0.3, 1)))[["elapsed"]]
+tF$F_re      <- system.time(f3 <- fit_with(F_re = TRUE))[["elapsed"]]
+tF$no_RW     <- system.time(f4 <- fit_with(prior_sigmaF = FALSE))[["elapsed"]]
+fits_F <- list(fixed_0.3 = f1, prior = f2, F_re = f3, no_RW = f4)
+data.frame(option = names(fits_F), sigmaF = round(sapply(fits_F, sigmaF_flicc), 3),
+           seconds = round(unlist(tF), 1), SPR_last = sapply(fits_F, function(f) round(tail(c(f$report$spr), 1), 3)),
+           se_logSPR_last = sapply(fits_F, function(f) round(se_last(f), 3)), row.names = NULL)
+```
 
-| Option | Settings | sigmaF | Speed | Notes |
-|---|---|---|---|---|
-| fixed (default) | `sigmaF = 0.3` | fixed | fast | routine and MSE choice |
-| penalised with prior | `prior_sigmaF = c(log(0.5), 0.3, 1)` | estimated | fast | earlier default; pulled to small values |
-| random effects | `F_re = TRUE` | estimated (marginal likelihood) | ~5-10x slower | SEs include the F process; weak prior `c(log(0.3), 0.5, 1)` unless given |
-| no random walk | `prior_sigmaF = FALSE` | – | fast | each year free (LBSPR-like, shared selectivity); not with gaps |
-| separate years | `by_year = TRUE` | – | fast | independent fits incl. selectivity |
-
-```{r f-options, fig.height = 4}
-fit_with <- function(...) fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                                 settings = c(list(CVL = 0.1, obs_model = "dm"), list(...)))
-fits_F <- list(fixed_0.3 = fit, prior = fit_with(prior_sigmaF = c(log(0.5), 0.3, 1)),
-               F_re = fit_with(F_re = TRUE), no_RW = fit_with(prior_sigmaF = FALSE))
-sapply(fits_F, sigmaF_flicc)
+```{r f-options-plot, fig.height = 4}
 plot_spr(fits_F, ci = TRUE)
 ```
 
-**Avoid** estimating sigmaF without a prior as a penalised fixed effect
-(`prior_sigmaF = c(NA, NA, 1)`): each random-walk step rewards a smaller sigmaF, it
-collapses towards 0 and F becomes flat. FLicc warns in that case.
+## Default: sigmaF fixed
 
-**Estimate once, then fix** for repeated fits (MSE, ensembles):
-`sigmaF = sigmaF_flicc(fits_F$F_re)`.
+`sigmaF = 0.3` (the default) fixes the year-to-year standard deviation of log F,
+roughly a 30% typical annual change. It is fast, cannot collapse, and the
+simulations showed that it removes most of the smoothing lag (next section).
+Change it where fleet dynamics are known to be smoother (0.2) or more variable
+(0.5).
+
+## Estimating sigmaF with a prior (penalised)
+
+With `prior_sigmaF = c(mu, sd, 1)`, $\sigma_F$ is a fixed-effect parameter and the
+objective is
+$$
+-\log L = -\log L_{data} - \sum_{g,y} \log \phi\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right)
+          - \log \phi\left(\log \sigma_F;\, \mu, sd\right).
+$$
+Each random-walk term contributes $-\log \sigma_F$, so the joint maximum favours
+small $\sigma_F$ with flat F whenever the data do not resist: the estimate is
+pulled down (here `r round(sigmaF_flicc(f2), 3)`), and only the prior keeps it
+away from 0. Without a prior (`prior_sigmaF = c(NA, NA, 1)`) it collapses; FLicc
+warns.
+
+## F as random effects (`F_re = TRUE`)
+
+The log F are integrated out,
+$$
+L(\theta) = \int L_{data}(\theta, \mathbf F)\, p(\mathbf F \mid \sigma_F)\, d\mathbf F,
+$$
+by the Laplace approximation (TMB): for each value of the other parameters
+$\theta$ (selectivity, $\sigma_F$), the F path is optimised and the curvature
+around it enters the marginal likelihood. Consequences:
+
+- $\sigma_F$ is estimated from the marginal likelihood, which properly accounts for
+  the uncertainty of the F path (here `r round(sigmaF_flicc(f3), 3)`). It can still
+  go to small values when the compositions carry little year-to-year
+  information; a weak prior `c(log(0.3), 0.5, 1)` is used unless another is given.
+- Standard errors (e.g. of log SPR) include the uncertainty of the F process.
+- Fitting is slower (here `r round(tF$F_re / tF$fixed_0.3, 1)` times the default).
+
+Use it for a final assessment and to estimate $\sigma_F$ once; then fix it for
+repeated fits: `sigmaF = sigmaF_flicc(fit_re)`. `F_re = TRUE` with `sigmaF` given
+keeps the random effects but fixes $\sigma_F$.
+
+## No random walk and separate years
+
+`prior_sigmaF = FALSE` estimates each year's F freely with shared selectivity
+(LBSPR fitted year by year, with common selectivity): no smoothing lag, but noisier
+F and no information for years without data. `by_year = TRUE` fits each year
+completely separately (including selectivity).
+
+| Option | Settings | sigmaF | Use |
+|---|---|---|---|
+| fixed (default) | `sigmaF = 0.3` | fixed | routine, MSE, ensembles |
+| penalised with prior | `prior_sigmaF = c(log(0.5), 0.3, 1)` | estimated, pulled down | comparison with earlier versions |
+| random effects | `F_re = TRUE` | marginal likelihood | final assessment; estimate sigmaF once |
+| no random walk | `prior_sigmaF = FALSE` | – | complete data, maximum responsiveness |
+| separate years | `by_year = TRUE` | – | checks of selectivity change |
 
 ## Lag under changing F
 
@@ -524,6 +629,99 @@ values add little responsiveness but more year-to-year noise (+10 to +50%). The
 rest of the lag comes from the data (the tail carries the memory of past F) and
 from recruitment rising during recovery under a stock-recruitment relationship.
 In a rebuild from deep depletion the equilibrium model stays pessimistic.
+
+# Growth variability and life-history priors
+
+## CVL
+
+`CVL` is the coefficient of variation of Linf among growth-type groups. It sets how
+far individual growth spreads the length composition, mostly in the tail: the
+fastest-growing groups determine how many fish occur near and beyond Linf. It is
+fixed at its input value unless `CVL.sd` is given; typical values are 0.07-0.15.
+
+```{r cvl-sens}
+cvl_grid <- expand.grid(CVL = c(0.07, 0.10, 0.13), cut = c("none", "47"), stringsAsFactors = FALSE)
+cvl_grid$SPR_last <- mapply(function(cv, ct) {
+  f <- if (ct == "none") fit_with(CVL = cv, se = FALSE) else fit_with(CVL = cv, tail_cut = 47, se = FALSE)
+  round(tail(c(f$report$spr), 1), 3)
+}, cvl_grid$CVL, cvl_grid$cut)
+reshape(cvl_grid, idvar = "CVL", timevar = "cut", direction = "wide")
+```
+
+Status is sensitive to CVL because CVL shapes the tail; the tail cut reduces
+this sensitivity (*simulation*: about halved).
+
+## maxsd and ngtg
+
+The growth groups are placed at $z_h$ on `seq(-maxsd, maxsd, length = ngtg)` with
+normal weights. Truncating the normal at `maxsd` reduces the realised CV of the
+groups below CVL and caps the largest group at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$:
+
+```{r maxsd-cv}
+eff_cv <- function(maxsd, ngtg) { z <- seq(-maxsd, maxsd, length.out = ngtg); w <- dnorm(z); w <- w / sum(w)
+  sqrt(sum(w * z^2)) }
+data.frame(maxsd = c(2, 2, 3, 3), ngtg = c(13, 19, 13, 19),
+           effective_CV_factor = round(mapply(eff_cv, c(2, 2, 3, 3), c(13, 19, 13, 19)), 3),
+           largest_Linf = round(55.7 * (1 + c(2, 2, 3, 3) * 0.1), 1))
+```
+
+With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
+CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
+groups matters little beyond about 13.
+
+```{r maxsd-sens}
+ms <- data.frame(setting = c("maxsd2_ngtg13", "maxsd3_ngtg19", "maxsd2_cut47", "maxsd3_cut47"))
+ms$SPR_last <- c(
+  tail(c(fit_with(se = FALSE)$report$spr), 1),
+  tail(c(fit_with(maxsd = 3, ngtg = 19, se = FALSE)$report$spr), 1),
+  tail(c(fit_with(tail_cut = 47, se = FALSE)$report$spr), 1),
+  tail(c(fit_with(maxsd = 3, ngtg = 19, tail_cut = 47, se = FALSE)$report$spr), 1))
+ms$SPR_last <- round(ms$SPR_last, 3)
+ms
+```
+
+Recommendation: keep the LBSPR default for comparability and treat `maxsd = 3`
+as a sensitivity; with a tail cut the choice matters little, because the
+affected bins lie far above the cut. The effective CV matters when CVL is taken
+from external growth studies: with `maxsd = 2`, a CVL input of 0.1 corresponds
+to a realised spread of about 0.09.
+
+## Estimating Linf, M/k and CVL with priors
+
+By default growth and natural mortality are fixed. `linf.sd`, `Mk.sd` and
+`CVL.sd` estimate them with normal priors on the log scale around the inputs:
+$$
+\log L_\infty \sim N(\log L_\infty^{in}, \texttt{linf.sd}^2), \quad
+\log (M/k) \sim N(\log (M/k)^{in}, \texttt{Mk.sd}^2), \quad
+\log \mathrm{CVL} \sim N(\log \mathrm{CVL}^{in}, \texttt{CVL.sd}^2),
+$$
+so each sd is approximately a CV (e.g. `linf.sd = 0.05`: about ±10% at 95%).
+
+```{r priors}
+fit_pri <- fit_with(linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25)
+pp <- function(nm, col = "mpd") fit_pri$par[[col]][fit_pri$par$par == nm][1]
+lh <- fit_pri$tmb_data
+data.frame(parameter = c("Linf", "M/k", "CVL"),
+           input = round(c(lh$Linf_init, lh$Mk_init, lh$CVL_init), 3),
+           estimate = round(c(exp(pp("log_Linf")), exp(pp("log_Mk")), 1 / sqrt(exp(pp("log_Galpha")))), 3),
+           prior_cv = c(0.05, 0.1, 0.25),
+           posterior_cv = round(c(pp("log_Linf", "se"), pp("log_Mk", "se"), pp("log_Galpha", "se") / 2), 3))
+c(SPR_last_fixed = round(tail(c(fit$report$spr), 1), 3),
+  SPR_last_priors = round(tail(c(fit_pri$report$spr), 1), 3))
+```
+
+Notes:
+
+- **k** is not estimated separately: the length model depends on M/k (and Z/k), so
+  uncertainty in k and M is expressed through `Mk.sd`. k still sets the time scale
+  of the annual F estimates (F is estimated as F/k).
+- Length data carry limited information on Linf and CVL, and both are confounded
+  with dome-shaped selectivity and the tail; a posterior CV close to the prior CV
+  means the data are uninformative. Large moves away from the input (several prior
+  SDs) indicate a conflict between the data and the life history, to be
+  investigated rather than accepted.
+- For ensembles, drawing the life-history parameters and keeping them fixed in
+  each fit (`mc_flicc()`) is usually better behaved than estimating them.
 
 # Tail of the length composition
 
@@ -734,7 +932,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | 3 | largest fish vs Linf | > 1% at or above Linf | revisit Linf; tail cut |
 | 4 | empirical catch curves (`plot_zlcc`) | curved limbs, jumping slopes | dome or tail cut; keep random walk |
 | 5 | life-history inputs | Linf inconsistent with data; odd M/k | Linf sensitivity and ensemble |
-| 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data |
+| 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data; dome sensitivity (`dome_sens_flicc`) |
 | 7 | convergence (`flicc_convergence`) | gradient, Hessian, bounds | restarts; simplify; tail cut |
 | 8 | fit to compositions (`plot_len`) | systematic misfit | selectivity, Linf, tail cut |
 | 9 | retrospective | rho beyond ±0.2 | trends in selectivity or sampling |
@@ -744,7 +942,8 @@ est <- mseCtrl(method = flicc.sa, args = list(
 |---|---|
 | Observation model | `dm` with real data |
 | Sample size | ESS about 150-200 per gear-year; never raw thousands |
-| Growth | fix Linf and CVL; Linf is the main sensitivity |
+| Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
+| Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
 | F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate) |
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
 | Missing data | keep zeros, rely on the random walk; not without random walk |

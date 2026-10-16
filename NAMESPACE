@@ -107,6 +107,10 @@ export(plot_mat)
 export(plot_lw)
 export(plot_LBIp)
 export(plot_lfdn)
+export(sel_curve_flicc)
+export(plot_selfun)
+export(dome_sens_flicc)
+export(plot_dome_sens)
 
 
 #---Monte-Carlo Ensemble---
