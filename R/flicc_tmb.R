@@ -1481,6 +1481,9 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
     }
   }
 
+  # drop the levels of fixed entries: TMB sizes the parameter vector by the
+  # number of levels, so unused levels would add phantom NA parameters
+  Sm_map <- factor(as.character(Sm_map), levels = unique(as.character(Sm_map[!is.na(Sm_map)])))
   list(parameters = parameters, map_Sm = Sm_map)
 }
 
