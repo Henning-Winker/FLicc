@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="Henning Winker — FAO Fisheries and Aquaculture Division (NFIFM)" />
+  <title>FLicc management procedures for stocks with multiple areas</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+  <style type="text/css">body{max-width:900px;margin:0 auto;padding:24px 16px;font:16px/1.6 "Helvetica Neue",Arial,sans-serif;color:#1f2328;background:#fff}
+h1,h2,h3{color:#333;line-height:1.25} h1.title{font-size:1.9rem}
+pre{background:#f6f8fa;padding:10px 12px;border-radius:6px;overflow-x:auto;font-size:13.5px}
+code{font-family:Menlo,Consolas,monospace;font-size:0.92em}
+table{border-collapse:collapse;margin:12px 0;font-size:14px;display:block;overflow-x:auto}
+th,td{border:1px solid #d0d7de;padding:4px 8px;vertical-align:top} th{background:#f6f8fa}
+.preview{background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;padding:8px 12px;margin:12px 0}
+nav#TOC{background:#f6f8fa;border-radius:6px;padding:8px 16px;margin:16px 0;font-size:14px}
+a{color:#0b5d8a}
+@media (prefers-color-scheme:dark){body{background:#0d1117;color:#e6edf3}h1,h2,h3{color:#e6edf3}pre,th,nav#TOC{background:#161b22}th,td{border-color:#30363d}.preview{background:#3b2e00;border-color:#9e6a03}a{color:#58a6ff}}
+</style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">FLicc management procedures for stocks with multiple
+areas</h1>
+<p class="author">Henning Winker — FAO Fisheries and Aquaculture
+Division (NFIFM)</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#purpose-and-scope" id="toc-purpose-and-scope"><span class="toc-section-number">1</span> Purpose and scope</a></li>
+<li><a href="#spatial-structure-in-the-om-and-the-oem" id="toc-spatial-structure-in-the-om-and-the-oem"><span class="toc-section-number">2</span> Spatial structure in the OM and the
+OEM</a>
+<ul>
+<li><a href="#areas-as-units" id="toc-areas-as-units"><span class="toc-section-number">2.1</span> Areas as units</a></li>
+<li><a href="#what-the-oem-delivers" id="toc-what-the-oem-delivers"><span class="toc-section-number">2.2</span> What the OEM delivers</a></li>
+</ul></li>
+<li><a href="#three-levels-of-spatial-resolution" id="toc-three-levels-of-spatial-resolution"><span class="toc-section-number">3</span> Three levels of spatial
+resolution</a>
+<ul>
+<li><a href="#a-stock-wide-assessment-fixed-split" id="toc-a-stock-wide-assessment-fixed-split"><span class="toc-section-number">3.1</span> A: stock-wide assessment, fixed
+split</a></li>
+<li><a href="#b-stock-wide-assessment-split-by-recent-catch" id="toc-b-stock-wide-assessment-split-by-recent-catch"><span class="toc-section-number">3.2</span> B: stock-wide assessment, split by
+recent catch</a></li>
+<li><a href="#c-per-area-assessments-hcrs-and-tacs" id="toc-c-per-area-assessments-hcrs-and-tacs"><span class="toc-section-number">3.3</span> C: per-area assessments, HCRs and
+TACs</a>
+<ul>
+<li><a href="#names-of-indicators-and-tracking-metrics" id="toc-names-of-indicators-and-tracking-metrics"><span class="toc-section-number">3.3.1</span> Names of indicators and tracking
+metrics</a></li>
+<li><a href="#how-the-modules-connect" id="toc-how-the-modules-connect"><span class="toc-section-number">3.3.2</span> How the modules connect</a></li>
+</ul></li>
+<li><a href="#pooled-and-per-area-fits-together-unit_fit-both" id="toc-pooled-and-per-area-fits-together-unit_fit-both"><span class="toc-section-number">3.4</span> Pooled and per-area fits together:
+<code>unit_fit = &quot;both&quot;</code></a></li>
+</ul></li>
+<li><a href="#what-a-per-area-assessment-measures" id="toc-what-a-per-area-assessment-measures"><span class="toc-section-number">4</span> What a per-area assessment
+measures</a></li>
+<li><a href="#requirements-for-the-om-projection" id="toc-requirements-for-the-om-projection"><span class="toc-section-number">5</span> Requirements for the OM
+projection</a></li>
+<li><a href="#summarising-runs-by-area" id="toc-summarising-runs-by-area"><span class="toc-section-number">6</span> Summarising runs by area</a></li>
+<li><a href="#notes-on-the-angler-fish-test-set-up" id="toc-notes-on-the-angler-fish-test-set-up"><span class="toc-section-number">7</span> Notes on the angler-fish test
+set-up</a></li>
+<li><a href="#appendix-arguments-for-multiple-areas" id="toc-appendix-arguments-for-multiple-areas"><span class="toc-section-number">8</span> Appendix: arguments for multiple
+areas</a></li>
+<li><a href="#session-information" id="toc-session-information"><span class="toc-section-number">9</span> Session information</a></li>
+</ul>
+</nav>
+<div class="preview">
+<p><strong>Preview.</strong> Converted with pandoc without running R:
+code is shown, output and figures are not. Re-render with
+<code>source(&quot;inst/scripts/render_docs.R&quot;)</code>.</p>
+</div>
+<h1 data-number="1" id="purpose-and-scope"><span class="header-section-number">1</span> Purpose and scope</h1>
+<p>This guideline extends the FLicc management procedure (MP) of <a href="mse-01-flicc-modules.html">mse-01</a> to stocks whose operating
+model (OM) has <strong>areas in the <code>unit</code>
+dimension</strong>: area-specific fleets (gears), area-specific length
+samples and catches, movement between areas and a split of recruitment
+among them. It documents three levels of spatial resolution in the MP,
+from one stock-wide assessment with a fixed split of the TAC to one
+assessment, HCR and TAC per area, and the FLicc arguments that switch
+between them:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Module</th>
+<th>Argument</th>
+<th>Values</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>flicc.sa()</code></td>
+<td><code>unit_fit</code></td>
+<td><code>&quot;pooled&quot;</code> (default), <code>&quot;each&quot;</code>,
+<code>&quot;both&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>lbi.hcr()</code>, <code>rfb.flicc.hcr()</code></td>
+<td><code>units</code></td>
+<td><code>NULL</code> (default, stock-wide) or area names</td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>catch_area</code></td>
+<td><code>NULL</code>, fixed shares by area, or
+<code>&quot;recent&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>flicc.is()</code></td>
+<td><code>area_tac</code></td>
+<td><code>&quot;split&quot;</code> (default) or <code>&quot;each&quot;</code></td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>area_years</code></td>
+<td>years of catch for <code>catch_area = &quot;recent&quot;</code></td>
+</tr>
+</tbody>
+</table>
+<p>The examples follow the angler-fish test set-up with three areas:
+area <code>a</code> fished by trawl and gillnet, area <code>b</code> by
+trawl only, and area <code>c</code> (gillnet gear defined, currently
+unfished) as a closed area.</p>
+<h1 data-number="2" id="spatial-structure-in-the-om-and-the-oem"><span class="header-section-number">2</span> Spatial structure in the OM and
+the OEM</h1>
+<h2 data-number="2.1" id="areas-as-units"><span class="header-section-number">2.1</span> Areas as units</h2>
+<p>In the OM every <code>FLStock</code> slot carries the areas in
+<code>unit</code>
+(<code>dimnames(stock(om))$unit = c(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;)</code>). The
+projection method (<code>proj_units()</code> in the test set-up) moves
+fish between areas, splits recruitment among them and takes catch
+targets <strong>by unit</strong>. Gears are defined by area, each with
+its own selectivity-at-length, share of the area’s fishing mortality
+(<code>f_mult</code>) and sampling design (<code>ess_age</code>,
+<code>ess_len</code>):</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>gear_by_area <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">a =</span> <span class="fu">list</span>(</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">trawl   =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dnormal&quot;</span>, <span class="at">Lpeak =</span> <span class="fl">0.8</span> <span class="sc">*</span> l50, <span class="at">sd_left =</span> <span class="dv">5</span>, <span class="at">sd_right =</span> l50 <span class="sc">/</span> <span class="dv">2</span>,</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>                   <span class="at">f_mult =</span> <span class="fl">0.3</span>, <span class="at">ess_age =</span> <span class="dv">50</span>, <span class="at">ess_len =</span> <span class="dv">300</span>),</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">gillnet =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;logistic&quot;</span>, <span class="at">L50 =</span> l50, <span class="at">L95 =</span> <span class="fl">1.1</span> <span class="sc">*</span> l50,</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>                   <span class="at">f_mult =</span> <span class="fl">0.7</span>, <span class="at">ess_age =</span> <span class="dv">50</span>, <span class="at">ess_len =</span> <span class="dv">700</span>)),</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">b =</span> <span class="fu">list</span>(</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="at">trawl   =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;dnormal&quot;</span>, <span class="at">Lpeak =</span> <span class="fl">0.8</span> <span class="sc">*</span> l50, <span class="at">sd_left =</span> <span class="dv">5</span>, <span class="at">sd_right =</span> l50 <span class="sc">/</span> <span class="dv">2</span>,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>                   <span class="at">f_mult =</span> <span class="dv">1</span>, <span class="at">ess_age =</span> <span class="dv">50</span>, <span class="at">ess_len =</span> <span class="dv">300</span>)),</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">c =</span> <span class="fu">list</span>(</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">gillnet =</span> <span class="fu">list</span>(<span class="at">type =</span> <span class="st">&quot;logistic&quot;</span>, <span class="at">L50 =</span> l50, <span class="at">L95 =</span> <span class="fl">1.1</span> <span class="sc">*</span> l50,</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>                   <span class="at">f_mult =</span> <span class="dv">1</span>, <span class="at">ess_age =</span> <span class="dv">50</span>, <span class="at">ess_len =</span> <span class="dv">500</span>)))</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>om_gears_area <span class="ot">&lt;-</span> <span class="fu">lapply</span>(gear_by_area, build_gear, <span class="at">lhpar =</span> lh_pars, <span class="at">age =</span> ages,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>                        <span class="at">lmin =</span> <span class="dv">5</span>, <span class="at">lmax_mult =</span> <span class="fl">1.5</span>, <span class="at">bin =</span> <span class="dv">3</span>, <span class="at">timing =</span> <span class="fl">0.5</span>)</span></code></pre></div>
+<h2 data-number="2.2" id="what-the-oem-delivers"><span class="header-section-number">2.2</span> What the OEM delivers</h2>
+<p>The area OEM (<code>sampling.lfd.area.oem()</code>) samples each gear
+in each area from that area’s catch-at-age and attaches, as in the
+single-area case,</p>
+<ul>
+<li><code>attr(stk, &quot;lfd&quot;)</code>: <code>FLQuants</code> by
+<strong>gear</strong>, <code>len x year x unit x ... x iter</code>, with
+the areas in <code>unit</code>. A gear that does not fish in an area has
+a unit of zeros there (<code>trawl</code> in <code>c</code>,
+<code>gillnet</code> in <code>b</code>);</li>
+<li><code>attr(stk, &quot;catch_gear&quot;)</code>: catch by gear with reporting
+error, in the same <code>gear x unit</code> layout.</li>
+</ul>
+<p>This layout is what <code>flicc.sa()</code> needs for all three
+configurations below: <code>unitSums()</code> gives the stock-wide
+samples, <code>x[, , &quot;a&quot;]</code> the samples of one area.</p>
+<pre><code>lfd$trawl     unit:  a [samples]   b [samples]   c [zeros]
+lfd$gillnet   unit:  a [samples]   b [zeros]     c [zeros: F = 0]
+catch_gear    same layout, catch weight by gear and area</code></pre>
+<h1 data-number="3" id="three-levels-of-spatial-resolution"><span class="header-section-number">3</span> Three levels of spatial
+resolution</h1>
+<pre><code>                      A: pooled, fixed split   B: pooled, recent split   C: per area
+flicc.sa(unit_fit =)  &quot;pooled&quot;                 &quot;pooled&quot;                  &quot;each&quot;
+  fits per cycle      it                       it                        it x areas with data
+  ind                 SPR, LBIspr.trawl, ...   same                      SPR.a, SPR.b, LBIspr.trawl.a, ...
+HCR (units =)         NULL                     NULL                      c(&quot;a&quot;, &quot;b&quot;)
+  multipliers         one per iteration        one per iteration         one per area and iteration
+flicc.is()            area_tac = &quot;split&quot;       area_tac = &quot;split&quot;        area_tac = &quot;each&quot;
+                      catch_area = shares      catch_area = &quot;recent&quot;     initac by area
+  area TACs           TAC x fixed share        TAC x recent catch share  own TAC x own multiplier</code></pre>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>A</th>
+<th>B</th>
+<th>C</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Status signal</td>
+<td>stock-wide</td>
+<td>stock-wide</td>
+<td>local, per area</td>
+</tr>
+<tr class="even">
+<td>Distribution of catch among areas</td>
+<td>fixed by management</td>
+<td>follows the fleets</td>
+<td>follows local signals</td>
+</tr>
+<tr class="odd">
+<td>Responds to local depletion</td>
+<td>no</td>
+<td>no (may even reinforce it)</td>
+<td>yes</td>
+</tr>
+<tr class="even">
+<td>Data needed per area</td>
+<td>none</td>
+<td>catches</td>
+<td>length samples and catches</td>
+</tr>
+<tr class="odd">
+<td>Fit cost per cycle</td>
+<td>1 x</td>
+<td>1 x</td>
+<td>number of areas with data</td>
+</tr>
+<tr class="even">
+<td>Risk</td>
+<td>local depletion if shares are wrong</td>
+<td>shares drift to where fish are concentrated</td>
+<td>noisy local indicators; areas linked by movement</td>
+</tr>
+</tbody>
+</table>
+<h2 data-number="3.1" id="a-stock-wide-assessment-fixed-split"><span class="header-section-number">3.1</span> A: stock-wide assessment, fixed
+split</h2>
+<p>The stock-wide assessment pools all length samples by gear over
+areas; the HCR returns one multiplier; <code>flicc.is()</code> updates
+the stock TAC and divides it by fixed shares, given in unit order or
+named:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>ctrl_A <span class="ot">&lt;-</span> <span class="fu">mpCtrl</span>(<span class="fu">list</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">est  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.sa, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">lhpar =</span> flicc_pars, <span class="at">sel_fun =</span> <span class="fu">c</span>(<span class="at">trawl =</span> <span class="st">&quot;dsnormal&quot;</span>, <span class="at">gillnet =</span> <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">m_model =</span> <span class="st">&quot;Gislason&quot;</span>, <span class="at">settings =</span> <span class="fu">list</span>(<span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>           <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">nyrs =</span> <span class="dv">10</span>, <span class="at">outer_parallel =</span> <span class="cn">TRUE</span>)),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">hcr  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> lbi.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>           <span class="at">gear =</span> <span class="st">&quot;SPR&quot;</span>, <span class="at">b1 =</span> <span class="dv">0</span>, <span class="at">b2 =</span> <span class="fl">0.35</span>, <span class="at">b3 =</span> <span class="fl">0.45</span>, <span class="at">b4 =</span> <span class="fl">0.7</span>)),</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">isys =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>           <span class="at">initac =</span> initac, <span class="at">catch_area =</span> <span class="fu">c</span>(<span class="at">a =</span> <span class="fl">0.3</span>, <span class="at">b =</span> <span class="fl">0.7</span>, <span class="at">c =</span> <span class="dv">0</span>)))))</span></code></pre></div>
+<p>Area <code>c</code> has a zero share and stays closed.</p>
+<h2 data-number="3.2" id="b-stock-wide-assessment-split-by-recent-catch"><span class="header-section-number">3.2</span> B: stock-wide assessment, split
+by recent catch</h2>
+<p>Same as A, but the shares are the observed catch shares by area over
+the last <code>area_years</code> data years, by iteration, taken from
+<code>attr(stk, &quot;catch_gear&quot;)</code> (or <code>catch(stk)</code> if the
+OEM does not attach catch by gear):</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mrow><mi>u</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>=</mo><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>y</mi></msub><mspace width="0.278em"></mspace><mfrac><mrow><munderover><mo>∑</mo><mrow><mi>t</mi><mo>=</mo><mi>d</mi><mi>y</mi><mo>−</mo><mi>n</mi><mo>+</mo><mn>1</mn></mrow><mrow><mi>d</mi><mi>y</mi></mrow></munderover><msubsup><mi>C</mi><mrow><mi>u</mi><mo>,</mo><mi>t</mi></mrow><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup></mrow><mrow><munder><mo>∑</mo><mrow><mi>u</mi><mi>′</mi></mrow></munder><munderover><mo>∑</mo><mrow><mi>t</mi><mo>=</mo><mi>d</mi><mi>y</mi><mo>−</mo><mi>n</mi><mo>+</mo><mn>1</mn></mrow><mrow><mi>d</mi><mi>y</mi></mrow></munderover><msubsup><mi>C</mi><mrow><mi>u</mi><mi>′</mi><mo>,</mo><mi>t</mi></mrow><mrow><mi>o</mi><mi>b</mi><mi>s</mi></mrow></msubsup></mrow></mfrac><mi>.</mi></mrow><annotation encoding="application/x-tex">
+TAC_{u,y} = TAC_y \; \frac{\sum_{t = dy - n + 1}^{dy} C^{obs}_{u,t}}
+                        {\sum_{u&#39;} \sum_{t = dy - n + 1}^{dy} C^{obs}_{u&#39;,t}} .
+</annotation></semantics></math></p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>ctrl_B <span class="ot">&lt;-</span> ctrl_A</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">isys</span>(ctrl_B) <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">initac =</span> initac, <span class="at">catch_area =</span> <span class="st">&quot;recent&quot;</span>, <span class="at">area_years =</span> <span class="dv">3</span>))</span></code></pre></div>
+<p>Because the shares follow the realised catches, which in turn follow
+the area TACs, the split is self-reinforcing: it preserves the
+historical distribution of the fishery unless the OM’s fleets cannot
+take their TAC in an area. An area with no recent catch stays
+closed.</p>
+<h2 data-number="3.3" id="c-per-area-assessments-hcrs-and-tacs"><span class="header-section-number">3.3</span> C: per-area assessments, HCRs
+and TACs</h2>
+<p>Each area with length samples is assessed on its own, using only the
+gears that fish there (here: trawl and gillnet in <code>a</code>, trawl
+in <code>b</code>; <code>c</code> has no samples and is not assessed).
+The HCR is applied to each area’s indicators, and each area’s TAC is
+updated with its own multiplier:</p>
+<p><math display="block" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mrow><mi>u</mi><mo>,</mo><mi>y</mi></mrow></msub><mo>=</mo><mi>T</mi><mi>A</mi><msub><mi>C</mi><mrow><mi>u</mi><mo>,</mo><mi>y</mi><mo>−</mo><mi>f</mi><mi>r</mi><mi>q</mi></mrow></msub><mo>×</mo><msub><mtext mathvariant="normal">mult</mtext><mrow><mi>u</mi><mo>,</mo><mi>y</mi></mrow></msub><mi>.</mi></mrow><annotation encoding="application/x-tex">
+TAC_{u,y} = TAC_{u,y-frq} \times \text{mult}_{u,y}.
+</annotation></semantics></math></p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>ctrl_C <span class="ot">&lt;-</span> <span class="fu">mpCtrl</span>(<span class="fu">list</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">est  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.sa, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>           <span class="at">lhpar =</span> flicc_pars, <span class="at">sel_fun =</span> <span class="fu">c</span>(<span class="at">trawl =</span> <span class="st">&quot;dsnormal&quot;</span>, <span class="at">gillnet =</span> <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>           <span class="at">refit_sel_fun =</span> <span class="fu">c</span>(<span class="at">trawl =</span> <span class="st">&quot;logistic&quot;</span>, <span class="at">gillnet =</span> <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>           <span class="at">m_model =</span> <span class="st">&quot;Gislason&quot;</span>, <span class="at">settings =</span> <span class="fu">list</span>(<span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>           <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">nyrs =</span> <span class="dv">10</span>, <span class="at">unit_fit =</span> <span class="st">&quot;each&quot;</span>, <span class="at">outer_parallel =</span> <span class="cn">TRUE</span>)),</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">hcr  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> lbi.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>           <span class="at">gear =</span> <span class="st">&quot;SPR&quot;</span>, <span class="at">units =</span> <span class="fu">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>),</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>           <span class="at">b1 =</span> <span class="dv">0</span>, <span class="at">b2 =</span> <span class="fl">0.35</span>, <span class="at">b3 =</span> <span class="fl">0.45</span>, <span class="at">b4 =</span> <span class="fl">0.7</span>)),</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">isys =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>           <span class="at">initac =</span> <span class="fu">c</span>(<span class="at">a =</span> <span class="fl">0.3</span>, <span class="at">b =</span> <span class="fl">0.7</span>, <span class="at">c =</span> <span class="dv">0</span>) <span class="sc">*</span> initac, <span class="at">area_tac =</span> <span class="st">&quot;each&quot;</span>,</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>           <span class="at">dtaclow =</span> <span class="fl">0.7</span>, <span class="at">dtacupp =</span> <span class="fl">1.2</span>))))</span></code></pre></div>
+<p>Or with the rfb-type rule on each area’s gear indicator:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">hcr</span>(ctrl_C) <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">index =</span> <span class="st">&quot;LBIspr.trawl&quot;</span>, <span class="at">units =</span> <span class="fu">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>), <span class="at">spr_trigger =</span> <span class="fl">0.25</span>))</span></code></pre></div>
+<p><code>trawl</code> is the only gear sampled in both areas, so
+<code>&quot;LBIspr.trawl&quot;</code> exists for <code>a</code> and
+<code>b</code>; <code>&quot;LBIspr.gillnet.b&quot;</code> exists too, but is
+<code>NA</code> (no gillnet in <code>b</code>), which keeps the TAC of
+<code>b</code> unchanged.</p>
+<h3 data-number="3.3.1" id="names-of-indicators-and-tracking-metrics"><span class="header-section-number">3.3.1</span> Names of indicators and
+tracking metrics</h3>
+<p>With <code>unit_fit = &quot;each&quot;</code> every name gets the area as
+suffix. For the example areas:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pooled (<code>&quot;pooled&quot;</code>)</th>
+<th>Per area (<code>&quot;each&quot;</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>SPR</code>, <code>Z</code>, <code>Ztgt</code>,
+<code>Zrel</code></td>
+<td><code>SPR.a</code>, <code>SPR.b</code>, <code>SPR.c</code>,
+<code>Zrel.a</code>, …</td>
+</tr>
+<tr class="even">
+<td><code>LBIspr.trawl</code>, <code>LBIspr.gillnet</code></td>
+<td><code>LBIspr.trawl.a</code>, <code>LBIspr.gillnet.a</code>,
+<code>LBIspr.trawl.b</code>, …</td>
+</tr>
+<tr class="odd">
+<td><code>LBImean.trawl</code>, …</td>
+<td><code>LBImean.trawl.a</code>, …</td>
+</tr>
+<tr class="even">
+<td>tracking <code>conv.est</code>, <code>used.est</code>,
+<code>sprbound.est</code>, <code>refit.est</code></td>
+<td><code>conv.est.a</code>, <code>used.est.b</code>, …</td>
+</tr>
+<tr class="odd">
+<td>tracking <code>Lref.trawl</code>, <code>Lmeanref.trawl</code></td>
+<td><code>Lref.trawl.a</code>, <code>Lmeanref.trawl.b</code>, …</td>
+</tr>
+<tr class="even">
+<td>HCR <code>mult.hcr</code>, <code>decision.hcr</code>,
+<code>trend.hcr</code> / <code>r.hcr</code>, <code>f.hcr</code>,
+<code>b.hcr</code></td>
+<td><code>mult.hcr.a</code>, <code>decision.hcr.b</code>, …</td>
+</tr>
+<tr class="odd">
+<td>isys <code>tac.is</code></td>
+<td><code>tac.is</code> (sum) and <code>tac.is.a</code>,
+<code>tac.is.b</code>, <code>tac.is.c</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>mp()</code> also tracks every indicator as
+<code>&lt;name&gt;.ind</code> in the last data year. Gears absent from
+an area are present with <code>NA</code>, so the same names exist in
+every area; an area without any samples (here <code>c</code>) has
+<code>NA</code> throughout and <code>used.est.c = 0</code>, without a
+warning.</p>
+<h3 data-number="3.3.2" id="how-the-modules-connect"><span class="header-section-number">3.3.2</span> How the modules connect</h3>
+<pre><code>flicc.sa(unit_fit = &quot;each&quot;)
+   for u in units:  lfd[, , u], catch_gear[, , u]  -&gt;  drop gears without samples
+                    -&gt;  fiticc() per iteration       -&gt;  ind: &lt;name&gt;.u
+lbi.hcr(units = c(&quot;a&quot;,&quot;b&quot;))  /  rfb.flicc.hcr(units = ...)
+   for u in units:  trend on ind[[&lt;gear&gt;.u]], status on ind[[&quot;SPR.u&quot;]]
+                    -&gt;  track mult.hcr.u, decision.hcr.u
+   ctrl = mean of the unit multipliers (information only)
+flicc.is(area_tac = &quot;each&quot;)
+   for u in units:  prev = initac[u] or tac.is.u at ay - frq
+                    mult = mult.hcr.u (stock-wide ctrl value if not tracked)
+                    TAC_u = prev x mult, limits with decision.hcr.u
+   Cmax on the sum (proportional scaling)
+   ctrl = one row per management year and unit</code></pre>
+<p>The per-area multipliers travel from the HCR to
+<code>flicc.is()</code> through the tracking object
+(<code>mult.hcr.&lt;unit&gt;</code>), in the same way as
+<code>decision.hcr</code> already did, so the <code>ctrl</code> returned
+by the HCR stays a single row.</p>
+<h2 data-number="3.4" id="pooled-and-per-area-fits-together-unit_fit-both"><span class="header-section-number">3.4</span> Pooled and per-area fits
+together: <code>unit_fit = &quot;both&quot;</code></h2>
+<p><code>&quot;both&quot;</code> returns the pooled indicators and the per-area
+indicators in the same <code>ind</code>. The HCRs use one or the other
+(<code>units = NULL</code> or area names). This is useful to monitor
+both scales in the same run, e.g. to see whether a stock-wide rule (A or
+B) hides local depletion, at the cost of the extra fits. Combining them
+in one rule, such as an area trend with a stock-wide SPR safeguard, is
+not implemented yet.</p>
+<h1 data-number="4" id="what-a-per-area-assessment-measures"><span class="header-section-number">4</span> What a per-area assessment
+measures</h1>
+<p>A length-based catch-curve model treats the length composition as the
+equilibrium outcome of growth, natural mortality, fishing mortality and
+selectivity <strong>within one closed population</strong>. An area of a
+stock with movement is not closed:</p>
+<ul>
+<li><strong>Movement.</strong> Fish that grow up in one area and move to
+another carry the exploitation history of both. With movement from
+<code>a</code> to <code>b</code>, the large fish in <code>b</code> have
+been exposed to F in <code>a</code> as well, and the per-area SPR is an
+<em>apparent</em> local SPR, not the SPR of a sub-population. With
+strong mixing, per-area estimates converge to the stock-wide one, plus
+noise.</li>
+<li><strong>Ontogenetic movement.</strong> If small fish dominate one
+area and large fish another, the per-area compositions mix growth and
+movement. The model will absorb this in selectivity or in Z, and the
+local indicator is biased in a direction set by the movement pattern.
+The OM is the place to test whether the per-area indicators still rank
+areas correctly.</li>
+<li><strong>Recruitment split.</strong> The relative recruitment to each
+area does not enter the per-recruit indicators; an area receiving few
+recruits can show a high SPR at a very low abundance.</li>
+<li><strong>Data per area.</strong> Each area’s fit needs enough length
+samples and enough gear contrast. Area <code>b</code> has a single
+dome-shaped gear, where F and the descending limb of selectivity are
+confounded; <code>refit_sel_fun</code> with asymptotic selectivity and
+the SPR boundary check (<code>spr_max</code>) are important there, and
+<code>used.est.b</code> should be monitored.</li>
+<li><strong>Life history.</strong> All areas share <code>lhpar</code>.
+Area differences in growth or M are not represented by the
+estimator.</li>
+</ul>
+<p>Configuration C is therefore most useful where movement among areas
+is limited (e.g. seamounts or banks) and local depletion is the main
+risk; with strong mixing, A or B with a stock-wide assessment is simpler
+and has less noise.</p>
+<h1 data-number="5" id="requirements-for-the-om-projection"><span class="header-section-number">5</span> Requirements for the OM
+projection</h1>
+<p><code>flicc.is()</code> returns a <code>fwdControl</code> with
+<strong>one row per management year and area</strong> whenever areas are
+used (<code>catch_area</code> given or
+<code>area_tac = &quot;each&quot;</code>):</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">fwdControl</span>(<span class="fu">unlist</span>(<span class="fu">lapply</span>(mys, <span class="cf">function</span>(y)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">lapply</span>(units, <span class="cf">function</span>(u)</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">year =</span> y, <span class="at">quant =</span> <span class="st">&quot;catch&quot;</span>, <span class="at">unit =</span> u, <span class="at">value =</span> tac_u[u, ]))),</span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">recursive =</span> <span class="cn">FALSE</span>))</span></code></pre></div>
+<p>The projection method of the OM (<code>proj_units()</code> in the
+test set-up) must</p>
+<ul>
+<li>take catch targets by <code>unit</code>, including zero targets for
+closed areas;</li>
+<li>accept several management years per cycle when
+<code>frq &gt; 1</code> (the same TAC is repeated in every year of the
+cycle);</li>
+<li>handle a stock-wide target without <code>unit</code> when
+<code>catch_area = NULL</code>.</li>
+</ul>
+<h1 data-number="6" id="summarising-runs-by-area"><span class="header-section-number">6</span> Summarising runs by area</h1>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(data.table)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>trk <span class="ot">&lt;-</span> run_C<span class="sc">@</span>tracking</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>areas <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="st">&quot;a&quot;</span>, <span class="st">&quot;b&quot;</span>, <span class="st">&quot;c&quot;</span>)</span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="do">## area TACs, area SPR and share of usable fits</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>dt <span class="ot">&lt;-</span> trk[metric <span class="sc">%in%</span> <span class="fu">c</span>(<span class="fu">paste0</span>(<span class="st">&quot;tac.is.&quot;</span>, areas), <span class="fu">paste0</span>(<span class="st">&quot;SPR.&quot;</span>, areas, <span class="st">&quot;.ind&quot;</span>),</span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>                        <span class="fu">paste0</span>(<span class="st">&quot;used.est.&quot;</span>, areas))]</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>dt[, area <span class="sc">:=</span> <span class="fu">sub</span>(<span class="st">&quot;.*</span><span class="sc">\\</span><span class="st">.([abc])(</span><span class="sc">\\</span><span class="st">.ind)?$&quot;</span>, <span class="st">&quot;</span><span class="sc">\\</span><span class="st">1&quot;</span>, metric)]</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>dt[, what <span class="sc">:=</span> <span class="fu">sub</span>(<span class="st">&quot;</span><span class="sc">\\</span><span class="st">.[abc](</span><span class="sc">\\</span><span class="st">.ind)?$&quot;</span>, <span class="st">&quot;&quot;</span>, metric)]</span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(dt, <span class="fu">aes</span>(<span class="fu">factor</span>(year), data)) <span class="sc">+</span></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_boxplot</span>(<span class="at">outliers =</span> <span class="cn">FALSE</span>) <span class="sc">+</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_grid</span>(what <span class="sc">~</span> area, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>) <span class="sc">+</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">&quot;Year&quot;</span>, <span class="at">y =</span> <span class="cn">NULL</span>)</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a><span class="do">## true SSB by area in the OM</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>stks <span class="ot">&lt;-</span> <span class="fu">FLStocks</span>(<span class="fu">lapply</span>(<span class="fu">setNames</span>(<span class="at">nm =</span> areas), <span class="cf">function</span>(u) run_C<span class="sc">@</span>om<span class="sc">@</span>stock[, , u]))</span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(stks) <span class="sc">+</span> <span class="fu">facet_wrap</span>(<span class="sc">~</span>qname, <span class="at">scales =</span> <span class="st">&quot;free_y&quot;</span>)</span></code></pre></div>
+<h1 data-number="7" id="notes-on-the-angler-fish-test-set-up"><span class="header-section-number">7</span> Notes on the angler-fish test
+set-up</h1>
+<p>Points found while going through
+<code>OEM_lfd_setup_flicc.R</code>:</p>
+<ul>
+<li><strong>HCR argument typo.</strong>
+<code>lbi.hcr(..., b = 0, b2 = 0.35, ...)</code> passes <code>b</code>
+into <code>...</code>, where it is ignored, so <code>b1</code> stays at
+its default of 0.1. Use <code>b1 = 0</code> for the v1 rule.</li>
+<li><strong>Gear names.</strong>
+<code>sel_fun = c(Trawl = &quot;dsnormal&quot;, Gillnet = &quot;logistic&quot;)</code> is
+named with capitals while the OEM gears are <code>trawl</code> and
+<code>gillnet</code>. <code>flicc.sa()</code> now matches
+<code>sel_fun</code>, <code>refit_sel_fun</code> and <code>ess.g</code>
+by gear name when all gears are named and falls back to gear order
+otherwise, so this still works, but lower-case names avoid the
+ambiguity.</li>
+<li><strong>Area shares.</strong>
+<code>catch_area = c(0.3, 0.7, 0)</code> is read in unit order
+(<code>a</code>, <code>b</code>, <code>c</code>); named shares are
+safer.</li>
+<li><strong>Parallel <code>mp()</code>.</strong> The length-sampling
+deviances are lists of plain arrays. When
+<code>mp(parallel = TRUE)</code> splits iterations across workers it
+subsets only <code>FLQuant</code> deviances (see the FLRef developer
+notes), so each worker may reuse the draws of iterations
+<code>1:length(chunk)</code>. This does not bias the results, but
+iterations in different chunks then share their sampling draws. Run with
+<code>parallel = FALSE</code> in <code>mp()</code> and
+<code>parallel = TRUE, workers = n</code> in <code>flicc.sa()</code>
+until the OEM deviances are <code>FLQuant</code>s.</li>
+<li><strong>Fit cost.</strong> <code>unit_fit = &quot;each&quot;</code> fits areas
+<code>a</code> and <code>b</code> (two models per iteration and cycle;
+<code>c</code> is skipped). With <code>nyrs = 10</code> and 50
+projection years at <code>frq = 1</code>, this doubles the run time of
+configuration A.</li>
+</ul>
+<h1 data-number="8" id="appendix-arguments-for-multiple-areas"><span class="header-section-number">8</span> Appendix: arguments for multiple
+areas</h1>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Argument</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>flicc.sa()</code></td>
+<td><code>unit_fit</code></td>
+<td><code>&quot;pooled&quot;</code></td>
+<td><code>&quot;pooled&quot;</code>: sum over units; <code>&quot;each&quot;</code>: one fit
+per unit with data; <code>&quot;both&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>flicc.sa()</code></td>
+<td><code>sel_fun</code>, <code>refit_sel_fun</code>,
+<code>ess.g</code></td>
+<td></td>
+<td>by gear name (all gears named) or in gear order; subset to the gears
+of each unit</td>
+</tr>
+<tr class="odd">
+<td><code>lbi.hcr()</code></td>
+<td><code>units</code></td>
+<td><code>NULL</code></td>
+<td>apply the rule to <code>&lt;gear&gt;.&lt;unit&gt;</code> and
+<code>SPR.&lt;unit&gt;</code></td>
+</tr>
+<tr class="even">
+<td><code>rfb.flicc.hcr()</code></td>
+<td><code>units</code></td>
+<td><code>NULL</code></td>
+<td>apply the rule to <code>&lt;index&gt;.&lt;unit&gt;</code>,
+<code>&lt;f&gt;.&lt;unit&gt;</code>, <code>SPR.&lt;unit&gt;</code></td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>area_tac</code></td>
+<td><code>&quot;split&quot;</code></td>
+<td><code>&quot;split&quot;</code>: stock TAC divided among units;
+<code>&quot;each&quot;</code>: TAC per unit from
+<code>mult.hcr.&lt;unit&gt;</code></td>
+</tr>
+<tr class="even">
+<td><code>flicc.is()</code></td>
+<td><code>catch_area</code></td>
+<td><code>NULL</code></td>
+<td>shares by unit (named or unit order) or <code>&quot;recent&quot;</code></td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>area_years</code></td>
+<td>3</td>
+<td>data years for <code>catch_area = &quot;recent&quot;</code></td>
+</tr>
+<tr class="even">
+<td><code>flicc.is()</code></td>
+<td><code>initac</code></td>
+<td></td>
+<td>stock total, or by unit for <code>area_tac = &quot;each&quot;</code></td>
+</tr>
+<tr class="odd">
+<td><code>flicc.is()</code></td>
+<td><code>Cmax</code></td>
+<td><code>NA</code></td>
+<td>cap on the stock total; area TACs scaled proportionally</td>
+</tr>
+</tbody>
+</table>
+<h1 data-number="9" id="session-information"><span class="header-section-number">9</span> Session information</h1>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
+</body>
+</html>

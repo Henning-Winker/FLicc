@@ -1,0 +1,374 @@
+---
+title: "FLicc management procedures for stocks with multiple areas"
+author: "Henning Winker<br><span style=\"font-size: 0.8em;\">FAO Fisheries and Aquaculture Division, Assessment and Management Team (NFIFM)<br><a href=\"mailto:henning.winker@fao.org\">henning.winker@fao.org</a></span>"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: true
+    theme: readable
+    math_method: mathml
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE,
+                      fig.width = 8, fig.height = 4.5, dpi = 110,
+                      fig.align = "center")
+# The spatial OM (areas as units, movement, recruitment split) and its
+# length-sampling OEM live outside the package for now, so the mp() chunks
+# are shown but not run. Set options(FLicc.area_dir = "<folder>") to a folder
+# with the OM test set-up and options(FLicc.run_mse = TRUE) to run them.
+area_dir <- getOption("FLicc.area_dir", NULL)
+run_mse  <- !is.null(area_dir) && isTRUE(getOption("FLicc.run_mse", FALSE))
+```
+
+# Purpose and scope
+
+This guideline extends the FLicc management procedure (MP) of
+[mse-01](mse-01-flicc-modules.html) to stocks whose operating model (OM) has
+**areas in the `unit` dimension**: area-specific fleets (gears), area-specific
+length samples and catches, movement between areas and a split of
+recruitment among them. It documents three levels of spatial resolution in
+the MP, from one stock-wide assessment with a fixed split of the TAC to one
+assessment, HCR and TAC per area, and the FLicc arguments that switch
+between them:
+
+| Module | Argument | Values |
+|---|---|---|
+| `flicc.sa()` | `unit_fit` | `"pooled"` (default), `"each"`, `"both"` |
+| `lbi.hcr()`, `rfb.flicc.hcr()` | `units` | `NULL` (default, stock-wide) or area names |
+| `flicc.is()` | `catch_area` | `NULL`, fixed shares by area, or `"recent"` |
+| `flicc.is()` | `area_tac` | `"split"` (default) or `"each"` |
+| `flicc.is()` | `area_years` | years of catch for `catch_area = "recent"` |
+
+The examples follow the angler-fish test set-up with three areas: area `a`
+fished by trawl and gillnet, area `b` by trawl only, and area `c` (gillnet
+gear defined, currently unfished) as a closed area.
+
+# Spatial structure in the OM and the OEM
+
+## Areas as units
+
+In the OM every `FLStock` slot carries the areas in `unit`
+(`dimnames(stock(om))$unit = c("a", "b", "c")`). The projection method
+(`proj_units()` in the test set-up) moves fish between areas, splits
+recruitment among them and takes catch targets **by unit**. Gears are
+defined by area, each with its own selectivity-at-length, share of the
+area's fishing mortality (`f_mult`) and sampling design (`ess_age`,
+`ess_len`):
+
+```{r gears, eval = FALSE}
+gear_by_area <- list(
+  a = list(
+    trawl   = list(type = "dnormal", Lpeak = 0.8 * l50, sd_left = 5, sd_right = l50 / 2,
+                   f_mult = 0.3, ess_age = 50, ess_len = 300),
+    gillnet = list(type = "logistic", L50 = l50, L95 = 1.1 * l50,
+                   f_mult = 0.7, ess_age = 50, ess_len = 700)),
+  b = list(
+    trawl   = list(type = "dnormal", Lpeak = 0.8 * l50, sd_left = 5, sd_right = l50 / 2,
+                   f_mult = 1, ess_age = 50, ess_len = 300)),
+  c = list(
+    gillnet = list(type = "logistic", L50 = l50, L95 = 1.1 * l50,
+                   f_mult = 1, ess_age = 50, ess_len = 500)))
+
+om_gears_area <- lapply(gear_by_area, build_gear, lhpar = lh_pars, age = ages,
+                        lmin = 5, lmax_mult = 1.5, bin = 3, timing = 0.5)
+```
+
+## What the OEM delivers
+
+The area OEM (`sampling.lfd.area.oem()`) samples each gear in each area from
+that area's catch-at-age and attaches, as in the single-area case,
+
+* `attr(stk, "lfd")`: `FLQuants` by **gear**, `len x year x unit x ... x iter`,
+  with the areas in `unit`. A gear that does not fish in an area has a unit
+  of zeros there (`trawl` in `c`, `gillnet` in `b`);
+* `attr(stk, "catch_gear")`: catch by gear with reporting error, in the same
+  `gear x unit` layout.
+
+This layout is what `flicc.sa()` needs for all three configurations below:
+`unitSums()` gives the stock-wide samples, `x[, , "a"]` the samples of one
+area.
+
+```
+lfd$trawl     unit:  a [samples]   b [samples]   c [zeros]
+lfd$gillnet   unit:  a [samples]   b [zeros]     c [zeros: F = 0]
+catch_gear    same layout, catch weight by gear and area
+```
+
+# Three levels of spatial resolution
+
+```
+                      A: pooled, fixed split   B: pooled, recent split   C: per area
+flicc.sa(unit_fit =)  "pooled"                 "pooled"                  "each"
+  fits per cycle      it                       it                        it x areas with data
+  ind                 SPR, LBIspr.trawl, ...   same                      SPR.a, SPR.b, LBIspr.trawl.a, ...
+HCR (units =)         NULL                     NULL                      c("a", "b")
+  multipliers         one per iteration        one per iteration         one per area and iteration
+flicc.is()            area_tac = "split"       area_tac = "split"        area_tac = "each"
+                      catch_area = shares      catch_area = "recent"     initac by area
+  area TACs           TAC x fixed share        TAC x recent catch share  own TAC x own multiplier
+```
+
+| | A | B | C |
+|---|---|---|---|
+| Status signal | stock-wide | stock-wide | local, per area |
+| Distribution of catch among areas | fixed by management | follows the fleets | follows local signals |
+| Responds to local depletion | no | no (may even reinforce it) | yes |
+| Data needed per area | none | catches | length samples and catches |
+| Fit cost per cycle | 1 x | 1 x | number of areas with data |
+| Risk | local depletion if shares are wrong | shares drift to where fish are concentrated | noisy local indicators; areas linked by movement |
+
+## A: stock-wide assessment, fixed split
+
+The stock-wide assessment pools all length samples by gear over areas; the
+HCR returns one multiplier; `flicc.is()` updates the stock TAC and divides
+it by fixed shares, given in unit order or named:
+
+```{r config-a, eval = FALSE}
+ctrl_A <- mpCtrl(list(
+  est  = mseCtrl(method = flicc.sa, args = list(
+           lhpar = flicc_pars, sel_fun = c(trawl = "dsnormal", gillnet = "logistic"),
+           m_model = "Gislason", settings = list(obs_model = "dm", CVL = 0.1),
+           spr = 40, nyrs = 10, outer_parallel = TRUE)),
+  hcr  = mseCtrl(method = lbi.hcr, args = list(
+           gear = "SPR", b1 = 0, b2 = 0.35, b3 = 0.45, b4 = 0.7)),
+  isys = mseCtrl(method = flicc.is, args = list(
+           initac = initac, catch_area = c(a = 0.3, b = 0.7, c = 0)))))
+```
+
+Area `c` has a zero share and stays closed.
+
+## B: stock-wide assessment, split by recent catch
+
+Same as A, but the shares are the observed catch shares by area over the
+last `area_years` data years, by iteration, taken from
+`attr(stk, "catch_gear")` (or `catch(stk)` if the OEM does not attach catch
+by gear):
+
+$$
+TAC_{u,y} = TAC_y \; \frac{\sum_{t = dy - n + 1}^{dy} C^{obs}_{u,t}}
+                        {\sum_{u'} \sum_{t = dy - n + 1}^{dy} C^{obs}_{u',t}} .
+$$
+
+```{r config-b, eval = FALSE}
+ctrl_B <- ctrl_A
+isys(ctrl_B) <- mseCtrl(method = flicc.is, args = list(
+  initac = initac, catch_area = "recent", area_years = 3))
+```
+
+Because the shares follow the realised catches, which in turn follow the
+area TACs, the split is self-reinforcing: it preserves the historical
+distribution of the fishery unless the OM's fleets cannot take their TAC in
+an area. An area with no recent catch stays closed.
+
+## C: per-area assessments, HCRs and TACs
+
+Each area with length samples is assessed on its own, using only the gears
+that fish there (here: trawl and gillnet in `a`, trawl in `b`; `c` has no
+samples and is not assessed). The HCR is applied to each area's indicators,
+and each area's TAC is updated with its own multiplier:
+
+$$
+TAC_{u,y} = TAC_{u,y-frq} \times \text{mult}_{u,y}.
+$$
+
+```{r config-c, eval = FALSE}
+ctrl_C <- mpCtrl(list(
+  est  = mseCtrl(method = flicc.sa, args = list(
+           lhpar = flicc_pars, sel_fun = c(trawl = "dsnormal", gillnet = "logistic"),
+           refit_sel_fun = c(trawl = "logistic", gillnet = "logistic"),
+           m_model = "Gislason", settings = list(obs_model = "dm", CVL = 0.1),
+           spr = 40, nyrs = 10, unit_fit = "each", outer_parallel = TRUE)),
+  hcr  = mseCtrl(method = lbi.hcr, args = list(
+           gear = "SPR", units = c("a", "b"),
+           b1 = 0, b2 = 0.35, b3 = 0.45, b4 = 0.7)),
+  isys = mseCtrl(method = flicc.is, args = list(
+           initac = c(a = 0.3, b = 0.7, c = 0) * initac, area_tac = "each",
+           dtaclow = 0.7, dtacupp = 1.2))))
+```
+
+Or with the rfb-type rule on each area's gear indicator:
+
+```{r config-c-rfb, eval = FALSE}
+hcr(ctrl_C) <- mseCtrl(method = rfb.flicc.hcr, args = list(
+  index = "LBIspr.trawl", units = c("a", "b"), spr_trigger = 0.25))
+```
+
+`trawl` is the only gear sampled in both areas, so `"LBIspr.trawl"` exists
+for `a` and `b`; `"LBIspr.gillnet.b"` exists too, but is `NA` (no gillnet in
+`b`), which keeps the TAC of `b` unchanged.
+
+### Names of indicators and tracking metrics
+
+With `unit_fit = "each"` every name gets the area as suffix. For the
+example areas:
+
+| Pooled (`"pooled"`) | Per area (`"each"`) |
+|---|---|
+| `SPR`, `Z`, `Ztgt`, `Zrel` | `SPR.a`, `SPR.b`, `SPR.c`, `Zrel.a`, ... |
+| `LBIspr.trawl`, `LBIspr.gillnet` | `LBIspr.trawl.a`, `LBIspr.gillnet.a`, `LBIspr.trawl.b`, ... |
+| `LBImean.trawl`, ... | `LBImean.trawl.a`, ... |
+| tracking `conv.est`, `used.est`, `sprbound.est`, `refit.est` | `conv.est.a`, `used.est.b`, ... |
+| tracking `Lref.trawl`, `Lmeanref.trawl` | `Lref.trawl.a`, `Lmeanref.trawl.b`, ... |
+| HCR `mult.hcr`, `decision.hcr`, `trend.hcr` / `r.hcr`, `f.hcr`, `b.hcr` | `mult.hcr.a`, `decision.hcr.b`, ... |
+| isys `tac.is` | `tac.is` (sum) and `tac.is.a`, `tac.is.b`, `tac.is.c` |
+
+`mp()` also tracks every indicator as `<name>.ind` in the last data year.
+Gears absent from an area are present with `NA`, so the same names exist in
+every area; an area without any samples (here `c`) has `NA` throughout and
+`used.est.c = 0`, without a warning.
+
+### How the modules connect
+
+```
+flicc.sa(unit_fit = "each")
+   for u in units:  lfd[, , u], catch_gear[, , u]  ->  drop gears without samples
+                    ->  fiticc() per iteration       ->  ind: <name>.u
+lbi.hcr(units = c("a","b"))  /  rfb.flicc.hcr(units = ...)
+   for u in units:  trend on ind[[<gear>.u]], status on ind[["SPR.u"]]
+                    ->  track mult.hcr.u, decision.hcr.u
+   ctrl = mean of the unit multipliers (information only)
+flicc.is(area_tac = "each")
+   for u in units:  prev = initac[u] or tac.is.u at ay - frq
+                    mult = mult.hcr.u (stock-wide ctrl value if not tracked)
+                    TAC_u = prev x mult, limits with decision.hcr.u
+   Cmax on the sum (proportional scaling)
+   ctrl = one row per management year and unit
+```
+
+The per-area multipliers travel from the HCR to `flicc.is()` through the
+tracking object (`mult.hcr.<unit>`), in the same way as `decision.hcr`
+already did, so the `ctrl` returned by the HCR stays a single row.
+
+## Pooled and per-area fits together: `unit_fit = "both"`
+
+`"both"` returns the pooled indicators and the per-area indicators in the
+same `ind`. The HCRs use one or the other (`units = NULL` or area names).
+This is useful to monitor both scales in the same run, e.g. to see whether
+a stock-wide rule (A or B) hides local depletion, at the cost of the extra
+fits. Combining them in one rule, such as an area trend with a stock-wide
+SPR safeguard, is not implemented yet.
+
+# What a per-area assessment measures
+
+A length-based catch-curve model treats the length composition as the
+equilibrium outcome of growth, natural mortality, fishing mortality and
+selectivity **within one closed population**. An area of a stock with
+movement is not closed:
+
+* **Movement.** Fish that grow up in one area and move to another carry the
+  exploitation history of both. With movement from `a` to `b`, the large
+  fish in `b` have been exposed to F in `a` as well, and the per-area SPR is
+  an *apparent* local SPR, not the SPR of a sub-population. With strong
+  mixing, per-area estimates converge to the stock-wide one, plus noise.
+* **Ontogenetic movement.** If small fish dominate one area and large fish
+  another, the per-area compositions mix growth and movement. The model
+  will absorb this in selectivity or in Z, and the local indicator is biased
+  in a direction set by the movement pattern. The OM is the place to test
+  whether the per-area indicators still rank areas correctly.
+* **Recruitment split.** The relative recruitment to each area does not
+  enter the per-recruit indicators; an area receiving few recruits can show
+  a high SPR at a very low abundance.
+* **Data per area.** Each area's fit needs enough length samples and enough
+  gear contrast. Area `b` has a single dome-shaped gear, where F and the
+  descending limb of selectivity are confounded; `refit_sel_fun` with
+  asymptotic selectivity and the SPR boundary check (`spr_max`) are
+  important there, and `used.est.b` should be monitored.
+* **Life history.** All areas share `lhpar`. Area differences in growth or
+  M are not represented by the estimator.
+
+Configuration C is therefore most useful where movement among areas is
+limited (e.g. seamounts or banks) and local depletion is the main risk;
+with strong mixing, A or B with a stock-wide assessment is simpler and has
+less noise.
+
+# Requirements for the OM projection
+
+`flicc.is()` returns a `fwdControl` with **one row per management year and
+area** whenever areas are used (`catch_area` given or `area_tac = "each"`):
+
+```{r ctrl-structure, eval = FALSE}
+fwdControl(unlist(lapply(mys, function(y)
+  lapply(units, function(u)
+    list(year = y, quant = "catch", unit = u, value = tac_u[u, ]))),
+  recursive = FALSE))
+```
+
+The projection method of the OM (`proj_units()` in the test set-up) must
+
+* take catch targets by `unit`, including zero targets for closed areas;
+* accept several management years per cycle when `frq > 1` (the same TAC is
+  repeated in every year of the cycle);
+* handle a stock-wide target without `unit` when `catch_area = NULL`.
+
+# Summarising runs by area
+
+```{r summarise, eval = FALSE}
+library(data.table)
+trk <- run_C@tracking
+areas <- c("a", "b", "c")
+
+## area TACs, area SPR and share of usable fits
+dt <- trk[metric %in% c(paste0("tac.is.", areas), paste0("SPR.", areas, ".ind"),
+                        paste0("used.est.", areas))]
+dt[, area := sub(".*\\.([abc])(\\.ind)?$", "\\1", metric)]
+dt[, what := sub("\\.[abc](\\.ind)?$", "", metric)]
+
+ggplot(dt, aes(factor(year), data)) +
+  geom_boxplot(outliers = FALSE) +
+  facet_grid(what ~ area, scales = "free_y") +
+  labs(x = "Year", y = NULL)
+
+## true SSB by area in the OM
+stks <- FLStocks(lapply(setNames(nm = areas), function(u) run_C@om@stock[, , u]))
+plot(stks) + facet_wrap(~qname, scales = "free_y")
+```
+
+# Notes on the angler-fish test set-up
+
+Points found while going through `OEM_lfd_setup_flicc.R`:
+
+* **HCR argument typo.** `lbi.hcr(..., b = 0, b2 = 0.35, ...)` passes `b`
+  into `...`, where it is ignored, so `b1` stays at its default of 0.1.
+  Use `b1 = 0` for the v1 rule.
+* **Gear names.** `sel_fun = c(Trawl = "dsnormal", Gillnet = "logistic")` is
+  named with capitals while the OEM gears are `trawl` and `gillnet`.
+  `flicc.sa()` now matches `sel_fun`, `refit_sel_fun` and `ess.g` by gear
+  name when all gears are named and falls back to gear order otherwise, so
+  this still works, but lower-case names avoid the ambiguity.
+* **Area shares.** `catch_area = c(0.3, 0.7, 0)` is read in unit order
+  (`a`, `b`, `c`); named shares are safer.
+* **Parallel `mp()`.** The length-sampling deviances are lists of plain
+  arrays. When `mp(parallel = TRUE)` splits iterations across workers it
+  subsets only `FLQuant` deviances (see the FLRef developer notes), so
+  each worker may reuse the draws of iterations `1:length(chunk)`. This does
+  not bias the results, but iterations in different chunks then share their
+  sampling draws. Run with `parallel = FALSE` in `mp()` and
+  `parallel = TRUE, workers = n` in `flicc.sa()` until the OEM deviances are
+  `FLQuant`s.
+* **Fit cost.** `unit_fit = "each"` fits areas `a` and `b` (two models per
+  iteration and cycle; `c` is skipped). With `nyrs = 10` and 50 projection
+  years at `frq = 1`, this doubles the run time of configuration A.
+
+# Appendix: arguments for multiple areas
+
+| Function | Argument | Default | Meaning |
+|---|---|---|---|
+| `flicc.sa()` | `unit_fit` | `"pooled"` | `"pooled"`: sum over units; `"each"`: one fit per unit with data; `"both"` |
+| `flicc.sa()` | `sel_fun`, `refit_sel_fun`, `ess.g` | | by gear name (all gears named) or in gear order; subset to the gears of each unit |
+| `lbi.hcr()` | `units` | `NULL` | apply the rule to `<gear>.<unit>` and `SPR.<unit>` |
+| `rfb.flicc.hcr()` | `units` | `NULL` | apply the rule to `<index>.<unit>`, `<f>.<unit>`, `SPR.<unit>` |
+| `flicc.is()` | `area_tac` | `"split"` | `"split"`: stock TAC divided among units; `"each"`: TAC per unit from `mult.hcr.<unit>` |
+| `flicc.is()` | `catch_area` | `NULL` | shares by unit (named or unit order) or `"recent"` |
+| `flicc.is()` | `area_years` | 3 | data years for `catch_area = "recent"` |
+| `flicc.is()` | `initac` | | stock total, or by unit for `area_tac = "each"` |
+| `flicc.is()` | `Cmax` | `NA` | cap on the stock total; area TACs scaled proportionally |
+
+# Session information
+
+```{r session}
+sessionInfo()
+```

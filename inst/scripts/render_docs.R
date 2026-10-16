@@ -12,9 +12,10 @@ options(FLicc.rdata   = normalizePath("rdata", mustWork = TRUE),
         FLicc.run_mse = TRUE)
 
 docs <- c(
-  mse_modules = "inst/rmd/mse-01-flicc-modules.Rmd"
-  # mse_alfonsino  = "inst/rmd/mse-02-alfonsino-mse.Rmd",  # OM + sampling.lfd.oem + flicc.sa
-  # mse_robustness = "inst/rmd/mse-03-robustness.Rmd"      # misspecified M, Linf, CVL, selectivity
+  mse_modules = "inst/rmd/mse-01-flicc-modules.Rmd",
+  mse_areas   = "inst/rmd/mse-02-multiple-areas.Rmd"     # mp() chunks need options(FLicc.area_dir)
+  # mse_alfonsino  = "inst/rmd/mse-03-alfonsino-mse.Rmd",  # OM + sampling.lfd.oem + flicc.sa
+  # mse_robustness = "inst/rmd/mse-04-robustness.Rmd"      # misspecified M, Linf, CVL, selectivity
 )
 
 for (d in docs) {

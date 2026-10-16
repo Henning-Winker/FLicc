@@ -143,8 +143,15 @@ Harvest control rules</a>
 <code>lbi.hcr()</code></a></li>
 <li><a href="#the-rfb-type-rule-rfb.flicc.hcr" id="toc-the-rfb-type-rule-rfb.flicc.hcr"><span class="toc-section-number">5.3</span> The rfb-type rule:
 <code>rfb.flicc.hcr()</code></a></li>
-<li><a href="#implementation-system-flicc.is" id="toc-implementation-system-flicc.is"><span class="toc-section-number">5.4</span> Implementation system:
-<code>flicc.is()</code></a></li>
+<li><a href="#implementation-system-tac-control-with-flicc.is" id="toc-implementation-system-tac-control-with-flicc.is"><span class="toc-section-number">5.4</span> Implementation system: TAC control
+with <code>flicc.is()</code></a>
+<ul>
+<li><a href="#what-happens-in-one-cycle" id="toc-what-happens-in-one-cycle"><span class="toc-section-number">5.4.1</span> What happens in one
+cycle</a></li>
+<li><a href="#the-code-stock-tac" id="toc-the-code-stock-tac"><span class="toc-section-number">5.4.2</span> The code (stock TAC)</a></li>
+<li><a href="#a-worked-example" id="toc-a-worked-example"><span class="toc-section-number">5.4.3</span> A worked example</a></li>
+<li><a href="#areas" id="toc-areas"><span class="toc-section-number">5.4.4</span> Areas</a></li>
+</ul></li>
 </ul></li>
 <li><a href="#assembling-the-management-procedure" id="toc-assembling-the-management-procedure"><span class="toc-section-number">6</span> Assembling the management
 procedure</a></li>
@@ -217,16 +224,21 @@ options</td>
 </tr>
 <tr class="even">
 <td>mse-02</td>
+<td>Multiple areas: per-area assessments, HCRs and TACs</td>
+<td>prototype</td>
+</tr>
+<tr class="odd">
+<td>mse-03</td>
 <td>Splendid alfonsino length-selective OM (FLRef),
 <code>sampling.lfd.oem()</code> and full FLicc MSE runs</td>
 <td>planned (OM in <em>FLicc_MSE_lite_OM_v3</em>)</td>
 </tr>
-<tr class="odd">
-<td>mse-03</td>
+<tr class="even">
+<td>mse-04</td>
 <td>Robustness set: misspecified M, Linf, CVL and selectivity form</td>
 <td>planned</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>FLRef <code>lfd-01</code></td>
 <td>Length-frequency simulation and <code>sampling.lfd.oem()</code></td>
 <td><a href="https://henning-winker.github.io/FLRef/">FLRef
@@ -339,8 +351,8 @@ attributes</td>
 <td><code>flicc.is()</code></td>
 <td><code>isys</code></td>
 <td>multiplier, previous TAC, <code>decision.hcr</code></td>
-<td>TAC for <code>ay + management_lag</code></td>
-<td><code>tac.is</code></td>
+<td>TAC for the management years (by area if requested)</td>
+<td><code>tac.is</code>, <code>tac.is.&lt;unit&gt;</code></td>
 </tr>
 </tbody>
 </table>
@@ -366,16 +378,18 @@ to <em>data years</em>, not to cycles.</li>
 <code>flicc.sa()</code></h1>
 <h2 data-number="3.1" id="inputs-from-the-oem"><span class="header-section-number">3.1</span> Inputs from the OEM</h2>
 <ol type="1">
-<li><strong>Length compositions.</strong> <code>attr(stk, &quot;lfd&quot;)</code>
-is summed over units (<code>unitSums()</code>), so area- or
-sex-structured samples are pooled into one composition per gear. Each
-gear-year composition is then rescaled to the effective sample size
-<code>ess.g</code> with <code>lfdess()</code>. The OEM’s own sample size
-(<code>ess_len</code>, typically hundreds of fish) would give the
-multinomial or Dirichlet-multinomial likelihood far too much weight
-relative to the real information in a length sample; <code>ess.g</code>
-(default 150) sets the weight explicitly and can differ by gear.
-<code>ess.g = NULL</code> keeps the sampled counts.</li>
+<li><strong>Length compositions.</strong> By default
+<code>attr(stk, &quot;lfd&quot;)</code> is summed over units
+(<code>unitSums()</code>), so area- or sex-structured samples are pooled
+into one composition per gear; <code>unit_fit = &quot;each&quot;</code> fits each
+area separately instead (mse-02). Seasonal samples are summed to annual
+compositions. Each gear-year composition is then rescaled to the
+effective sample size <code>ess.g</code> with <code>lfdess()</code>. The
+OEM’s own sample size (<code>ess_len</code>, typically hundreds of fish)
+would give the multinomial or Dirichlet-multinomial likelihood far too
+much weight relative to the real information in a length sample;
+<code>ess.g</code> (default 150) sets the weight explicitly and can
+differ by gear. <code>ess.g = NULL</code> keeps the sampled counts.</li>
 <li><strong>Catch split.</strong> Catch shares by gear and year are
 formed from <code>attr(stk, &quot;catch_gear&quot;)</code> (catch weight by gear,
 with reporting error), so that the partition carries observation error
@@ -385,9 +399,9 @@ fallback for an OEM that does not attach catch by gear.</li>
 M/k, L50, a, b) is static across cycles and builds the length template
 with <code>stocklen()</code> for each iteration’s composition.</li>
 </ol>
-<p>The OEM must deliver <strong>annual</strong> compositions
-(<code>season = FALSE</code> in <code>sampling.lfd.oem()</code>);
-seasonal samples are not pooled by <code>flicc.sa()</code>.</p>
+<p>With <code>sampling.lfd.oem(season = TRUE)</code>,
+<code>flicc.sa()</code> sums the seasonal samples into annual
+compositions (FLicc is an annual model).</p>
 <h2 data-number="3.2" id="one-fit-per-iteration"><span class="header-section-number">3.2</span> One fit per iteration</h2>
 <p><code>fiticc()</code> fits one FLR iteration at a time, so
 <code>flicc.sa()</code> loops over <code>args$it</code>. Each iteration
@@ -646,7 +660,7 @@ r = \frac{\frac{1}{n_1}\sum_{y \in \text{recent}} I_y}
 component (<code>r</code>) is robust to the life-history assumptions,
 while any level component (<code>f</code>, the SPR status, the SPR
 safeguard <code>b</code>) inherits the model’s scale bias and is where
-the robustness set (mse-03) has to show that the MP is still
+the robustness set (mse-04) has to show that the MP is still
 precautionary. Between refits the reference can still move when
 selectivity or CVL are re-estimated; the tracked
 <code>Lref.&lt;gear&gt;</code> and <code>Lmeanref.&lt;gear&gt;</code>
@@ -791,63 +805,241 @@ of <code>f</code> implies:</p>
 <span id="cb9-16"><a href="#cb9-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_LBImean   =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> <span class="fu">paste0</span>(<span class="st">&quot;LBImean.&quot;</span>, gears[<span class="dv">1</span>])),</span>
 <span id="cb9-17"><a href="#cb9-17" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_LBIspr    =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> idx_g),</span>
 <span id="cb9-18"><a href="#cb9-18" aria-hidden="true" tabindex="-1"></a>      <span class="at">f_Zrel      =</span> <span class="fu">rfb_parts</span>(fit, idx_g, <span class="at">f =</span> <span class="st">&quot;Zrel&quot;</span>))</span></code></pre></div>
-<h2 data-number="5.4" id="implementation-system-flicc.is"><span class="header-section-number">5.4</span> Implementation system:
-<code>flicc.is()</code></h2>
-<p><code>flicc.is()</code> converts the multiplier into a TAC,
-<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>y</mi></msub><mo>=</mo><mi>T</mi><mi>A</mi><msub><mi>C</mi><mrow><mi>y</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>×</mo><mtext mathvariant="normal">mult</mtext></mrow><annotation encoding="application/x-tex">TAC_y = TAC_{y-1} \times \text{mult}</annotation></semantics></math>,
-for the iterations flagged by <code>decision.hcr &gt; 2</code> limits
-the change to <code>dtaclow</code>–<code>dtacupp</code> times the
-previous TAC and caps it at <code>Cmax</code>, and sets it for
-<code>ay + management_lag</code>. The first cycle needs
-<code>initac</code>, normally the last observed catch. With
-<code>catch_area</code> the TAC is split across units (areas) by fixed
-shares.</p>
+<h2 data-number="5.4" id="implementation-system-tac-control-with-flicc.is"><span class="header-section-number">5.4</span> Implementation system: TAC
+control with <code>flicc.is()</code></h2>
+<p>The HCRs only say <em>how much</em> to change the TAC.
+<code>flicc.is()</code> is the TAC control: it keeps track of the TAC,
+applies the change, enforces the limits, sets the TAC for the right
+years and, for spatial stocks, divides it among areas. It is the only
+module that knows the absolute catch level.</p>
+<h3 data-number="5.4.1" id="what-happens-in-one-cycle"><span class="header-section-number">5.4.1</span> What happens in one
+cycle</h3>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Stock TAC (default)</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1. Multiplier</td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mtext mathvariant="normal">mult</mtext><mi>i</mi></msub><annotation encoding="application/x-tex">\text{mult}_i</annotation></semantics></math>
+for each iteration
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math></td>
+<td>HCR <code>ctrl</code> (<code>ctrl@iters[1, &quot;value&quot;, ]</code>)</td>
+</tr>
+<tr class="even">
+<td>2. Previous TAC</td>
+<td><code>initac</code> if <code>ay == iy</code>, else
+<code>tac.is</code> tracked at <code>ay - frq</code></td>
+<td><code>initac</code>, tracking</td>
+</tr>
+<tr class="odd">
+<td>3. New TAC</td>
+<td><math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>i</mi></msub><mo>=</mo><mi>T</mi><mi>A</mi><msubsup><mi>C</mi><mi>i</mi><mrow><mi>p</mi><mi>r</mi><mi>e</mi><mi>v</mi></mrow></msubsup><mo>×</mo><msub><mtext mathvariant="normal">mult</mtext><mi>i</mi></msub></mrow><annotation encoding="application/x-tex">TAC_i = TAC^{prev}_i \times \text{mult}_i</annotation></semantics></math></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>4. Change limits</td>
+<td>for flagged
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>i</mi></msub><mo>∈</mo><mrow><mo stretchy="true" form="prefix">[</mo><mspace width="0.167em"></mspace><mtext mathvariant="normal">dtaclow</mtext><mo>,</mo><mspace width="0.222em"></mspace><mtext mathvariant="normal">dtacupp</mtext><mspace width="0.167em"></mspace><mo stretchy="true" form="postfix">]</mo></mrow><mo>×</mo><mi>T</mi><mi>A</mi><msubsup><mi>C</mi><mi>i</mi><mrow><mi>p</mi><mi>r</mi><mi>e</mi><mi>v</mi></mrow></msubsup></mrow><annotation encoding="application/x-tex">TAC_i \in [\,\text{dtaclow},\ \text{dtacupp}\,] \times TAC^{prev}_i</annotation></semantics></math></td>
+<td><code>decision.hcr &gt; 2</code> from the HCR</td>
+</tr>
+<tr class="odd">
+<td>5. Cap</td>
+<td>for flagged
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mi>i</mi><annotation encoding="application/x-tex">i</annotation></semantics></math>:
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>A</mi><msub><mi>C</mi><mi>i</mi></msub><mo>≤</mo></mrow><annotation encoding="application/x-tex">TAC_i \leq</annotation></semantics></math>
+<code>Cmax</code></td>
+<td></td>
+</tr>
+<tr class="even">
+<td>6. Years</td>
+<td>same TAC for every management year <code>args$mys</code>
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>=</mo><mi>a</mi><mi>y</mi><mo>+</mo><mtext mathvariant="normal">mlag</mtext><mo>,</mo><mi>…</mi><mo>,</mo><mi>a</mi><mi>y</mi><mo>+</mo><mtext mathvariant="normal">mlag</mtext><mo>+</mo><mi>f</mi><mi>r</mi><mi>q</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">= ay + \text{mlag}, \dots, ay + \text{mlag} + frq - 1</annotation></semantics></math></td>
+<td><code>mp()</code> args</td>
+</tr>
+<tr class="odd">
+<td>7. Areas</td>
+<td>optional division among units (Section 5.4.4 and mse-02)</td>
+<td><code>catch_area</code>, <code>area_tac</code></td>
+</tr>
+<tr class="even">
+<td>8. Tracking</td>
+<td><code>tac.is</code> (and <code>tac.is.&lt;unit&gt;</code>)</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>Three points are easy to miss:</p>
+<ul>
+<li><strong>The TAC is a running product.</strong> Because each TAC is
+the previous one times a multiplier, <code>initac</code> sets the scale
+of the whole projection, and an iteration whose fit fails simply carries
+its TAC forward (<code>mult = 1</code>). Use the last observed catch
+(e.g. the mean of the last three years) for <code>initac</code>.</li>
+<li><strong>Which iterations are limited is decided by the HCR</strong>,
+through the tracked flag <code>decision.hcr</code>.
+<code>lbi.hcr()</code> flags iterations with SPR <em>below</em> its
+<code>spr_trigger</code> (limits protect against large swings when the
+stock is low); <code>rfb.flicc.hcr()</code> flags iterations whose
+safeguard is <em>inactive</em> (ICES rfb: stability limits only while
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">b = 1</annotation></semantics></math>,
+so the safeguard can cut freely). With <code>spr_trigger = 0</code> in
+<code>lbi.hcr()</code> no iteration is limited.</li>
+<li><strong>With <code>frq &gt; 1</code> the TAC is held</strong> for
+all <code>frq</code> management years. Earlier versions set only
+<code>ay + management_lag</code>, which left the following years without
+a catch target.</li>
+</ul>
+<h3 data-number="5.4.2" id="the-code-stock-tac"><span class="header-section-number">5.4.2</span> The code (stock TAC)</h3>
+<p>The core of <code>flicc.is()</code> for a stock-wide TAC, stripped of
+the area options:</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>flicc.is <span class="ot">&lt;-</span> <span class="cf">function</span>(stk, ctrl, args, tracking, <span class="at">output =</span> <span class="st">&quot;catch&quot;</span>,</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>                     <span class="at">dtaclow =</span> <span class="cn">NA</span>, <span class="at">dtacupp =</span> <span class="cn">NA</span>, <span class="at">Cmax =</span> <span class="cn">NA</span>, <span class="at">initac =</span> <span class="cn">NULL</span>, ...) {</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">spread</span>(args)                                   <span class="co"># ay, iy, frq, it, mys, ...</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  mys  <span class="ot">&lt;-</span> <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.null</span>(args<span class="sc">$</span>mys)) args<span class="sc">$</span>mys <span class="cf">else</span> ay <span class="sc">+</span> management_lag</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  mult <span class="ot">&lt;-</span> <span class="fu">c</span>(ctrl<span class="sc">@</span>iters[<span class="dv">1</span>, <span class="st">&quot;value&quot;</span>, ])            <span class="co"># 1. multiplier from the HCR</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  prev_tac <span class="ot">&lt;-</span> <span class="cf">if</span> (ay <span class="sc">==</span> iy) <span class="fu">rep</span>(initac, it) <span class="cf">else</span> <span class="co"># 2. previous TAC</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">c</span>(tracking[metric <span class="sc">==</span> <span class="st">&quot;tac.is&quot;</span> <span class="sc">&amp;</span> year <span class="sc">==</span> ay <span class="sc">-</span> frq, data])</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>  TAC <span class="ot">&lt;-</span> prev_tac <span class="sc">*</span> mult                         <span class="co"># 3. new TAC</span></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a>  id <span class="ot">&lt;-</span> tracking[metric <span class="sc">==</span> <span class="st">&quot;decision.hcr&quot;</span> <span class="sc">&amp;</span> year <span class="sc">==</span> ay, data <span class="sc">&gt;</span> <span class="dv">2</span>]</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(dtacupp)) TAC[id] <span class="ot">&lt;-</span> <span class="fu">pmin</span>(TAC[id], prev_tac[id] <span class="sc">*</span> dtacupp)  <span class="co"># 4.</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(dtaclow)) TAC[id] <span class="ot">&lt;-</span> <span class="fu">pmax</span>(TAC[id], prev_tac[id] <span class="sc">*</span> dtaclow)</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a>  <span class="cf">if</span> (<span class="sc">!</span><span class="fu">is.na</span>(Cmax))    TAC[id] <span class="ot">&lt;-</span> <span class="fu">pmin</span>(TAC[id], Cmax)                    <span class="co"># 5.</span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  ctrl <span class="ot">&lt;-</span> <span class="fu">fwdControl</span>(<span class="fu">lapply</span>(mys, <span class="cf">function</span>(y)     <span class="co"># 6. all management years</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>    <span class="fu">list</span>(<span class="at">year =</span> y, <span class="at">quant =</span> output, <span class="at">value =</span> TAC)))</span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>  <span class="fu">track</span>(tracking, <span class="st">&quot;tac.is&quot;</span>, <span class="fu">ac</span>(ay)) <span class="ot">&lt;-</span>           <span class="co"># 8. tracking</span></span>
+<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>    <span class="fu">FLQuant</span>(TAC, <span class="at">dimnames =</span> <span class="fu">list</span>(<span class="at">iter =</span> <span class="fu">seq_along</span>(TAC)))</span>
+<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">list</span>(<span class="at">ctrl =</span> ctrl, <span class="at">tracking =</span> tracking)</span>
+<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 data-number="5.4.3" id="a-worked-example"><span class="header-section-number">5.4.3</span> A worked example</h3>
+<p>The same arithmetic for one iteration over six assessments, with
+limits of +20 % and −30 % applied in every cycle
+(<code>decision.hcr = 3</code>):</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>initac <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>mult   <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fl">1.15</span>, <span class="fl">1.30</span>, <span class="fl">0.95</span>, <span class="fl">0.60</span>, <span class="fl">0.80</span>, <span class="fl">1.05</span>)   <span class="co"># multipliers from the HCR</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>tac    <span class="ot">&lt;-</span> <span class="fu">numeric</span>(<span class="fu">length</span>(mult)); prev <span class="ot">&lt;-</span> initac</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k <span class="cf">in</span> <span class="fu">seq_along</span>(mult)) {</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>  tac[k] <span class="ot">&lt;-</span> <span class="fu">min</span>(<span class="fu">max</span>(prev <span class="sc">*</span> mult[k], prev <span class="sc">*</span> <span class="fl">0.7</span>), prev <span class="sc">*</span> <span class="fl">1.2</span>)</span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>  prev   <span class="ot">&lt;-</span> tac[k]</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="fu">data.frame</span>(<span class="at">cycle =</span> <span class="fu">seq_along</span>(mult), <span class="at">mult =</span> mult,</span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>           <span class="at">unlimited =</span> <span class="fu">round</span>(initac <span class="sc">*</span> <span class="fu">cumprod</span>(mult)), <span class="at">TAC =</span> <span class="fu">round</span>(tac))</span></code></pre></div>
+<p>The 30 % increase in cycle 2 and the 40 % cut in cycle 4 are
+truncated, and the TAC path no longer equals the cumulative product of
+the multipliers.</p>
+<h3 data-number="5.4.4" id="areas"><span class="header-section-number">5.4.4</span> Areas</h3>
+<p>For a stock with areas in the <code>unit</code> dimension,
+<code>flicc.is()</code> sets one catch target per unit and management
+year:</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><code>area_tac</code></th>
+<th><code>catch_area</code></th>
+<th>TAC per area</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>&quot;split&quot;</code> (default)</td>
+<td><code>NULL</code></td>
+<td>none: one stock-wide target</td>
+</tr>
+<tr class="even">
+<td><code>&quot;split&quot;</code></td>
+<td>shares, e.g. <code>c(a = 0.3, b = 0.7, c = 0)</code></td>
+<td>stock TAC
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>×</mo><annotation encoding="application/x-tex">\times</annotation></semantics></math>
+fixed share</td>
+</tr>
+<tr class="odd">
+<td><code>&quot;split&quot;</code></td>
+<td><code>&quot;recent&quot;</code></td>
+<td>stock TAC
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>×</mo><annotation encoding="application/x-tex">\times</annotation></semantics></math>
+observed catch share by area over the last <code>area_years</code>
+years</td>
+</tr>
+<tr class="even">
+<td><code>&quot;each&quot;</code></td>
+<td>(for the first-cycle split of a scalar <code>initac</code>)</td>
+<td>own previous TAC
+<math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mo>×</mo><annotation encoding="application/x-tex">\times</annotation></semantics></math>
+own multiplier <code>mult.hcr.&lt;unit&gt;</code>, own limits</td>
+</tr>
+</tbody>
+</table>
+<p>Areas with a zero share stay closed. The per-area assessment and HCR
+options, and how they connect, are documented in mse-02.</p>
 <h1 data-number="6" id="assembling-the-management-procedure"><span class="header-section-number">6</span> Assembling the management
 procedure</h1>
 <p>The OM <code>om</code> and the OEM <code>oem</code> (with
 <code>sampling.lfd.oem()</code>, <code>season = FALSE</code>) are built
-in mse-02. Given those, alternative MPs differ only in the
+in mse-03. Given those, alternative MPs differ only in the
 <code>hcr</code> element:</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mse)</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>est <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.sa, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">lhpar =</span> lhpar, <span class="at">sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;dsnormal&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
-<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">settings =</span> <span class="fu">list</span>(<span class="at">pop_model =</span> <span class="st">&quot;gtg&quot;</span>, <span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>,</span>
-<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">ngtg =</span> <span class="dv">13</span>, <span class="at">maxsd =</span> <span class="dv">2</span>,</span>
-<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>),  <span class="co"># Section 7.3</span></span>
-<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>                  <span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>,                  <span class="co"># Section 8</span></span>
-<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>                  <span class="at">spr_ref =</span> <span class="dv">40</span>),</span>
-<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">thresh =</span> <span class="fl">0.75</span>, <span class="at">ess.g =</span> <span class="dv">150</span>, <span class="at">nyrs =</span> <span class="dv">5</span>,</span>
-<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi =</span> <span class="fu">c</span>(<span class="st">&quot;spr&quot;</span>, <span class="st">&quot;mean&quot;</span>), <span class="at">pool =</span> <span class="st">&quot;none&quot;</span>,</span>
-<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">refit_sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
-<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_restart =</span> <span class="dv">1</span>, <span class="at">outer_parallel =</span> <span class="cn">TRUE</span>))</span>
-<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a>isys <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">initac =</span> initac, <span class="at">dtaclow =</span> <span class="fl">0.7</span>, <span class="at">dtacupp =</span> <span class="fl">1.2</span>))</span>
-<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a>hcrs <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
-<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a>  <span class="co"># trend x status</span></span>
-<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi    =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> lbi.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a>             <span class="at">gear =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>, <span class="at">b3 =</span> <span class="fl">0.5</span>, <span class="at">b4 =</span> <span class="fl">0.75</span>,</span>
-<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a>             <span class="at">dlow =</span> <span class="sc">-</span><span class="fl">0.2</span>, <span class="at">dopt =</span> <span class="dv">0</span>, <span class="at">dhi =</span> <span class="fl">0.15</span>, <span class="at">n1 =</span> <span class="dv">2</span>, <span class="at">n2 =</span> <span class="dv">3</span>)),</span>
-<span id="cb10-23"><a href="#cb10-23" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rb: trend and SPR safeguard only</span></span>
-<span id="cb10-24"><a href="#cb10-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">rb     =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-25"><a href="#cb10-25" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
-<span id="cb10-26"><a href="#cb10-26" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with the ICES-type f = Lmean / Lmean(F = M)</span></span>
-<span id="cb10-27"><a href="#cb10-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Lm =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-28"><a href="#cb10-28" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;LBImean.Gillnet&quot;</span>,</span>
-<span id="cb10-29"><a href="#cb10-29" aria-hidden="true" tabindex="-1"></a>             <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
-<span id="cb10-30"><a href="#cb10-30" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with f = Ztgt / Z</span></span>
-<span id="cb10-31"><a href="#cb10-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Z  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
-<span id="cb10-32"><a href="#cb10-32" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;Zrel&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)))</span>
-<span id="cb10-33"><a href="#cb10-33" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-34"><a href="#cb10-34" aria-hidden="true" tabindex="-1"></a>mps <span class="ot">&lt;-</span> <span class="fu">lapply</span>(hcrs, <span class="cf">function</span>(h) <span class="fu">mpCtrl</span>(<span class="fu">list</span>(<span class="at">est =</span> est, <span class="at">hcr =</span> h, <span class="at">isys =</span> isys)))</span>
-<span id="cb10-35"><a href="#cb10-35" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-36"><a href="#cb10-36" aria-hidden="true" tabindex="-1"></a>mseargs <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">iy =</span> <span class="dv">2024</span>, <span class="at">fy =</span> <span class="dv">2054</span>, <span class="at">y0 =</span> <span class="dv">2015</span>, <span class="at">data_lag =</span> <span class="dv">1</span>,</span>
-<span id="cb10-37"><a href="#cb10-37" aria-hidden="true" tabindex="-1"></a>                <span class="at">management_lag =</span> <span class="dv">1</span>, <span class="at">frq =</span> <span class="dv">2</span>, <span class="at">it =</span> nsim)</span>
-<span id="cb10-38"><a href="#cb10-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb10-39"><a href="#cb10-39" aria-hidden="true" tabindex="-1"></a>runs <span class="ot">&lt;-</span> <span class="fu">lapply</span>(mps, <span class="cf">function</span>(ctrl)</span>
-<span id="cb10-40"><a href="#cb10-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mp</span>(om, <span class="at">oem =</span> oem, <span class="at">ctrl =</span> ctrl, <span class="at">args =</span> mseargs, <span class="at">parallel =</span> <span class="cn">TRUE</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(mse)</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>est <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.sa, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">lhpar =</span> lhpar, <span class="at">sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;dsnormal&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">settings =</span> <span class="fu">list</span>(<span class="at">pop_model =</span> <span class="st">&quot;gtg&quot;</span>, <span class="at">obs_model =</span> <span class="st">&quot;dm&quot;</span>, <span class="at">CVL =</span> <span class="fl">0.1</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>                  <span class="at">ngtg =</span> <span class="dv">13</span>, <span class="at">maxsd =</span> <span class="dv">2</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>),  <span class="co"># Section 7.3</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>                  <span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>,                  <span class="co"># Section 8</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>                  <span class="at">spr_ref =</span> <span class="dv">40</span>),</span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">spr =</span> <span class="dv">40</span>, <span class="at">thresh =</span> <span class="fl">0.75</span>, <span class="at">ess.g =</span> <span class="dv">150</span>, <span class="at">nyrs =</span> <span class="dv">5</span>,</span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi =</span> <span class="fu">c</span>(<span class="st">&quot;spr&quot;</span>, <span class="st">&quot;mean&quot;</span>), <span class="at">pool =</span> <span class="st">&quot;none&quot;</span>,</span>
+<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a>  <span class="at">refit_sel_fun =</span> <span class="fu">c</span>(<span class="st">&quot;logistic&quot;</span>, <span class="st">&quot;logistic&quot;</span>),</span>
+<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">n_restart =</span> <span class="dv">1</span>, <span class="at">outer_parallel =</span> <span class="cn">TRUE</span>))</span>
+<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>isys <span class="ot">&lt;-</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> flicc.is, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>  <span class="at">initac =</span> initac, <span class="at">dtaclow =</span> <span class="fl">0.7</span>, <span class="at">dtacupp =</span> <span class="fl">1.2</span>))</span>
+<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>hcrs <span class="ot">&lt;-</span> <span class="fu">list</span>(</span>
+<span id="cb12-19"><a href="#cb12-19" aria-hidden="true" tabindex="-1"></a>  <span class="co"># trend x status</span></span>
+<span id="cb12-20"><a href="#cb12-20" aria-hidden="true" tabindex="-1"></a>  <span class="at">lbi    =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> lbi.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-21"><a href="#cb12-21" aria-hidden="true" tabindex="-1"></a>             <span class="at">gear =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">b1 =</span> <span class="fl">0.1</span>, <span class="at">b2 =</span> <span class="fl">0.3</span>, <span class="at">b3 =</span> <span class="fl">0.5</span>, <span class="at">b4 =</span> <span class="fl">0.75</span>,</span>
+<span id="cb12-22"><a href="#cb12-22" aria-hidden="true" tabindex="-1"></a>             <span class="at">dlow =</span> <span class="sc">-</span><span class="fl">0.2</span>, <span class="at">dopt =</span> <span class="dv">0</span>, <span class="at">dhi =</span> <span class="fl">0.15</span>, <span class="at">n1 =</span> <span class="dv">2</span>, <span class="at">n2 =</span> <span class="dv">3</span>)),</span>
+<span id="cb12-23"><a href="#cb12-23" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rb: trend and SPR safeguard only</span></span>
+<span id="cb12-24"><a href="#cb12-24" aria-hidden="true" tabindex="-1"></a>  <span class="at">rb     =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-25"><a href="#cb12-25" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
+<span id="cb12-26"><a href="#cb12-26" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with the ICES-type f = Lmean / Lmean(F = M)</span></span>
+<span id="cb12-27"><a href="#cb12-27" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Lm =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-28"><a href="#cb12-28" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;LBImean.Gillnet&quot;</span>,</span>
+<span id="cb12-29"><a href="#cb12-29" aria-hidden="true" tabindex="-1"></a>             <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)),</span>
+<span id="cb12-30"><a href="#cb12-30" aria-hidden="true" tabindex="-1"></a>  <span class="co"># rfb with f = Ztgt / Z</span></span>
+<span id="cb12-31"><a href="#cb12-31" aria-hidden="true" tabindex="-1"></a>  <span class="at">rfb_Z  =</span> <span class="fu">mseCtrl</span>(<span class="at">method =</span> rfb.flicc.hcr, <span class="at">args =</span> <span class="fu">list</span>(</span>
+<span id="cb12-32"><a href="#cb12-32" aria-hidden="true" tabindex="-1"></a>             <span class="at">index =</span> <span class="st">&quot;LBIspr.Gillnet&quot;</span>, <span class="at">f =</span> <span class="st">&quot;Zrel&quot;</span>, <span class="at">spr_trigger =</span> <span class="fl">0.25</span>)))</span>
+<span id="cb12-33"><a href="#cb12-33" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-34"><a href="#cb12-34" aria-hidden="true" tabindex="-1"></a>mps <span class="ot">&lt;-</span> <span class="fu">lapply</span>(hcrs, <span class="cf">function</span>(h) <span class="fu">mpCtrl</span>(<span class="fu">list</span>(<span class="at">est =</span> est, <span class="at">hcr =</span> h, <span class="at">isys =</span> isys)))</span>
+<span id="cb12-35"><a href="#cb12-35" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-36"><a href="#cb12-36" aria-hidden="true" tabindex="-1"></a>mseargs <span class="ot">&lt;-</span> <span class="fu">list</span>(<span class="at">iy =</span> <span class="dv">2024</span>, <span class="at">fy =</span> <span class="dv">2054</span>, <span class="at">y0 =</span> <span class="dv">2015</span>, <span class="at">data_lag =</span> <span class="dv">1</span>,</span>
+<span id="cb12-37"><a href="#cb12-37" aria-hidden="true" tabindex="-1"></a>                <span class="at">management_lag =</span> <span class="dv">1</span>, <span class="at">frq =</span> <span class="dv">2</span>, <span class="at">it =</span> nsim)</span>
+<span id="cb12-38"><a href="#cb12-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb12-39"><a href="#cb12-39" aria-hidden="true" tabindex="-1"></a>runs <span class="ot">&lt;-</span> <span class="fu">lapply</span>(mps, <span class="cf">function</span>(ctrl)</span>
+<span id="cb12-40"><a href="#cb12-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mp</span>(om, <span class="at">oem =</span> oem, <span class="at">ctrl =</span> ctrl, <span class="at">args =</span> mseargs, <span class="at">parallel =</span> <span class="cn">TRUE</span>))</span></code></pre></div>
 <p><code>outer_parallel = TRUE</code> is set because <code>mp()</code>
 runs in parallel here; with <code>parallel = FALSE</code> in
 <code>mp()</code>, use <code>parallel = TRUE, workers = n</code> in
@@ -896,10 +1088,10 @@ one TMB call.</li>
 argument of <code>flicc.sa()</code> (both default to 40). If they
 differ, every indicator call falls back to one extra TMB evaluation per
 iteration.</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">Fspr40_stored =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Fspr30_tmb    =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">30</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBIspr        =</span> <span class="fu">system.time</span>(<span class="fu">LBIspr</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBImean       =</span> <span class="fu">system.time</span>(<span class="fu">LBImean</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]])</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="fu">c</span>(<span class="at">Fspr40_stored =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">40</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">Fspr30_tmb    =</span> <span class="fu">system.time</span>(<span class="fu">fspr_flicc</span>(fit, <span class="at">spr =</span> <span class="dv">30</span>))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBIspr        =</span> <span class="fu">system.time</span>(<span class="fu">LBIspr</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]],</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">LBImean       =</span> <span class="fu">system.time</span>(<span class="fu">LBImean</span>(fit))[[<span class="st">&quot;elapsed&quot;</span>]])</span></code></pre></div>
 <h2 data-number="7.2" id="settings-that-control-fit-time"><span class="header-section-number">7.2</span> Settings that control fit
 time</h2>
 <table>
@@ -1018,24 +1210,24 @@ the last one or two years of the window.</li>
 once, in a conditioning step on the historical sampled data with the
 full time series, and then pass it to <code>flicc.sa()</code> with a
 tight prior, which holds it effectively fixed:</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. conditioning fit: sigmaF estimated with the default prior</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>sigmaF_hat <span class="ot">&lt;-</span> <span class="fu">exp</span>(fit<span class="sc">$</span>par<span class="sc">$</span>mpd[fit<span class="sc">$</span>par<span class="sc">$</span>par <span class="sc">==</span> <span class="st">&quot;log_sigmaF&quot;</span>])</span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>sigmaF_hat</span>
-<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. fits with sigmaF held at the estimate (tight prior on log sigmaF)</span></span>
-<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>settings_fix <span class="ot">&lt;-</span> <span class="fu">modifyList</span>(settings,</span>
-<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">list</span>(<span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>)))</span>
-<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>t_fix <span class="ot">&lt;-</span> <span class="fu">system.time</span>(</span>
-<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  fit_fix <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
-<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>                    <span class="at">settings =</span> settings_fix)</span>
-<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a>)[[<span class="st">&quot;elapsed&quot;</span>]]</span>
-<span id="cb12-12"><a href="#cb12-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb12-13"><a href="#cb12-13" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">estimated =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fit, <span class="at">evals =</span> fit<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
-<span id="cb12-14"><a href="#cb12-14" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit<span class="sc">$</span>max_gradient,</span>
-<span id="cb12-15"><a href="#cb12-15" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)),</span>
-<span id="cb12-16"><a href="#cb12-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">fixed     =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fix, <span class="at">evals =</span> fit_fix<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
-<span id="cb12-17"><a href="#cb12-17" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit_fix<span class="sc">$</span>max_gradient,</span>
-<span id="cb12-18"><a href="#cb12-18" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_fix<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)))</span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. conditioning fit: sigmaF estimated with the default prior</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>sigmaF_hat <span class="ot">&lt;-</span> <span class="fu">exp</span>(fit<span class="sc">$</span>par<span class="sc">$</span>mpd[fit<span class="sc">$</span>par<span class="sc">$</span>par <span class="sc">==</span> <span class="st">&quot;log_sigmaF&quot;</span>])</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>sigmaF_hat</span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 2. fits with sigmaF held at the estimate (tight prior on log sigmaF)</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>settings_fix <span class="ot">&lt;-</span> <span class="fu">modifyList</span>(settings,</span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>                           <span class="fu">list</span>(<span class="at">prior_sigmaF =</span> <span class="fu">c</span>(<span class="fu">log</span>(sigmaF_hat), <span class="fl">0.01</span>, <span class="dv">1</span>)))</span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>t_fix <span class="ot">&lt;-</span> <span class="fu">system.time</span>(</span>
+<span id="cb14-9"><a href="#cb14-9" aria-hidden="true" tabindex="-1"></a>  fit_fix <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
+<span id="cb14-10"><a href="#cb14-10" aria-hidden="true" tabindex="-1"></a>                    <span class="at">settings =</span> settings_fix)</span>
+<span id="cb14-11"><a href="#cb14-11" aria-hidden="true" tabindex="-1"></a>)[[<span class="st">&quot;elapsed&quot;</span>]]</span>
+<span id="cb14-12"><a href="#cb14-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb14-13"><a href="#cb14-13" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">estimated =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fit, <span class="at">evals =</span> fit<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
+<span id="cb14-14"><a href="#cb14-14" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit<span class="sc">$</span>max_gradient,</span>
+<span id="cb14-15"><a href="#cb14-15" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)),</span>
+<span id="cb14-16"><a href="#cb14-16" aria-hidden="true" tabindex="-1"></a>      <span class="at">fixed     =</span> <span class="fu">c</span>(<span class="at">time =</span> t_fix, <span class="at">evals =</span> fit_fix<span class="sc">$</span>opt<span class="sc">$</span>evaluations[[<span class="st">&quot;function&quot;</span>]],</span>
+<span id="cb14-17"><a href="#cb14-17" aria-hidden="true" tabindex="-1"></a>                    <span class="at">max_grad =</span> fit_fix<span class="sc">$</span>max_gradient,</span>
+<span id="cb14-18"><a href="#cb14-18" aria-hidden="true" tabindex="-1"></a>                    <span class="at">SPR_last =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_fix<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>)))</span></code></pre></div>
 <p>In the MSE, the conditioning step is done once per iteration on the
 historical OEM samples (or once on the median), before <code>mp()</code>
 is called, and the estimate is then passed in
@@ -1106,13 +1298,13 @@ Negative log-likelihoods are comparable only between fits with the same
 <code>LBImean()</code> use the unpooled observed compositions, so the
 indicators themselves are not affected by <code>Lplus</code>, only the
 fit.</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>fit_rob <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a>                  <span class="at">settings =</span> <span class="fu">modifyList</span>(settings,</span>
-<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>                                        <span class="fu">list</span>(<span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>)))</span>
-<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">default =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
-<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))),</span>
-<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">Lplus50_rob0.001 =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_rob<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
-<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit_rob), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))))</span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a>fit_rob <span class="ot">&lt;-</span> <span class="fu">fiticc</span>(lfd, stklen, <span class="at">sel_fun =</span> sel_fun, <span class="at">catch_by_gear =</span> cbg,</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a>                  <span class="at">settings =</span> <span class="fu">modifyList</span>(settings,</span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>                                        <span class="fu">list</span>(<span class="at">Lplus =</span> <span class="dv">50</span>, <span class="at">rob_eps =</span> <span class="fl">0.001</span>)))</span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a><span class="fu">rbind</span>(<span class="at">default =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))),</span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>      <span class="at">Lplus50_rob0.001 =</span> <span class="fu">c</span>(<span class="at">SPR =</span> <span class="fu">tail</span>(<span class="fu">c</span>(fit_rob<span class="sc">$</span>report<span class="sc">$</span>spr), <span class="dv">1</span>),</span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>                  <span class="at">LBIspr =</span> <span class="fu">sapply</span>(<span class="fu">LBIspr</span>(fit_rob), <span class="cf">function</span>(x) <span class="fu">tail</span>(<span class="fu">c</span>(<span class="fu">index</span>(x)), <span class="dv">1</span>))))</span></code></pre></div>
 <h2 data-number="8.4" id="boundary-fits-and-selectivity-form"><span class="header-section-number">8.4</span> Boundary fits and selectivity
 form</h2>
 <p>The SPR boundary check (<code>spr_max</code>) and the rescue refit
@@ -1353,6 +1545,6 @@ the rfb rule</td>
 </tbody>
 </table>
 <h1 data-number="12" id="session-information"><span class="header-section-number">12</span> Session information</h1>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
 </body>
 </html>

@@ -36,20 +36,29 @@
   <code>rfb.flicc.hcr()</code> and <code>flicc.is()</code> connect inside <code>mp()</code>;
   the indicators SPR, Z/Z<sub>tgt</sub>, <code>LBIspr</code> and <code>LBImean</code>
   (L<sub>mean</sub>/L<sub>mean</sub>(F&nbsp;=&nbsp;M)), levels versus trends; the trend&nbsp;&times;&nbsp;status
-  rule and the new rfb-type rule; run time (Fspr in TMB, fit settings, estimating
+  rule, the new rfb-type rule and TAC control with <code>flicc.is()</code>; run time (Fspr in TMB, fit settings, estimating
   &sigma;<sub>F</sub> once and fixing it); GTG tail cut, <code>rob_eps</code> and
   <code>Lplus</code> for robust repeated fits.</p>
 </div>
 
+<div class="card">
+  <h3><a href="mse-02-multiple-areas.html">2. FLicc management procedures for stocks with multiple areas</a></h3>
+  <p>Areas as units in the OM and the length-sampling OEM; three levels of spatial resolution:
+  stock-wide assessment with a fixed or recent-catch split of the TAC, and per-area assessments,
+  HCRs and TACs (<code>flicc.sa(unit_fit = "each")</code>, <code>lbi.hcr(units = )</code>,
+  <code>flicc.is(area_tac = "each")</code>); what a per-area length composition measures under
+  movement, and requirements for the OM projection.</p>
+</div>
+
 <div class="card planned">
-  <h3>2. Splendid alfonsino FLicc MSE</h3>
+  <h3>3. Splendid alfonsino FLicc MSE</h3>
   <p><span class="tag">In preparation.</span> Length-selective operating model with a dome-shaped
   trawl and a gillnet, length sampling with <code>sampling.lfd.oem()</code>, and full MSE runs of
   the alternative FLicc management procedures.</p>
 </div>
 
 <div class="card planned">
-  <h3>3. Robustness set</h3>
+  <h3>4. Robustness set</h3>
   <p><span class="tag">In preparation.</span> Misspecified M, Linf, CVL and selectivity form in the
   estimator; which HCR components inherit the bias and which do not.</p>
 </div>

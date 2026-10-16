@@ -22,7 +22,7 @@ library(ggplot2)
 library(FLicc)
 
 # Only the single-fit examples are evaluated here (seconds). The mp() set-up
-# in Section 6 is shown but not run; the full runs live in mse-02 and use the
+# in Section 6 is shown but not run; the full runs live in mse-03 and use the
 # cached results in rdata/ (see inst/scripts/render_docs.R).
 rdata <- getOption("FLicc.rdata", "rdata")
 ```
@@ -43,8 +43,9 @@ The operating model (OM) and the length-sampling observation error model
 | Doc | Content | Status |
 |-----|---------|--------|
 | **mse-01 (this)** | FLicc MP modules: flow, indicators, HCRs, run time, robustness options | prototype |
-| mse-02 | Splendid alfonsino length-selective OM (FLRef), `sampling.lfd.oem()` and full FLicc MSE runs | planned (OM in *FLicc_MSE_lite_OM_v3*) |
-| mse-03 | Robustness set: misspecified M, Linf, CVL and selectivity form | planned |
+| mse-02 | Multiple areas: per-area assessments, HCRs and TACs | prototype |
+| mse-03 | Splendid alfonsino length-selective OM (FLRef), `sampling.lfd.oem()` and full FLicc MSE runs | planned (OM in *FLicc_MSE_lite_OM_v3*) |
+| mse-04 | Robustness set: misspecified M, Linf, CVL and selectivity form | planned |
 | FLRef `lfd-01` | Length-frequency simulation and `sampling.lfd.oem()` | [FLRef docs](https://henning-winker.github.io/FLRef/) |
 
 All single-fit examples below use the `alfonsino` example data in FLicc, so
@@ -103,7 +104,7 @@ Two design decisions run through all modules:
 | `flicc.sa()` | `est` | `attr(stk, "lfd")`, `attr(stk, "catch_gear")` | `ind` (indicators, year x iter) | `conv.est`, `sprbound.est`, `refit.est`, `used.est`, `Lref.<gear>`, `Lmeanref.<gear>` |
 | `lbi.hcr()` | `hcr` | `ind[[gear]]`, `ind$SPR` | multiplier | `trend.hcr`, `metric.hcr`, `decision.hcr`, `mult.hcr` |
 | `rfb.flicc.hcr()` | `hcr` | `ind[[index]]`, `ind[[f]]`, `ind$SPR` | multiplier | `r.hcr`, `f.hcr`, `b.hcr`, `mult.hcr`, `decision.hcr` |
-| `flicc.is()` | `isys` | multiplier, previous TAC, `decision.hcr` | TAC for `ay + management_lag` | `tac.is` |
+| `flicc.is()` | `isys` | multiplier, previous TAC, `decision.hcr` | TAC for the management years (by area if requested) | `tac.is`, `tac.is.<unit>` |
 
 ## Timing within a cycle
 
@@ -123,9 +124,10 @@ With the usual `mse` arguments (`iy`, `fy`, `y0`, `data_lag`,
 
 ## Inputs from the OEM
 
-1. **Length compositions.** `attr(stk, "lfd")` is summed over units
-   (`unitSums()`), so area- or sex-structured samples are pooled into one
-   composition per gear. Each gear-year composition is then rescaled to the
+1. **Length compositions.** By default `attr(stk, "lfd")` is summed over
+   units (`unitSums()`), so area- or sex-structured samples are pooled into
+   one composition per gear; `unit_fit = "each"` fits each area separately
+   instead (mse-02). Seasonal samples are summed to annual compositions. Each gear-year composition is then rescaled to the
    effective sample size `ess.g` with `lfdess()`. The OEM's own sample size
    (`ess_len`, typically hundreds of fish) would give the multinomial or
    Dirichlet-multinomial likelihood far too much weight relative to the
@@ -141,8 +143,8 @@ With the usual `mse` arguments (`iy`, `fy`, `y0`, `data_lag`,
    cycles and builds the length template with `stocklen()` for each
    iteration's composition.
 
-The OEM must deliver **annual** compositions (`season = FALSE` in
-`sampling.lfd.oem()`); seasonal samples are not pooled by `flicc.sa()`.
+With `sampling.lfd.oem(season = TRUE)`, `flicc.sa()` sums the seasonal
+samples into annual compositions (FLicc is an annual model).
 
 ## One fit per iteration
 
@@ -328,7 +330,7 @@ $$
 This is the main design principle of the HCRs below: the trend component
 (`r`) is robust to the life-history assumptions, while any level component
 (`f`, the SPR status, the SPR safeguard `b`) inherits the model's scale bias
-and is where the robustness set (mse-03) has to show that the MP is still
+and is where the robustness set (mse-04) has to show that the MP is still
 precautionary. Between refits the reference can still move when selectivity
 or CVL are re-estimated; the tracked `Lref.<gear>` and `Lmeanref.<gear>`
 show by how much.
@@ -432,19 +434,116 @@ rbind(rb          = rfb_parts(fit, idx_g),
       f_Zrel      = rfb_parts(fit, idx_g, f = "Zrel"))
 ```
 
-## Implementation system: `flicc.is()`
+## Implementation system: TAC control with `flicc.is()`
 
-`flicc.is()` converts the multiplier into a TAC,
-$TAC_y = TAC_{y-1} \times \text{mult}$, for the iterations flagged by
-`decision.hcr > 2` limits the change to `dtaclow`–`dtacupp` times the
-previous TAC and caps it at `Cmax`, and sets it for `ay + management_lag`.
-The first cycle needs `initac`, normally the last observed catch. With
-`catch_area` the TAC is split across units (areas) by fixed shares.
+The HCRs only say *how much* to change the TAC. `flicc.is()` is the TAC
+control: it keeps track of the TAC, applies the change, enforces the limits,
+sets the TAC for the right years and, for spatial stocks, divides it among
+areas. It is the only module that knows the absolute catch level.
+
+### What happens in one cycle
+
+| Step | Stock TAC (default) | Source |
+|---|---|---|
+| 1. Multiplier | $\text{mult}_i$ for each iteration $i$ | HCR `ctrl` (`ctrl@iters[1, "value", ]`) |
+| 2. Previous TAC | `initac` if `ay == iy`, else `tac.is` tracked at `ay - frq` | `initac`, tracking |
+| 3. New TAC | $TAC_i = TAC^{prev}_i \times \text{mult}_i$ | |
+| 4. Change limits | for flagged $i$: $TAC_i \in [\,\text{dtaclow},\ \text{dtacupp}\,] \times TAC^{prev}_i$ | `decision.hcr > 2` from the HCR |
+| 5. Cap | for flagged $i$: $TAC_i \leq$ `Cmax` | |
+| 6. Years | same TAC for every management year `args$mys` $= ay + \text{mlag}, \dots, ay + \text{mlag} + frq - 1$ | `mp()` args |
+| 7. Areas | optional division among units (Section 5.4.4 and mse-02) | `catch_area`, `area_tac` |
+| 8. Tracking | `tac.is` (and `tac.is.<unit>`) | |
+
+Three points are easy to miss:
+
+* **The TAC is a running product.** Because each TAC is the previous one
+  times a multiplier, `initac` sets the scale of the whole projection, and
+  an iteration whose fit fails simply carries its TAC forward
+  (`mult = 1`). Use the last observed catch (e.g. the mean of the last three
+  years) for `initac`.
+* **Which iterations are limited is decided by the HCR**, through the
+  tracked flag `decision.hcr`. `lbi.hcr()` flags iterations with SPR *below*
+  its `spr_trigger` (limits protect against large swings when the stock is
+  low); `rfb.flicc.hcr()` flags iterations whose safeguard is *inactive*
+  (ICES rfb: stability limits only while $b = 1$, so the safeguard can cut
+  freely). With `spr_trigger = 0` in `lbi.hcr()` no iteration is limited.
+* **With `frq > 1` the TAC is held** for all `frq` management years. Earlier
+  versions set only `ay + management_lag`, which left the following years
+  without a catch target.
+
+### The code (stock TAC)
+
+The core of `flicc.is()` for a stock-wide TAC, stripped of the area
+options:
+
+```{r flicc-is-code, eval = FALSE}
+flicc.is <- function(stk, ctrl, args, tracking, output = "catch",
+                     dtaclow = NA, dtacupp = NA, Cmax = NA, initac = NULL, ...) {
+
+  spread(args)                                   # ay, iy, frq, it, mys, ...
+  mys  <- if (!is.null(args$mys)) args$mys else ay + management_lag
+
+  mult <- c(ctrl@iters[1, "value", ])            # 1. multiplier from the HCR
+
+  prev_tac <- if (ay == iy) rep(initac, it) else # 2. previous TAC
+    c(tracking[metric == "tac.is" & year == ay - frq, data])
+
+  TAC <- prev_tac * mult                         # 3. new TAC
+
+  id <- tracking[metric == "decision.hcr" & year == ay, data > 2]
+  if (!is.na(dtacupp)) TAC[id] <- pmin(TAC[id], prev_tac[id] * dtacupp)  # 4.
+  if (!is.na(dtaclow)) TAC[id] <- pmax(TAC[id], prev_tac[id] * dtaclow)
+  if (!is.na(Cmax))    TAC[id] <- pmin(TAC[id], Cmax)                    # 5.
+
+  ctrl <- fwdControl(lapply(mys, function(y)     # 6. all management years
+    list(year = y, quant = output, value = TAC)))
+
+  track(tracking, "tac.is", ac(ay)) <-           # 8. tracking
+    FLQuant(TAC, dimnames = list(iter = seq_along(TAC)))
+
+  list(ctrl = ctrl, tracking = tracking)
+}
+```
+
+### A worked example
+
+The same arithmetic for one iteration over six assessments, with limits
+of +20 % and −30 % applied in every cycle (`decision.hcr = 3`):
+
+```{r flicc-is-example}
+initac <- 1000
+mult   <- c(1.15, 1.30, 0.95, 0.60, 0.80, 1.05)   # multipliers from the HCR
+tac    <- numeric(length(mult)); prev <- initac
+for (k in seq_along(mult)) {
+  tac[k] <- min(max(prev * mult[k], prev * 0.7), prev * 1.2)
+  prev   <- tac[k]
+}
+data.frame(cycle = seq_along(mult), mult = mult,
+           unlimited = round(initac * cumprod(mult)), TAC = round(tac))
+```
+
+The 30 % increase in cycle 2 and the 40 % cut in cycle 4 are truncated, and
+the TAC path no longer equals the cumulative product of the multipliers.
+
+### Areas
+
+For a stock with areas in the `unit` dimension, `flicc.is()` sets one
+catch target per unit and management year:
+
+| `area_tac` | `catch_area` | TAC per area |
+|---|---|---|
+| `"split"` (default) | `NULL` | none: one stock-wide target |
+| `"split"` | shares, e.g. `c(a = 0.3, b = 0.7, c = 0)` | stock TAC $\times$ fixed share |
+| `"split"` | `"recent"` | stock TAC $\times$ observed catch share by area over the last `area_years` years |
+| `"each"` | (for the first-cycle split of a scalar `initac`) | own previous TAC $\times$ own multiplier `mult.hcr.<unit>`, own limits |
+
+Areas with a zero share stay closed. The per-area assessment and HCR
+options, and how they connect, are documented in mse-02.
 
 # Assembling the management procedure
 
 The OM `om` and the OEM `oem` (with `sampling.lfd.oem()`, `season = FALSE`)
-are built in mse-02. Given those, alternative MPs differ only in the `hcr`
+are built in mse-03. Given those, alternative MPs differ only in the `hcr`
 element:
 
 ```{r mp-ctrl, eval = FALSE}
