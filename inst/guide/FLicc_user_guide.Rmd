@@ -1127,6 +1127,16 @@ rbind(CVL_drawn = tail(tab_drawn, 1),
       CVL_fixed = tail(tab_fixed, 1))
 ```
 
+Here, with the tail cut at 47 cm, drawing CVL makes little difference: the
+unweighted mean SPR in the last year is `r round(tail(tab_drawn$mean_uw, 1), 3)`
+with CVL drawn and `r round(tail(tab_fixed$mean_uw, 1), 3)` with CVL fixed, and the
+effective number of draws `r round(tail(tab_drawn$n_eff, 1), 1)` and
+`r round(tail(tab_fixed$n_eff, 1), 1)`. The cut has already removed the bins where
+CVL acts. Without a cut, CVL draws carry more weight (section 11.1), and keeping
+CVL fixed in the draws is the safer choice. In both ensembles the AIC-weighted
+mean (`r round(tail(tab_fixed$mean_w, 1), 3)`) lies well below the unweighted one,
+because a few draws carry most of the weight.
+
 The profile plots show SPR against the log-likelihood of each draw:
 
 ```{r mc-plots, fig.height = 4.5}
