@@ -43,6 +43,7 @@ for (r in c(1000, 22.3)) {
   f <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
               settings = list(CVL = 0.1, obs_model = "dm"), sel_fixed = list(Gillnet = list(rsd = r)), se = FALSE)
   cat("\n-- Gillnet dsnormal rsd", r, "conv", f$opt$convergence, "\n"); nonfin(f)
+  cat("opt$par:\n"); print(f$opt$par); cat("non-finite pars:", which(!is.finite(f$opt$par)), "\n")
   pb <- f$obj$env$last.par.best
   cat("last.par.best length", length(pb), "opt length", length(f$opt$par), "same", isTRUE(all.equal(unname(pb), unname(f$opt$par))), "\n")
   print(names(f$obj$env$last.par.best)[!names(f$obj$env$last.par.best) %in% names(f$opt$par)])
