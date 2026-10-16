@@ -842,14 +842,32 @@ sf$current
 plot_selF_flicc(sf)
 ```
 
+```{r selF-numbers, include = FALSE}
+gn_cur <- sf$current[sf$current$gear == "Gillnet", ]
+gn_s <- sf$surface[sf$surface$gear == "Gillnet", ]
+eng <- FLicc:::pr_engine_flicc(fit); st <- FLicc:::gear_state_flicc(fit)
+pr_gn <- function(loc, Fg) {
+  S <- function(g, p) sel_curve_flicc(st$Lmid, st$type[[g]], p)
+  eng(st$F[["Trawl"]] * S("Trawl", st$pars[["Trawl"]]) +
+      Fg * S("Gillnet", FLicc:::shift_sel_flicc(st$type[["Gillnet"]], st$pars[["Gillnet"]], loc)))
+}
+ymax <- max(gn_s$YPR)
+v <- pr_gn(sf$Lmat, gn_cur$F)
+gn_lmat <- list(SPR = v[["SPR"]], YPRrel = v[["YPR"]] / ymax)
+f40 <- tryCatch(uniroot(function(f) pr_gn(gn_cur$loc, f)[["SPR"]] - 0.4, c(0, gn_cur$F))$root,
+                error = function(e) NA)
+gn_cut <- if (is.na(f40)) "more than 100" else round(100 * (1 - f40 / gn_cur$F))
+```
+
 How to read it:
 
 - Moving down from the point (less F) or to the right (larger fish first caught)
   raises SPR; the isopleths show what that costs in yield per recruit.
-- Here the gillnet catches at `SL50` = `r round(sf$current$loc[sf$current$gear == "Gillnet"], 1)`,
-  below Lmat (`r round(sf$Lmat, 1)`): at its current F, raising `SL50` to about Lmat
-  gives an SPR near 40% at little loss of YPR, while reaching 40% through F alone
-  needs a large cut.
+- Here the gillnet catches at `SL50` = `r round(gn_cur$loc, 1)`, below Lmat
+  (`r round(sf$Lmat, 1)`). At its current F, raising `SL50` to Lmat gives an SPR
+  of about `r round(100 * gn_lmat$SPR)`% and `r round(100 * gn_lmat$YPRrel)`% of
+  the maximum YPR (now `r round(100 * gn_cur$YPRrel)`%); reaching SPR 40% at the
+  current `SL50` instead needs the gillnet F cut by about `r gn_cut`%.
 - The surfaces are equilibrium per-recruit results at the fitted life history;
   they ignore recruitment changes and are a guide to direction and scale, not a
   forecast.
