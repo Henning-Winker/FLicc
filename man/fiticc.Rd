@@ -40,7 +40,8 @@ parameters (e.g. Linf, k, M) and matching dimensions to \code{lfd}.}
 Supported options include \code{"logistic"}, \code{"normal"},
 and \code{"dsnormal"}.}
 
-\item{catch_by_gear}{Numeric vector of relative catch proportions by gear.
+\item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
+in weight (e.g. landings in tonnes); matched to the predicted catch in weight.
 Must sum to 1.}
 
 \item{settings}{Named list of model settings. Key options include:
@@ -60,8 +61,6 @@ growth formulation.}
   when \code{pop_model = "gamma"}).\}
 
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
-
-\\item\{\code{catch_units}\}\{Units in which \code{catch_by_gear} is compared with the predicted catch shares: \code{"numbers"} (default) or \code{"weight"} (predicted catch-at-length multiplied by weight at length). Use \code{"weight"} when the shares come from landings in tonnes.\}
 
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}

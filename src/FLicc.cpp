@@ -266,7 +266,6 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
-  DATA_INTEGER(catch_units); // 0: catch_by_gear matched in numbers, 1: in weight
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -351,6 +350,7 @@ Type objective_function<Type>::operator() ()
   vector<Type> spr_y(nyear);
   matrix<Type> N_y(nlen, nyear);
   matrix<Type> plen_all_y(nlen, nyear);
+  matrix<Type> catch_share(nyear, ngear);   // predicted catch shares in weight
   matrix<Type> sel_joint(nlen, nyear);
   matrix<Type> Fk_l(nlen, nyear);
 
@@ -450,16 +450,12 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    // predicted gear shares of the catch, in numbers (catch_units = 0) or in
-    // weight (catch_units = 1), compared with catch_by_gear
+    // predicted gear shares of the catch in weight (catch-at-length x weight
+    // at length), compared with catch_by_gear (e.g. landings in tonnes)
     vector<Type> pred_share(ngear);
     for(int g = 0; g < ngear; g++) {
-      if(catch_units == 1) {
-        pred_share(g) = Type(0);
-        for(int l = 0; l < nlen; l++) pred_share(g) += Cpred(l,g) * wt(l,y);
-      } else {
-        pred_share(g) = pred_gear(g);
-      }
+      pred_share(g) = Type(0);
+      for(int l = 0; l < nlen; l++) pred_share(g) += Cpred(l,g) * wt(l,y);
     }
     vector<Type> pred_pgear(ngear);
     Type pred_total = Type(0);
@@ -477,6 +473,7 @@ Type objective_function<Type>::operator() ()
         pred_pgear(g) = Type(0);
       }
     }
+    for(int g = 0; g < ngear; g++) catch_share(y, g) = pred_pgear(g);
 
 
     Type fmax = Type(0);
@@ -827,6 +824,7 @@ Type objective_function<Type>::operator() ()
   REPORT(Sel);        // nlen x ngear
   REPORT(plen);       // nlen x nyear x ngear
   REPORT(spr_y);      // nyear x 1
+  REPORT(catch_share); // nyear x ngear, predicted catch shares in weight
   REPORT(Fk);         // nyear x ngear on natural scale
   REPORT(sigmaF);
   REPORT(N_y);

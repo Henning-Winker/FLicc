@@ -154,7 +154,8 @@ one entry per gear in the order of `names(lfd)` (here Trawl, Gillnet):
   fish.
 - **`catch_by_gear`**: the share of the total catch taken by each gear, e.g.
   `c(0.7, 0.3)` for 70% and 30%. It tells the model how to split F between the
-  gears; FLicc matches it to the predicted catch **in numbers** of fish.
+  gears; FLicc matches it to the predicted catch **in weight**, so the shares
+  of the landings in tonnes can be used directly.
 
 ```{r qs-fit}
 fit1 <- fiticc(lfd, stklen,
@@ -623,7 +624,13 @@ wide right-hand SD forces a shape the data reject, which shows as very large dAI
 
 $F_{g,y}(L) = F_{g,y} S_g(L)$, $Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Gear shares of F
 are informed by `catch_by_gear` through a soft constraint on the predicted
-catch shares (`catch.sd`, default 0.05).
+catch shares in weight (`catch.sd`, default 0.05):
+$$
+\log\frac{\hat C^w_{g,y}}{\hat C^w_{G,y}} \sim N\!\left(\log\frac{c_{g,y}}{c_{G,y}},\ \texttt{catch.sd}^2\right),
+\qquad \hat C^w_{g,y} = \sum_L C_{g,y}(L)\, W(L),
+$$
+where $c_{g,y}$ is `catch_by_gear` and $G$ the last gear. The predicted shares
+are in `fit$obj$report()$catch_share`.
 
 ## Expected catch and length composition
 

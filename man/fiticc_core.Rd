@@ -36,7 +36,8 @@ containing stock and life-history information.}
 gear. Supported options include \code{"logistic"}, \code{"normal"}, and
 \code{"dsnormal"}.}
 
-\item{catch_by_gear}{Relative catch by gear. Can be supplied as a numeric
+\item{catch_by_gear}{Relative catch by gear in weight (e.g. landings in tonnes),
+matched to the predicted catch in weight. Can be supplied as a numeric
 vector or as an \code{FLQuants} object.}
 
 \item{settings}{A named list of model settings. Recognized elements are

@@ -67,10 +67,13 @@ check <- function(section, label, ok) {
 }
 ```
 
-# Default results are unchanged
+# Default results and catch shares in weight
 
-Without the new settings, fits must reproduce `main`. Reference values from
-`main` (FLicc 1.0.9, same data and settings):
+`catch_by_gear` is matched to the predicted catch in **weight** (in `main` it
+was matched in numbers, a bug). Default fits therefore differ from `main`; the
+reference values from `main` (FLicc 1.0.9, same data and settings) are shown for
+comparison, and the check is that the predicted catch shares in weight match
+`catch_by_gear`.
 
 ```{r regression}
 ref_main <- data.frame(obs_model = c("mn", "dm", "nb"),
@@ -80,10 +83,12 @@ fit_def <- lapply(setNames(ref_main$obs_model, ref_main$obs_model), function(om)
 ref_main$nll_branch <- sapply(fit_def, function(f) round(f$opt$objective, 4))
 ref_main$spr_branch <- sapply(fit_def, lastspr)
 ref_main
-for (i in seq_len(nrow(ref_main)))
-  check("Defaults", paste("default", ref_main$obs_model[i], "fit matches main"),
-        abs(ref_main$nll_branch[i] - ref_main$nll[i]) / ref_main$nll[i] < 1e-4 &&
-          abs(ref_main$spr_branch[i] - ref_main$spr[i]) < 1e-3)
+for (om in names(fit_def)) {
+  cs <- fit_def[[om]]$obj$report(fit_def[[om]]$obj$env$last.par.best)$catch_share
+  check("Defaults", paste("default", om, "fit: predicted catch shares in weight match catch_by_gear"),
+        max(abs(sweep(cs, 2, cbg / sum(cbg)))) < 0.05)
+}
+colMeans(fit_def$dm$obj$report(fit_def$dm$obj$env$last.par.best)$catch_share)
 check("Defaults", "no tail cut by default", fit_def$mn$tmb_data$cut_bin == -1)
 check("Defaults", "F is not a random effect by default", !isTRUE(fit_def$mn$F_re))
 f_d <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = list(CVL = 0.1))

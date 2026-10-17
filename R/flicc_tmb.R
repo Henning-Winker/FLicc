@@ -3,7 +3,7 @@
 #' @param lfd named list of FLQuant objects, one per gear
 #' @param stklen FLStockLen-like object with matching years
 #' @param sel_fun selectivity function per gear
-#' @param catch_by_gear numeric vector of relative catch by gear
+#' @param catch_by_gear numeric vector of relative catch by gear, in weight
 #' @param settings list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd
 #' @param years optional vector of years to include
 #'
@@ -115,9 +115,6 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   }
 
   catch_sd <- if (!is.null(settings$catch.sd)) as.numeric(settings$catch.sd) else 0.05
-  catch_units <- if (!is.null(settings$catch_units)) settings$catch_units else "numbers"
-  if (!catch_units %in% c("numbers", "weight"))
-    stop("settings$catch_units must be \"numbers\" or \"weight\".")
 
   # observation model
   obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "nb"
@@ -271,7 +268,6 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     mat        = unname(mat_mat),
     catch_wt   = unname(catch_wt),
     catch_sd   = catch_sd,
-    catch_units = as.integer(catch_units == "weight"),
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
     ngtg       = as.integer(ngtg),
@@ -460,7 +456,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param sel_fun Character vector giving the selectivity function for each
 #'   gear. Supported options include \code{"logistic"}, \code{"normal"}, and
 #'   \code{"dsnormal"}.
-#' @param catch_by_gear Relative catch by gear. Can be supplied as a numeric
+#' @param catch_by_gear Relative catch by gear in weight (e.g. landings in
+#'   tonnes), matched to the predicted catch in weight. Can be supplied as a numeric
 #'   vector or as an \code{FLQuants} object.
 #' @param settings A named list of model settings. Recognized elements are
 #'   \code{CVL}, \code{GL}, \code{catch.sd}, and \code{prior_sigmaF}. Missing
@@ -537,7 +534,6 @@ fiticc_core <- function(lfd, stklen,
     CVL = 0.1,
     GL = 50,
     catch.sd = 0.05,
-    catch_units = "numbers",
     pop_model = "gtg",
     obs_model = "mn",
     ngtg = 13,
@@ -889,7 +885,8 @@ fiticc_core <- function(lfd, stklen,
 #'   Supported options include \code{"logistic"}, \code{"normal"},
 #'   and \code{"dsnormal"}.
 #'
-#' @param catch_by_gear Numeric vector of relative catch proportions by gear.
+#' @param catch_by_gear Numeric vector of relative catch proportions by gear,
+#'   in weight (e.g. landings in tonnes); matched to the predicted catch in weight.
 #'   Must sum to 1.
 #'
 #' @param settings Named list of model settings. Key options include:
@@ -909,12 +906,6 @@ fiticc_core <- function(lfd, stklen,
 #'       when \code{pop_model = "gamma"}).}
 #'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
-#'
-#'     \item{\code{catch_units}}{Units in which \code{catch_by_gear} is
-#'       compared with the predicted catch shares: \code{"numbers"} (default)
-#'       or \code{"weight"} (predicted catch-at-length multiplied by weight at
-#'       length). Use \code{"weight"} when the shares come from landings in
-#'       tonnes.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
