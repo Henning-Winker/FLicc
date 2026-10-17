@@ -1,0 +1,98 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 17:07:56 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> shares <- function(fit) {
++     eng <- FLicc:::pr_engine_flicc(fit)
++     st <- FLicc:::gear_state_flicc(fit)
++     S <- lapply(st$gears, function(g) sel_curve_flicc(st$Lmid, 
++         st$type[[g]], st$pars[[g]]))
++     Fl <- Reduce(`+`, Map(function(f, s) f * s, st$F, S))
++     d <- eng(Fl, deta .... [TRUNCATED] 
+
+> for (case in list(list(nm = "raw mn", lfd = lfd, set = list(CVL = 0.1)), 
++     list(nm = "ess200 dm", lfd = lfdess(lfd, ess.g = 200), set = list(CVL = 0.1, 
++         obs_model = "dm")))) {
++     f <- fiticc(case$lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++         settings = case$set)
++    .... [TRUNCATED] 
+
+== raw mn  conv 0 maxgrad 0.01  SPR last 0.099  F by gear (last yr) 0.3249 0.1023 
+reported catch_share (weight), mean over years: 0.7 0.3 
+        Trawl Gillnet
+numbers 0.919   0.081
+weight  0.705   0.295
+ [1] 0.073 0.070 0.102 0.080 0.115 0.119 0.109 0.133 0.156 0.093 0.137 0.099
+
+== ess200 dm  conv 0 maxgrad 0.0099  SPR last 0.136  F by gear (last yr) 0.2572 0.0779 
+reported catch_share (weight), mean over years: 0.7 0.3 
+        Trawl Gillnet
+numbers 0.911   0.089
+weight  0.696   0.304
+ [1] 0.104 0.114 0.138 0.133 0.152 0.152 0.154 0.184 0.176 0.137 0.160 0.136
+
+> f <- fiticc(lfdess(lfd, ess.g = 200), stklen, sel_fun = sf, 
++     catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm"))
+
+> rp <- f$obj$report(f$obj$env$last.par.best)
+
+> comb <- Reduce(`+`, lapply(1:2, function(g) sweep(rp$plen[, 
++     , g], 2, rp$catch_share_n[, g], "*")))
+
+> cat("max |plen_all_y - weighted gear compositions|:", 
++     signif(max(abs(comb - rp$plen_all_y)), 3), "\n")
+max |plen_all_y - weighted gear compositions|: 2.78e-17 
+
+> stopifnot(max(abs(comb - rp$plen_all_y)) < 1e-10)
+
+> print(round(sapply(f$report$catch_share, function(x) mean(x)), 
++     3))
+  Trawl Gillnet 
+    0.7     0.3 
+
+> print(round(sapply(f$report$catch_share_n, function(x) mean(x)), 
++     3))
+  Trawl Gillnet 
+  0.912   0.088 
+
+> stopifnot(!is.null(f$report$catch_share_n), abs(mean(f$report$catch_share[["Trawl"]]) - 
++     0.7) < 0.05)
+
+> p <- plot_len(f)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> ggplot2::ggsave(file.path(od, "plot_len_pooled.png"), 
++     p, width = 7, height = 8, dpi = 100)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

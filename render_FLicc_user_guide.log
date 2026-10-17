@@ -1,0 +1,145 @@
+
+
+processing file: FLicc_user_guide.Rmd
+1/137                  
+2/137 [setup]          
+3/137                  
+4/137 [install]        
+5/137                  
+6/137 [load]           
+7/137                  
+8/137 [qs-data]        
+9/137                  
+10/137 [qs-own-data]    
+11/137                  
+12/137 [qs-flquants]    
+13/137                  
+14/137 [qs-plot-lfd]    
+15/137                  
+16/137 [qs-lhpar]       
+17/137                  
+18/137 [qs-stocklen]    
+19/137                  
+20/137 [qs-fit]         
+21/137                  
+22/137 [qs-convergence] 
+23/137                  
+24/137 [qs-plot-len]    
+25/137                  
+26/137 [qs-plot-sel]    
+27/137                  
+28/137 [qs-plot-spr]    
+29/137                  
+30/137 [data]           
+31/137                  
+32/137 [check-n]        
+33/137                  
+34/137 [check-lfd]      
+35/137                  
+36/137 [check-tail]     
+37/137                  
+38/137 [check-zlcc]     
+39/137                  
+40/137 [ess-demo]       
+41/137                  
+42/137 [ess-plot]       
+43/137                  
+44/137 [missing]        
+45/137                  
+46/137 [missing-plot]   
+47/137                  
+48/137 [stocklen]       
+49/137                  
+50/137 [sel]            
+51/137                  
+52/137 [sel-fixed]      
+53/137                  
+54/137 [selfun]         
+55/137                  
+56/137 [dome-sens]      
+57/137                  
+58/137 [dome-sens-cut]  
+59/137                  
+60/137 [fit]            
+61/137                  
+62/137 [check-conv]     
+63/137                  
+64/137 [check-len]      
+65/137                  
+66/137 [resid]          
+67/137                  
+68/137 [resid-bubble]   
+69/137                  
+70/137 [lmean-resid]    
+71/137                  
+72/137 [ppc]            
+73/137                  
+74/137 [check-retro]    
+75/137                  
+76/137 [f-options]      
+77/137                  
+78/137 [f-options-plot] 
+79/137                  
+80/137 [sigmaF-range]   
+81/137                  
+82/137 [f-re-time]      
+83/137                  
+84/137 [by-year]        
+85/137                  
+86/137 [cvl-sens]       
+87/137                  
+88/137 [maxsd-cv]       
+89/137                  
+90/137 [maxsd-sens]     
+91/137                  
+92/137 [priors]         
+93/137                  
+94/137 [priors-numbers] 
+95/137                  
+96/137 [tailcut]        
+97/137                  
+98/137 [refpts]         
+99/137                  
+100/137 [eqcurves]       
+101/137                  
+102/137 [prbrp]          
+103/137                  
+104/137 [steepness]      
+105/137                  
+106/137 [status-plots]   
+107/137                  
+108/137 [advice]         
+109/137                  
+110/137 [advice-rel]     
+111/137                  
+112/137 [contour]        
+113/137                  
+114/137 [contour-share]  
+115/137                  
+116/137 [contour-s]      
+117/137                  
+118/137 [contour-numbers]
+119/137                  
+120/137 [lbispr]         
+121/137                  
+122/137 [lbimean]        
+123/137                  
+124/137 [mse]            
+125/137                  
+126/137 [model-compare]  
+127/137                  
+128/137 [model-time]     
+129/137                  
+130/137 [fishblicc-data] 
+131/137                  
+132/137 [fishblicc-fit]  
+133/137                  
+134/137 [fishblicc-plots]
+135/137                  
+136/137 [fishblicc-eq]   
+137/137                  
+output file: FLicc_user_guide.knit.md
+
+/opt/hostedtoolcache/pandoc/3.8.3/x64/pandoc +RTS -K512m -RTS FLicc_user_guide.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /home/runner/work/FLicc/FLicc/out/html/FLicc_user_guide.html --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --variable toc_float=1 --variable toc_selectors=h1,h2,h3 --variable toc_collapsed=1 --variable toc_smooth_scroll=1 --variable toc_print=1 --template /home/runner/work/_temp/Library/rmarkdown/rmd/h/default.html --syntax-highlighting none --variable highlightjs=1 --number-sections --variable theme=bootstrap --mathml --include-in-header /tmp/RtmpnuI3pw/rmarkdown-str177f5d09c74b.html 
+
+Output created: out/html/FLicc_user_guide.html

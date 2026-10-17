@@ -1,0 +1,98 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 17:07:56 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> lfd200 <- lfdess(lfd, ess.g = 200)
+
+> for (pm in c("gtg", "gamma")) {
++     fit <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "logistic"), 
++         catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, 
++             obs_model = "dm", pop_model = pm))
++     st <- FLicc:::gear_state_flicc(fit)
++     for (g in st$gears) {
++      .... [TRUNCATED] 
+gtg Trawl max |sel diff| 2e-15 
+gtg Gillnet max |sel diff| 0.000224 
+gtg surface seconds: 0.772 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 17.78767 0.3351465 0.1364309 0.1292394 0.6854327
+Gillnet Gillnet logistic 26.92765 0.3351465 0.1364309 0.1292394 0.9890687
+           Fshare    Cshare
+Trawl   0.7674952 0.6958661
+Gillnet 0.2325048 0.3041339
+gtg SPR engine 0.1364309 report 0.1364312  YPR engine 0.1292394 ypr_flicc 0.1292383 
+      loc              F               SPR              YPRrel      
+ Min.   :10.00   Min.   :0.0000   Min.   :0.01290   Min.   :0.0000  
+ 1st Qu.:21.43   1st Qu.:0.1676   1st Qu.:0.09708   1st Qu.:0.6324  
+ Median :32.85   Median :0.3351   Median :0.24117   Median :0.8089  
+ Mean   :32.85   Mean   :0.3351   Mean   :0.31263   Mean   :0.7401  
+ 3rd Qu.:44.27   3rd Qu.:0.5027   3rd Qu.:0.45606   3rd Qu.:0.9168  
+ Max.   :55.70   Max.   :0.6703   Max.   :1.00000   Max.   :1.0000  
+view fleet 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 17.78767 0.3351465 0.1364309 0.1292394 0.6854327
+Gillnet Gillnet logistic 26.92765 0.3351465 0.1364309 0.1292394 0.9890687
+           Fshare    Cshare
+Trawl   0.7674952 0.6958661
+Gillnet 0.2325048 0.3041339
+view share 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 76.74952 0.3351465 0.1364309 0.1292394 0.6901844
+Gillnet Gillnet logistic 23.25048 0.3351465 0.1364309 0.1292394 0.6901844
+           Fshare    Cshare
+Trawl   0.7674952 0.6958661
+Gillnet 0.2325048 0.3041339
+gamma Trawl max |sel diff| 2.11e-15 
+gamma Gillnet max |sel diff| 0.000224 
+gamma surface seconds: 20.948 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 17.82380 0.3442163 0.1296045 0.1297104 0.6887738
+Gillnet Gillnet logistic 27.03504 0.3442163 0.1296045 0.1297104 0.9848449
+          Fshare    Cshare
+Trawl   0.760029 0.6960404
+Gillnet 0.239971 0.3039596
+gamma SPR engine 0.1296045 report 0.1296048  YPR engine 0.1297104 ypr_flicc 0.1297093 
+      loc              F               SPR              YPRrel      
+ Min.   :10.00   Min.   :0.0000   Min.   :0.01163   Min.   :0.0000  
+ 1st Qu.:21.43   1st Qu.:0.1721   1st Qu.:0.09226   1st Qu.:0.6394  
+ Median :32.85   Median :0.3442   Median :0.23275   Median :0.8088  
+ Mean   :32.85   Mean   :0.3442   Mean   :0.30539   Mean   :0.7429  
+ 3rd Qu.:44.27   3rd Qu.:0.5163   3rd Qu.:0.44429   3rd Qu.:0.9176  
+ Max.   :55.70   Max.   :0.6884   Max.   :1.00000   Max.   :1.0000  
+
+> d <- sf$surface
+
+> s1 <- 1
+
+> b <- 100 * pmax(4 * s1 * d$SPR - (1 - s1), 0)/(5 * 
++     s1 - 1)
+
+> stopifnot(max(abs(b - 100 * d$SPR)) < 1e-08)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

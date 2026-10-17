@@ -1,0 +1,107 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 17:07:56 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> lfd200 <- lfdess(lfd, ess.g = 200)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> for (om in c("dm", "mn")) {
++     f <- fiticc(lfd200, stklen, sel_fun = sf, catch_by_gear = cbg, 
++         settings = list(CVL = 0.1, obs_model = om))
++     rp <- resid_flicc(f, "pearson")
++     ro <- resid_flicc(f, "osa")
++     cat("\n==", om, " Pearson sd", round(sd(rp$resid), 2), " OSA mean",  .... [TRUNCATED] 
+
+== dm  Pearson sd 0.57  OSA mean 0.23 sd 0.76  n 785 
+           gear p_value pass sd_z
+Trawl     Trawl   0.179 TRUE 1.80
+Gillnet Gillnet   0.301 TRUE 0.97
+ppc seconds 0.303 
+     gear  stat share_outside_95
+1   Trawl Lmean             0.42
+2 Gillnet Lmean             0.08
+3   Trawl   L95             0.17
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.08
+7   Trawl  Lmax             0.17
+8 Gillnet  Lmax             0.00
+
+== mn  Pearson sd 1.35  OSA mean 0.1 sd 0.92  n 785 
+           gear p_value pass sd_z
+Trawl     Trawl   0.179 TRUE 2.84
+Gillnet Gillnet   0.272 TRUE 1.05
+ppc seconds 0.222 
+     gear  stat share_outside_95
+1   Trawl Lmean             0.58
+2 Gillnet Lmean             0.08
+3   Trawl   L95             0.08
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.08
+6 Gillnet  Pmat             0.25
+7   Trawl  Lmax             0.33
+8 Gillnet  Lmax             0.00
+
+> pc2 <- ppc_flicc(fdm, nsim = 200, par_draws = TRUE)
+
+> print(pc2$coverage)
+     gear  stat share_outside_95
+1   Trawl Lmean             0.42
+2 Gillnet Lmean             0.08
+3   Trawl   L95             0.17
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.08
+7   Trawl  Lmax             0.17
+8 Gillnet  Lmax             0.00
+
+> selfcheck <- function(f, om) {
++     cd <- FLicc:::comp_data_flicc(f)
++     set.seed(42)
++     sim <- f$tmb_data$obs
++     td <- f$tmb_data
++     rpp <- f$obj$report(f$obj$env$last.par.best)$plen
++     for (g in seq_len(dim(sim)[3])) for (y in seq_len(dim(sim)[2])) {
++         n <- round(sum(sim[, .... [TRUNCATED] 
+
+> sc_dm <- selfcheck(fdm, "dm")
+
+> print(round(sc_dm, 3))
+ mean    sd  ks_p 
+0.028 0.993 0.766 
+
+> stopifnot(abs(sc_dm["mean"]) < 0.1, abs(sc_dm["sd"] - 
++     1) < 0.1)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

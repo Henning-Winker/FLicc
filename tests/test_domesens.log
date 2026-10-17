@@ -1,0 +1,288 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 17:07:56 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> lfd200 <- lfdess(lfd, ess.g = 200)
+
+> sel_fun <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> for (g in names(lfd)) {
++     q <- lfd[[g]]
++     L <- as.numeric(dimnames(q)$len)
++     n <- apply(q@.Data, 1, sum)
++     cat(g, "largest bin with fish:", max(L[n > 0]), " n in bins >= 60:", 
++         sum(n[L >= 60]), "\n")
++ }
+Trawl largest bin with fish: 47  n in bins >= 60: 0 
+Gillnet largest bin with fish: 59  n in bins >= 60: 0 
+
+> fs <- function(...) fiticc(lfd200, stklen, sel_fun = sel_fun, 
++     catch_by_gear = cbg, settings = modifyList(list(CVL = 0.1, 
++         obs_model = "dm"), list(...)))
+
+> fit200 <- fs()
+
+> print(fit200$par[grepl("Sm", fit200$par$par), ])
+   par        mpd         se
+25  Sm -1.1414744 0.01527520
+26  Sm -3.2717564 0.06580119
+27  Sm -1.8015851 0.04171880
+28  Sm -0.7268267 0.01154800
+29  Sm -2.4261136 0.05131462
+
+> cat("base pdHess", fit200$rep$pdHess, "maxgrad", fit200$max_gradient, 
++     "SPR", tail(c(fit200$report$spr), 1), "\n")
+base pdHess TRUE maxgrad 0.009887723 SPR 0.1364312 
+
+> nonfin <- function(f) {
++     obj <- f$obj
++     p0 <- f$opt$par
++     g0 <- obj$gr(p0)
++     cat("fn", obj$fn(p0), " non-finite gr at opt:", which(!is.finite(g0)), 
++         "\n")
++     bad <- integer()
++     for (i in seq_along(p0)) for (h in c(-0.001, 0.001)) {
++         p <- p0
++         p[i] .... [TRUNCATED] 
+
+> sf_base <- c("logistic", "dsnormal", "normal")[fit200$tmb_data$sel_type]
+
+> r0 <- tryCatch(fiticc(fit200$report$obslen, fit200$stklen, 
++     sel_fun = sf_base, catch_by_gear = fit200$report$catch_by_gear, 
++     settings = fit200$settings), error = function(e) conditionMessage(e))
+
+> cat("refit via report route, no change:", if (is.character(r0)) r0 else "ok", 
++     "\n")
+refit via report route, no change: ok 
+
+> r1 <- tryCatch(fiticc(lfd200, stklen, sel_fun = sf_base, 
++     catch_by_gear = cbg, settings = fit200$settings), error = function(e) conditionMessage(e))
+
+> cat("refit with stored settings, original data:", 
++     if (is.character(r1)) r1 else "ok", "\n")
+refit with stored settings, original data: ok 
+
+> r2 <- tryCatch(fiticc(fit200$report$obslen, stklen, 
++     sel_fun = sf_base, catch_by_gear = cbg, settings = list(CVL = 0.1, 
++         obs_model = "dm")), error = function(e) conditionMessage(e))
+
+> cat("refit with report obslen, fresh settings:", if (is.character(r2)) r2 else "ok", 
++     "\n")
+refit with report obslen, fresh settings: ok 
+
+> print(all.equal(c(fit200$report$obslen[[1]]@.Data), 
++     c(lfd200[[1]]@.Data)))
+[1] TRUE
+
+> for (r in c(1000, 22.3)) {
++     f <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "dsnormal"), 
++         catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm"), 
++         sel_fixed = list(Gillnet = list(rsd = r)), se = FALSE)
++     cat("\n-- Gillnet dsnormal rsd", r, "conv", f$opt$ .... [TRUNCATED] 
+
+-- Gillnet dsnormal rsd 1000 conv 0 
+fn 14378.15  non-finite gr at opt:  
+all perturbed gradients finite
+       par      gr
+Sm -1.1411 -0.0402
+Sm -3.2707 -0.0051
+Sm -1.7997 -0.0115
+Sm -0.5463 -0.0453
+Sm -2.5688  0.0289
+opt$par:
+       log_Fk        log_Fk        log_Fk        log_Fk        log_Fk 
+ 1.256874e+00  1.221460e+00  1.157451e+00  1.178118e+00  1.124265e+00 
+       log_Fk        log_Fk        log_Fk        log_Fk        log_Fk 
+ 1.122295e+00  1.123397e+00  1.042981e+00  1.060280e+00  1.168065e+00 
+       log_Fk        log_Fk        log_Fk        log_Fk        log_Fk 
+ 1.104288e+00  1.172392e+00  2.614971e-01  1.958273e-01 -1.622277e-05 
+       log_Fk        log_Fk        log_Fk        log_Fk        log_Fk 
+ 2.408427e-02 -1.076396e-01 -1.016671e-01 -1.153659e-01 -2.934631e-01 
+       log_Fk        log_Fk        log_Fk        log_Fk            Sm 
+-2.425566e-01  1.763171e-03 -1.614833e-01 -8.637444e-03 -1.141106e+00 
+           Sm            Sm            Sm            Sm 
+-3.270684e+00 -1.799704e+00 -5.463283e-01 -2.568824e+00 
+non-finite pars:  
+last.par.best length 29 opt length 29 same TRUE 
+character(0)
+optimHess at opt$par: ok, min eigen 6.76 
+replicated optimHess: no non-finite gradient
+sdreport ok, pdHess TRUE 
+with se: ok 
+
+-- Gillnet dsnormal rsd 22.3 conv 0 
+fn 14378.41  non-finite gr at opt:  
+all perturbed gradients finite
+       par      gr
+Sm -1.1456  0.0050
+Sm -3.2842  0.0033
+Sm -1.8300  0.0013
+Sm -0.5544  0.0002
+Sm -2.5781 -0.0009
+opt$par:
+     log_Fk      log_Fk      log_Fk      log_Fk      log_Fk      log_Fk 
+ 1.23007330  1.17598490  1.10664341  1.13075444  1.06154714  1.04385768 
+     log_Fk      log_Fk      log_Fk      log_Fk      log_Fk      log_Fk 
+ 1.04212047  0.94515828  0.96077700  1.09775839  1.04965204  1.13557274 
+     log_Fk      log_Fk      log_Fk      log_Fk      log_Fk      log_Fk 
+ 0.14200000  0.03449252 -0.14432535 -0.11477666 -0.26373034 -0.29393463 
+     log_Fk      log_Fk      log_Fk      log_Fk      log_Fk      log_Fk 
+-0.31046366 -0.49526674 -0.45659183 -0.18824405 -0.29189325 -0.11774309 
+         Sm          Sm          Sm          Sm          Sm 
+-1.14559795 -3.28415373 -1.82997340 -0.55437909 -2.57810289 
+non-finite pars:  
+last.par.best length 29 opt length 29 same TRUE 
+character(0)
+optimHess at opt$par: ok, min eigen 3.86 
+replicated optimHess: no non-finite gradient
+sdreport ok, pdHess TRUE 
+with se: ok 
+
+> ds <- dome_sens_flicc(fit200, gear = "Gillnet")
+
+> print(ds$table)
+  scenario    rsd conv    logLik      AIC SPR_last   Fspr Fap_last dAIC
+1     base     NA    0 -14380.78 28819.56    0.136 0.1114   0.2570 5.26
+2  rsd1000 1000.0    0 -14378.15 28814.30    0.134 0.1107   0.2581 0.00
+3  rsd33.4   33.4    0 -14378.17 28814.34    0.144 0.1142   0.2545 0.04
+4  rsd22.3   22.3    0 -14378.41 28814.81    0.159 0.1190   0.2485 0.51
+5  rsd13.9   13.9    0 -14382.76 28823.53    0.212 0.1323   0.2285 9.23
+
+> print(ds$errors)
+character(0)
+
+> stopifnot(nrow(ds$table) == 5, length(ds$errors) == 
++     0, all(is.finite(ds$fits$rsd22.3$opt$par)))
+
+> for (nm in names(ds$fits)) {
++     f <- ds$fits[[nm]]
++     cat(nm, "pdHess", f$rep$pdHess, "maxgrad", signif(f$max_gradient, 
++         2), "\n")
++ }
+base pdHess TRUE maxgrad 0.0099 
+rsd1000 pdHess TRUE maxgrad 0.045 
+rsd33.4 pdHess TRUE maxgrad 0.0063 
+rsd22.3 pdHess TRUE maxgrad 0.005 
+rsd13.9 pdHess TRUE maxgrad 0.006 
+
+> fit_cut <- fs(tail_cut = 47)
+
+> dsc <- dome_sens_flicc(fit_cut, gear = "Gillnet")
+
+> print(dsc$table)
+  scenario    rsd conv    logLik      AIC SPR_last   Fspr Fap_last dAIC
+1     base     NA    0 -13946.42 27950.84    0.124 0.1102   0.2679 5.51
+2  rsd1000 1000.0    0 -13943.67 27945.33    0.120 0.1086   0.2699 0.00
+3  rsd33.4   33.4    0 -13943.94 27945.88    0.126 0.1113   0.2674 0.55
+4  rsd22.3   22.3    0 -13944.43 27946.85    0.135 0.1145   0.2639 1.52
+5  rsd13.9   13.9    0 -13946.77 27951.54    0.161 0.1225   0.2525 6.21
+
+> print(dsc$errors)
+character(0)
+
+> dst <- dome_sens_flicc(fit200, gear = "Trawl", se = FALSE)
+
+> print(dst$table)
+  scenario    rsd conv    logLik      AIC SPR_last   Fspr Fap_last   dAIC
+1     base     NA    0 -14380.78 28819.56    0.136 0.1114   0.2570   0.00
+2  rsd1000 1000.0    0 -14617.18 29290.37    0.147 0.0814   0.2046 470.81
+3  rsd33.4   33.4    0 -14560.69 29177.38    0.142 0.0792   0.1974 357.82
+4  rsd22.3   22.3    0 -14507.06 29070.12    0.139 0.0786   0.1935 250.56
+5  rsd13.9   13.9    0 -14421.54 28899.07    0.135 0.0800   0.1908  79.51
+
+> pr <- function(f) {
++     p <- f$par[f$par$par %in% c("log_Linf", "log_Mk", "log_Galpha"), 
++         ]
++     p$value <- ifelse(p$par == "log_Galpha", 1/sqrt(exp(p$mpd)), 
++         exp(p$mpd))
++     p
++ }
+
+> for (s in list(list(linf.sd = 0.05), list(Mk.sd = 0.1), 
++     list(CVL.sd = 0.25), list(linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25), 
++     list(linf.sd = 0.05, tail_cut = 47), list(linf.sd = 0.05, 
++         Mk.sd = 0.1, CVL.sd = 0.25, tail_cut = 47), list(linf.sd = 0.05, 
++         maxsd = 3, n .... [TRUNCATED] 
+
+== linf.sd=0.05  conv 0 pdHess TRUE maxgrad 0.0107 SPR 0.122 
+       par      mpd         se    value
+1 log_Linf 4.033663 0.02714556 56.46737
+
+== Mk.sd=0.1  conv 0 pdHess TRUE maxgrad 0.00527 SPR 0.112 
+     par       mpd         se    value
+1 log_Mk 0.6363798 0.08737454 1.889628
+
+== CVL.sd=0.25  conv 0 pdHess TRUE maxgrad 0.00951 SPR 0.136 
+         par      mpd       se     value
+1 log_Galpha 4.600031 0.305759 0.1002573
+
+== linf.sd=0.05, Mk.sd=0.1, CVL.sd=0.25  conv 0 pdHess TRUE maxgrad 0.0237 SPR 0.105 
+         par       mpd        se       value
+1   log_Linf 4.0350242 0.0344286 56.54428711
+2 log_Galpha 4.7665282 0.3992806  0.09224898
+3     log_Mk 0.6431736 0.0935413  1.90250904
+
+== linf.sd=0.05, tail_cut=47  conv 0 pdHess TRUE maxgrad 0.0103 SPR 0.089 
+       par      mpd         se    value
+1 log_Linf 4.078655 0.04160103 59.06597
+
+== linf.sd=0.05, Mk.sd=0.1, CVL.sd=0.25, tail_cut=47  conv 0 pdHess TRUE maxgrad 0.004 SPR 0.075 
+         par       mpd         se      value
+1   log_Linf 4.0702288 0.04351783 58.5703607
+2 log_Galpha 4.4432943 0.53619941  0.1084304
+3     log_Mk 0.6261574 0.09316304  1.8704095
+
+== linf.sd=0.05, maxsd=3, ngtg=19  conv 0 pdHess TRUE maxgrad 0.00511 SPR 0.125 
+       par      mpd         se    value
+1 log_Linf 4.025949 0.02830868 56.03347
+
+== linf.sd=0.05, rob_eps=1e-04  conv 0 pdHess TRUE maxgrad 0.00646 SPR 0.123 
+       par      mpd         se    value
+1 log_Linf 4.032903 0.02722501 56.42446
+
+> prof <- sapply(c(54, 54.5, 55, 55.5, 56, 57), function(li) {
++     lh2 <- lhpar
++     lh2["linf"] <- li
++     st <- stocklen(lfd, lh2, m_model = "constant")
++     f <- fiticc(lfd200, st, sel_fun = sel_fun, catch_by_gear = cbg, 
++         settings = list(CVL = 0.1, obs_model = "dm"), se = FALSE)
++  .... [TRUNCATED] 
+
+> print(round(t(prof), 2))
+     Linf      nll
+[1,] 54.0 14382.14
+[2,] 54.5 14381.56
+[3,] 55.0 14381.14
+[4,] 55.5 14380.86
+[5,] 56.0 14380.69
+[6,] 57.0 14380.60
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

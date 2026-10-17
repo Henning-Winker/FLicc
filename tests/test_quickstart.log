@@ -1,0 +1,66 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-10 17:07:56 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: ggrepel
+Loading required package: patchwork
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, 
++     c("len", "year", "data", "qname")]), unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> show <- function(nm, f) {
++     cc <- flicc_convergence(f)
++     cat(sprintf("%-28s maxgrad %.4g  conv %d  passed %s  SPR %.3f\n", 
++         nm, f$max_gradient, f$opt$convergence, paste(cc$passed, 
++             collapse = ","), sprcur_flicc(f)))
++ }
+
+> show("raw mn default", fiticc(lfd, stklen, sel_fun = sf, 
++     catch_by_gear = cbg))
+raw mn default               maxgrad 0.01026  conv 0  passed FALSE,TRUE,TRUE,TRUE  SPR 0.099
+
+> show("raw mn n_restart 3", fiticc(lfd, stklen, sel_fun = sf, 
++     catch_by_gear = cbg, n_restart = 3))
+raw mn n_restart 3           maxgrad 0.01026  conv 0  passed FALSE,TRUE,TRUE,TRUE  SPR 0.099
+
+> show("ess200 mn", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg))
+ess200 mn                    maxgrad 0.006631  conv 0  passed TRUE,TRUE,TRUE,TRUE  SPR 0.104
+
+> show("ess200 mn n_restart 3", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg, n_restart = 3))
+ess200 mn n_restart 3        maxgrad 0.006631  conv 0  passed TRUE,TRUE,TRUE,TRUE  SPR 0.104
+
+> show("ess200 dm", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(obs_model = "dm")))
+ess200 dm                    maxgrad 0.009888  conv 0  passed TRUE,TRUE,TRUE,TRUE  SPR 0.136
+
+> show("raw dm", fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = list(obs_model = "dm")))
+raw dm                       maxgrad 0.005043  conv 0  passed TRUE,TRUE,TRUE,TRUE  SPR 0.107
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
