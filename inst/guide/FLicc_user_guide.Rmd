@@ -47,9 +47,164 @@ library(FLicc)
 packageVersion("FLicc")
 ```
 
+# Quick start: your first fit
+
+This section goes from a table of length measurements to a first fitted model
+and its main plots, using the default settings. The later sections explain each
+step, the checks to make and the options.
+
+## Step 1: length data as a table
+
+FLicc needs length-frequency counts by **length bin**, **year** and **gear**
+(fleet). The simplest starting point is a long table with one row per bin, year
+and gear, and the columns `len` (lower bound of the length bin), `year`, `data`
+(number of fish measured) and `qname` (gear name). The alfonsino example data
+in this format:
+
+```{r qs-data}
+library(FLicc)
+data("alfonsino")
+lfd_df <- as.data.frame(lfd_alfonsino)[, c("len", "year", "data", "qname")]
+head(lfd_df)
+unique(lfd_df$qname)       # gears
+range(lfd_df$len)          # length range (cm)
+range(lfd_df$year)         # years
+```
+
+For your own data, read the file and name the columns accordingly, for example:
+
+```{r qs-own-data, eval = FALSE}
+lfd_df <- read.csv("my_length_data.csv")              # columns: length, year, count, fleet
+names(lfd_df) <- c("len", "year", "data", "qname")
+```
+
+## Step 2: convert to `FLQuants`
+
+`lfd_long_to_wide()` turns the long table into a wide one (one column per
+year, missing combinations filled with zeros), and `FLQuantLen()` turns that
+into an `FLQuants` object with one `FLQuant` per gear. `midL = FALSE` says that
+`len` is the lower bound of each bin; use `midL = TRUE` if your lengths are bin
+mid-points. Lengths in mm can be converted with `unit = "mm"`.
+
+```{r qs-flquants}
+lfd <- FLQuantLen(lfd_long_to_wide(lfd_df), unit = "cm", midL = FALSE)
+names(lfd)
+```
+
+## Step 3: look at the data
+
+```{r qs-plot-lfd, fig.height = 5}
+plot_lfd(lfd)
+```
+
+Each panel is a year, each colour a gear. Check that the compositions look
+plausible: one main mode per gear, no sudden shifts between years, no fish far
+beyond the expected maximum length.
+
+## Step 4: life history
+
+Growth, natural mortality, maturity and the length-weight relationship are given
+as an `FLPar`:
+
+| Parameter | Meaning |
+|---|---|
+| `linf`, `k` | von Bertalanffy asymptotic length and growth rate |
+| `M` | natural mortality (per year) |
+| `L50` | length at 50% maturity |
+| `a`, `b` | weight-length relationship $W = aL^b$ (here weight in kg for length in cm) |
+
+```{r qs-lhpar}
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
+               a = 0.004721956 / 1000, b = 3.146168)
+```
+
+## Step 5: the stock object and natural mortality
+
+`stocklen()` combines the length data and the life history into an `FLStockLen`
+object with weight, maturity and natural mortality at length. `m_model` sets how
+natural mortality changes with length:
+
+| `m_model` | M at length |
+|---|---|
+| `"constant"` | the same M at all lengths (default choice) |
+| `"inverse"` | $M\,L_{ref}/L$, higher for small fish; needs `reflen` |
+| `"Lorenzen"` | allometric, decreasing with weight |
+| `"Gislason"` | empirical, depending on length and Linf |
+
+```{r qs-stocklen, fig.height = 3.5}
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+plot_m(stklen)
+plot_mat(stklen)
+```
+
+Start with `"constant"` unless there is a biological reason for a
+length-dependent M.
+
+## Step 6: fit the model
+
+Two inputs are always needed besides the data and the stock object, both with
+one entry per gear in the order of `names(lfd)` (here Trawl, Gillnet):
+
+- **`sel_fun`**: the shape of each gear's selectivity.
+  `"logistic"` for gears that keep catching the largest fish (asymptotic, e.g.
+  most trawls and longlines); `"dsnormal"` (double-sided normal) for gears that
+  catch mostly intermediate sizes and fewer large fish (dome-shaped, e.g.
+  gillnets with one mesh size, or fleets fishing where large fish are scarce).
+  Here the trawl catches small fish and few large ones, the gillnet the larger
+  fish.
+- **`catch_by_gear`**: the share of the total catch taken by each gear, e.g.
+  `c(0.7, 0.3)` for 70% and 30%. It tells the model how to split F between the
+  gears; FLicc matches it to the predicted catch **in numbers** of fish.
+
+```{r qs-fit}
+fit1 <- fiticc(lfd, stklen,
+               sel_fun = c("dsnormal", "logistic"),
+               catch_by_gear = c(0.7, 0.3))
+```
+
+All other settings are at their defaults: growth and M fixed at the input
+values, a multinomial likelihood on the counts as they are, and a random walk on
+F over the years.
+
+## Step 7: check and plot the results
+
+First check that the fit converged: all lines should show `passed = TRUE`.
+
+```{r qs-convergence}
+flicc_convergence(fit1)
+```
+
+The fitted (lines) against the observed (bars) length compositions, by gear:
+
+```{r qs-plot-len, fig.height = 5}
+plot_len(fit1, by_gear = TRUE)
+```
+
+The estimated selectivity of each gear:
+
+```{r qs-plot-sel, fig.height = 3.5}
+plot_sel(fit1)
+```
+
+The spawning potential ratio (SPR) by year with its 95% interval, and the value
+in the last year. SPR is the spawning output per recruit at the estimated F
+relative to the unfished state; 40% is a common target.
+
+```{r qs-plot-spr, fig.height = 3.5}
+plot_spr(fit1, ci = TRUE)
+sprcur_flicc(fit1)
+```
+
+That is a first assessment. Before using it, work through the checks of the
+following sections, in particular the effective sample size (section *Effective
+sample size*): the raw counts used here usually overstate the information in
+the data, which makes the intervals too narrow. The reference fit used in the
+rest of this guide differs from `fit1` only in that respect (ESS 200 per gear
+and year, Dirichlet-multinomial likelihood).
+
 # Workflow and defaults
 
-1. **Data**: length frequencies by gear as `FLQuants`; check sample sizes, gaps and the tail.
+1. **Data**: length frequencies by gear as `FLQuants` (Quick start); check sample sizes, gaps and the tail.
 2. **Effective sample size**: rescale the counts to the information they carry.
 3. **Life history**: `FLPar` and `stocklen()`; check Linf against the largest fish.
 4. **Fit**: `fiticc()`; check convergence, residuals, selectivity and retrospective consistency.
