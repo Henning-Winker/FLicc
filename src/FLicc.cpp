@@ -351,6 +351,7 @@ Type objective_function<Type>::operator() ()
   matrix<Type> N_y(nlen, nyear);
   matrix<Type> plen_all_y(nlen, nyear);
   matrix<Type> catch_share(nyear, ngear);   // predicted catch shares in weight
+  matrix<Type> catch_share_n(nyear, ngear); // predicted catch shares in numbers
   matrix<Type> sel_joint(nlen, nyear);
   matrix<Type> Fk_l(nlen, nyear);
 
@@ -474,6 +475,9 @@ Type objective_function<Type>::operator() ()
       }
     }
     for(int g = 0; g < ngear; g++) catch_share(y, g) = pred_pgear(g);
+    Type pred_total_n = pred_gear.sum();
+    for(int g = 0; g < ngear; g++)
+      catch_share_n(y, g) = (pred_total_n > Type(0)) ? Type(pred_gear(g) / pred_total_n) : Type(0);
 
 
     Type fmax = Type(0);
@@ -512,17 +516,19 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    // combined expected length composition across gears
+    // combined expected length composition of the whole catch (numbers):
+    // the gears' catch-at-length summed, i.e. each gear's composition weighted
+    // by its predicted catch in numbers
     Type ctot = Type(0);
     for(int g = 0; g < ngear; g++) {
-      ctot += catch_wt(y,g) * pred_gear(g);
+      ctot += pred_gear(g);
     }
 
     for(int l = 0; l < nlen; l++) {
       Type ctot_l = Type(0);
 
       for(int g = 0; g < ngear; g++) {
-        ctot_l += catch_wt(y,g) * Cpred(l,g);
+        ctot_l += Cpred(l,g);
       }
 
       if(ctot > Type(0)) {
@@ -825,6 +831,7 @@ Type objective_function<Type>::operator() ()
   REPORT(plen);       // nlen x nyear x ngear
   REPORT(spr_y);      // nyear x 1
   REPORT(catch_share); // nyear x ngear, predicted catch shares in weight
+  REPORT(catch_share_n); // nyear x ngear, predicted catch shares in numbers
   REPORT(Fk);         // nyear x ngear on natural scale
   REPORT(sigmaF);
   REPORT(N_y);

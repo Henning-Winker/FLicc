@@ -140,6 +140,18 @@ as_FLQuants <- function(fit,stklen) {
   }))
   names(out$catch_by_gear) <-  gears
 
+  # predicted catch shares by gear and year, in weight (matched to
+  # catch_by_gear) and in numbers (used to combine gear compositions)
+  share_flq <- function(m) {
+    q <- FLCore::FLQuants(lapply(seq_along(gears), function(x)
+      FLCore::FLQuant(m[, x], dimnames = list(len = "all", year = yrs, unit = "unique",
+                                              season = "all", area = "unique", iter = "1"))))
+    names(q) <- gears
+    q
+  }
+  if (!is.null(report$catch_share))   out$catch_share   <- share_flq(report$catch_share)
+  if (!is.null(report$catch_share_n)) out$catch_share_n <- share_flq(report$catch_share_n)
+
 
   # FLQuants
   out$predlen_gear <- FLCore::FLQuants(lapply(1:length(gears),function(x){

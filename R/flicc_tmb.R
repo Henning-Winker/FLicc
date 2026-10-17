@@ -414,7 +414,7 @@ init_tmb_flicc <- function(tmb_data) {
     }
   }
 
-  gear_wt <- as.numeric(tmb_data$catch_wt)
+  gear_wt <- colMeans(as.matrix(tmb_data$catch_wt))
 
   if (length(gear_wt) != ngear ||
       any(!is.finite(gear_wt)) ||

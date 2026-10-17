@@ -209,8 +209,8 @@ plot_spr <- function(fit,
 #' `fit$report$predlen_gear`.
 #'
 #' The function can subset by year and gear, and can either display separate
-#' year-by-gear panels or aggregate across selected gears using the gear
-#' weights in `fit$tmb_data$catch_wt`.
+#' year-by-gear panels or aggregate across selected gears, weighted by each
+#' gear's predicted catch in numbers by year (`fit$report$catch_share_n`).
 #'
 #' @param fit A fitted `flicc_tmb_fit` object.
 #' @param year Optional year selection. Can be `NULL` for all years, a vector
@@ -218,7 +218,8 @@ plot_spr <- function(fit,
 #' @param gear Optional gear selection. Can be `NULL` for all gears, a vector
 #'   of gear names, or numeric indices.
 #' @param by_gear Logical. If `TRUE`, panels are shown by year and gear. If
-#'   `FALSE`, selected gears are combined using `fit$tmb_data$catch_wt`.
+#'   `FALSE`, selected gears are combined, weighted by their predicted catch
+#'   in numbers (`fit$report$catch_share_n`).
 #' @param title Optional plot title.
 #' @param observed_fill Fill colour for observed length composition bars.
 #' @param observed_colour Border colour for observed length composition bars.
@@ -229,7 +230,8 @@ plot_spr <- function(fit,
 #' @details
 #' Observed length frequencies are standardized within each year and gear to
 #' proportions before plotting. When `by_gear = FALSE`, the selected gears are
-#' combined using the relative gear weights stored in `fit$tmb_data$catch_wt`.
+#' combined with weights equal to each gear's predicted share of the catch in
+#' numbers in that year, so the result is the composition of the total catch.
 #'
 #' The function expects the fitted object to contain:
 #' \describe{
@@ -384,13 +386,17 @@ plot_len <- function(fit,
   # optional aggregate over gears
   #-----------------------------
   if (!by_gear) {
-    gear_wt_all <- fit$tmb_data$catch_wt
-    names(gear_wt_all) <- fit$tmb_data$gear_names
+    # combine the gears' compositions (numbers at length) weighted by each
+    # gear's predicted catch in numbers by year; equal weights if unavailable
+    csn <- fit$report$catch_share_n
+    w_tab <- do.call(rbind, lapply(gear_sel, function(g) {
+      yrs_g <- dimnames(fit$report$N)$year
+      w <- if (!is.null(csn)) as.numeric(csn[[g]]) else rep(1, length(yrs_g))
+      data.frame(year = yrs_g, gear = g, w = w)
+    }))
+    w_tab$w <- w_tab$w / stats::ave(w_tab$w, w_tab$year, FUN = sum)
 
-    gear_wt <- gear_wt_all[gear_sel]
-    gear_wt <- gear_wt / sum(gear_wt)
-
-    df$w <- gear_wt[as.character(df$gear)]
+    df$w <- w_tab$w[match(paste(df$year, df$gear), paste(w_tab$year, w_tab$gear))]
     df$observed <- df$observed * df$w
     df$fitted   <- df$fitted * df$w
 

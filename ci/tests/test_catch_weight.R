@@ -29,3 +29,19 @@ for (case in list(list(nm = "raw mn", lfd = lfd, set = list(CVL = 0.1)),
   print(round(c(f$report$spr), 3))
   stopifnot(max(abs(sweep(cs, 2, cbg))) < 0.05)
 }
+
+## consistency of the combined composition and the report
+f <- fiticc(lfdess(lfd, ess.g = 200), stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm"))
+rp <- f$obj$report(f$obj$env$last.par.best)
+# combined composition = gear compositions weighted by predicted catch in numbers
+comb <- Reduce(`+`, lapply(1:2, function(g) sweep(rp$plen[, , g], 2, rp$catch_share_n[, g], "*")))
+cat("max |plen_all_y - weighted gear compositions|:", signif(max(abs(comb - rp$plen_all_y)), 3), "\n")
+stopifnot(max(abs(comb - rp$plen_all_y)) < 1e-10)
+# report FLQuants
+print(round(sapply(f$report$catch_share, function(x) mean(x)), 3))
+print(round(sapply(f$report$catch_share_n, function(x) mean(x)), 3))
+stopifnot(!is.null(f$report$catch_share_n), abs(mean(f$report$catch_share[["Trawl"]]) - 0.7) < 0.05)
+# pooled plot runs and uses numbers shares
+p <- plot_len(f)
+od <- if (dir.exists("out/tests")) "out/tests" else "."
+ggplot2::ggsave(file.path(od, "plot_len_pooled.png"), p, width = 7, height = 8, dpi = 100)
