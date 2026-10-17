@@ -266,6 +266,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
+  DATA_INTEGER(catch_units); // 0: catch_by_gear matched in numbers, 1: in weight
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -449,19 +450,29 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    // predicted gear shares
+    // predicted gear shares of the catch, in numbers (catch_units = 0) or in
+    // weight (catch_units = 1), compared with catch_by_gear
+    vector<Type> pred_share(ngear);
+    for(int g = 0; g < ngear; g++) {
+      if(catch_units == 1) {
+        pred_share(g) = Type(0);
+        for(int l = 0; l < nlen; l++) pred_share(g) += Cpred(l,g) * wt(l,y);
+      } else {
+        pred_share(g) = pred_gear(g);
+      }
+    }
     vector<Type> pred_pgear(ngear);
     Type pred_total = Type(0);
 
     pred_pgear.setZero();
 
     for(int g = 0; g < ngear; g++) {
-      pred_total += pred_gear(g);
+      pred_total += pred_share(g);
     }
 
     for(int g = 0; g < ngear; g++) {
       if(pred_total > Type(0)) {
-        pred_pgear(g) = pred_gear(g) / pred_total;
+        pred_pgear(g) = pred_share(g) / pred_total;
       } else {
         pred_pgear(g) = Type(0);
       }

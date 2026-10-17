@@ -61,6 +61,8 @@ growth formulation.}
 
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
 
+\\item\{\code{catch_units}\}\{Units in which \code{catch_by_gear} is compared with the predicted catch shares: \code{"numbers"} (default) or \code{"weight"} (predicted catch-at-length multiplied by weight at length). Use \code{"weight"} when the shares come from landings in tonnes.\}
+
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
 

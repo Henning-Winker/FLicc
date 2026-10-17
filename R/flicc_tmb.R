@@ -115,6 +115,9 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   }
 
   catch_sd <- if (!is.null(settings$catch.sd)) as.numeric(settings$catch.sd) else 0.05
+  catch_units <- if (!is.null(settings$catch_units)) settings$catch_units else "numbers"
+  if (!catch_units %in% c("numbers", "weight"))
+    stop("settings$catch_units must be \"numbers\" or \"weight\".")
 
   # observation model
   obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "nb"
@@ -268,6 +271,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     mat        = unname(mat_mat),
     catch_wt   = unname(catch_wt),
     catch_sd   = catch_sd,
+    catch_units = as.integer(catch_units == "weight"),
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
     ngtg       = as.integer(ngtg),
@@ -904,6 +908,12 @@ fiticc_core <- function(lfd, stklen,
 #'       when \code{pop_model = "gamma"}).}
 #'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
+#'
+#'     \item{\code{catch_units}}{Units in which \code{catch_by_gear} is
+#'       compared with the predicted catch shares: \code{"numbers"} (default)
+#'       or \code{"weight"} (predicted catch-at-length multiplied by weight at
+#'       length). Use \code{"weight"} when the shares come from landings in
+#'       tonnes.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
