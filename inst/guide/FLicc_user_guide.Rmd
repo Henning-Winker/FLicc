@@ -748,6 +748,84 @@ plot_len(fit)
 | **Red flags** | Systematic misfit of the left limb (selectivity), of the tail (Linf, CVL, dome), or of one gear only; the misfit changing sign between periods (time-varying selectivity or sampling). |
 | **Action** | Revisit selectivity form and Linf; tail cut; split periods. |
 
+## Residual diagnostics
+
+FLicc is an equilibrium model: each year's composition is explained by the
+equilibrium at that year's F. Strong and weak year classes growing through the
+compositions are therefore expected to leave patterns in the residuals. The aim
+of the diagnostics is not to remove these patterns but to see them and judge
+their size, and to separate them from misfit that a setting can fix
+(selectivity, Linf, tail, effective sample size).
+
+**Residuals.** `resid_flicc()` computes residuals consistent with the
+likelihood of the fit (effective sample size, observation model, tail cut, plus
+group):
+
+- Pearson residuals, $r = (o - n\pi)/\sqrt{V}$, with $V = n\pi(1-\pi)$ for the
+  multinomial and the same times $(n+\alpha_0)/(1+\alpha_0)$ for the
+  Dirichlet-multinomial. They are easy to read in bubble plots but correlated
+  within a composition and not normal for small expected counts.
+- One-step-ahead (OSA) residuals: the composition is split, along increasing
+  length, into a sequence of conditional binomials (beta-binomials for the
+  Dirichlet-multinomial), and each observed count is turned into a randomized
+  quantile residual $r = \Phi^{-1}(u)$. Under a correct model they are
+  independent standard normal (Trijoulet et al. 2023), so QQ plots and tests
+  are valid.
+
+```{r resid, fig.height = 4.5}
+res_osa <- resid_flicc(fit, type = "osa")
+c(mean = mean(res_osa$resid, na.rm = TRUE), sd = sd(res_osa$resid, na.rm = TRUE))
+plot_resid_qq(res_osa)
+```
+
+**Bubble plots.** Residuals by length and year; blue where more fish were
+observed than expected, red where fewer. `cohorts = TRUE` adds von Bertalanffy
+growth tracks of year classes (grey lines):
+
+```{r resid-bubble, fig.height = 5}
+plot_resid_bubble(res_osa, fit = fit, cohorts = TRUE)
+```
+
+**Mean length and runs test.** The observed mean length of each composition is
+compared with its expectation, standardized with the standard error implied by
+the observation model (Francis 2011). A runs test checks whether the residuals
+change sign as often as random residuals would; too few runs mean systematic
+structure (green background: passed; red: failed; limits at three standard
+deviations, as in `ss3diags` and JABBA):
+
+```{r lmean-resid, fig.height = 3.5}
+lmr <- lmean_resid_flicc(fit)
+lmr$runs
+lmr$plot
+```
+
+**Posterior predictive checks.** `ppc_flicc()` simulates compositions from the
+fitted model (at the effective sample size and with the observation model of
+the fit) and compares observed statistics with their predictive distribution:
+mean length, 95th percentile, proportion of mature fish and largest length.
+With `par_draws = TRUE` the parameters are also drawn from their estimated
+uncertainty.
+
+```{r ppc, fig.height = 7}
+ppc <- ppc_flicc(fit, nsim = 300)
+ppc$coverage
+ppc$plot
+```
+
+About 5% of the observed values should lie outside the 95% intervals. Many more
+means that the effective sample size or the observation model understate the
+variability of the data, so the intervals of the assessment are too narrow;
+far fewer means the effective sample size could be higher.
+
+| Pattern | Likely cause | Response |
+|---|---|---|
+| Diagonal runs of one sign along the cohort tracks; mean-length runs test failed | strong or weak year classes (expected in an equilibrium model) | report it; check that status is robust (retrospective, tail cut); do not over-fit |
+| Vertical bands of one sign at the same lengths in all years | selectivity shape | logistic vs dome; dome sensitivity |
+| Misfit of the largest fish in all years | Linf, CVL or doming | Linf sensitivity, tail cut |
+| A change of sign between periods | change of selectivity, gear or sampling | split periods; `by_year` check |
+| Many observed statistics outside the predictive intervals | ESS too high, or observation model too narrow | lower ESS; Dirichlet-multinomial |
+| OSA residuals with sd well above 1 | the same | the same |
+
 ## Check 9: retrospective consistency
 
 The model is refitted with the last one, two and three years removed (`peels`);
@@ -1518,7 +1596,7 @@ plot_eqcurves(eqstk_fishblicc)
 | 5 | life-history inputs | Linf inconsistent with data; odd M/k | Linf sensitivity; priors (`linf.sd`) as a check |
 | 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data; dome sensitivity (`dome_sens_flicc`) |
 | 7 | convergence (`flicc_convergence`) | gradient, Hessian, bounds | restarts; simplify; tail cut |
-| 8 | fit to compositions (`plot_len`) | systematic misfit | selectivity, Linf, tail cut |
+| 8 | fit to compositions (`plot_len`, `plot_resid_bubble`, `lmean_resid_flicc`, `ppc_flicc`) | systematic misfit; failed runs test; many values outside predictive intervals | selectivity, Linf, tail cut; lower ESS; cohort patterns are expected |
 | 9 | retrospective | rho beyond ±0.2 | trends in selectivity or sampling |
 | 10 | indicators vs status | gears disagree | best gear; pooling; HCR smoothing |
 
