@@ -112,6 +112,7 @@ export(plot_selfun)
 export(contour_flicc)
 export(plot_contour_flicc)
 export(dome_sens_flicc)
+export(plot_compare_sel)
 export(plot_dome_sens)
 
 

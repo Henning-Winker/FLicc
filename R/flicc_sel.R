@@ -174,3 +174,61 @@ plot_dome_sens <- function(x, what = c("sel", "spr"), ...) {
                   title = paste0(x$gear, ": fitted selectivity by scenario")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
 }
+
+#' Compare estimated selectivity across FLicc fits
+#'
+#' Plots the fitted selectivity-at-length curves of several FLicc fits, one
+#' panel per gear and one colour per fit. Useful for sensitivity runs
+#' (e.g. dome levels, tail cuts, Linf or CVL settings, data subsets).
+#'
+#' @param fits A named list of fitted FLicc objects (from [fiticc()]). Unnamed
+#'   fits are labelled `fit1`, `fit2`, ...
+#' @param gear Optional character vector of gears to show (default all).
+#' @param colours Optional colours, one per fit (named by fit or in fit order).
+#' @param linewidth Line width.
+#' @param ncol Number of panel columns (default: one row per gear pair).
+#' @return A `ggplot` object.
+#' @examples
+#' \dontrun{
+#' plot_compare_sel(list(base = fit, cut47 = fit_cut, dome = fit_dome))
+#' plot_compare_sel(ds$fits, gear = "Gillnet")   # dome sensitivity runs
+#' }
+#' @export
+plot_compare_sel <- function(fits, gear = NULL, colours = NULL, linewidth = 0.8, ncol = NULL) {
+  if (inherits(fits, "flicc_tmb_fit")) fits <- list(fit = fits)
+  if (!is.list(fits) || length(fits) < 1) stop("fits must be a list of fitted FLicc objects.")
+  if (is.null(names(fits)) || any(names(fits) == "")) names(fits) <- paste0("fit", seq_along(fits))
+  fits <- fits[!vapply(fits, is.null, logical(1))]
+  d <- do.call(rbind, lapply(names(fits), function(nm) {
+    s <- fits[[nm]]$report$sel_gear
+    if (is.null(s)) stop("Fit '", nm, "' has no report$sel_gear (needs FLRreport = TRUE).")
+    df <- as.data.frame(s)
+    if ("year" %in% names(df) && length(unique(df$year)) > 1)
+      df <- df[df$year == max(df$year), , drop = FALSE]          # last year
+    data.frame(L = as.numeric(as.character(df$len)), sel = as.numeric(df$data),
+               gear = as.character(df$qname), fit = nm)
+  }))
+  if (!is.null(gear)) {
+    miss <- setdiff(gear, unique(d$gear))
+    if (length(miss)) stop("Unknown gear(s): ", paste(miss, collapse = ", "))
+    d <- d[d$gear %in% gear, , drop = FALSE]
+  }
+  d$fit <- factor(d$fit, levels = names(fits))
+  d$gear <- factor(d$gear, levels = unique(d$gear))
+  p <- ggplot2::ggplot(d, ggplot2::aes(L, sel, colour = fit)) +
+    ggplot2::geom_line(linewidth = linewidth) +
+    ggplot2::facet_wrap(~gear, ncol = ncol) +
+    ggplot2::scale_y_continuous(limits = c(0, 1.02)) +
+    ggplot2::labs(x = "Length", y = "Selectivity", colour = NULL) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(legend.position = "bottom", strip.background = ggplot2::element_rect(fill = "grey92"))
+  if (!is.null(colours)) {
+    if (is.null(names(colours))) colours <- stats::setNames(rep(colours, length.out = length(fits)), names(fits))
+    p <- p + ggplot2::scale_colour_manual(values = colours)
+  } else if (length(fits) <= 8) {
+    p <- p + ggplot2::scale_colour_manual(values = stats::setNames(
+      c("#000000", "#D55E00", "#0072B2", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#999999")[seq_along(fits)],
+      names(fits)))
+  }
+  p
+}

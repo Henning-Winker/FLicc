@@ -103,3 +103,11 @@ prof <- sapply(c(54, 54.5, 55, 55.5, 56, 57), function(li) {
   c(Linf = li, nll = f$opt$objective)
 })
 print(round(t(prof), 2))
+
+# plot_compare_sel: selectivity of several fits by gear
+pc <- plot_compare_sel(list(base = fit200, cut47 = fit_cut, dome = ds$fits[[length(ds$fits)]]))
+stopifnot(inherits(pc, "ggplot"), all(levels(pc$data$gear) %in% c("Trawl", "Gillnet")),
+          nlevels(pc$data$fit) == 3)
+od <- if (dir.exists("out/tests")) "out/tests" else "."
+ggplot2::ggsave(file.path(od, "compare_sel.png"), pc, width = 9, height = 4.5, dpi = 100)
+ggplot2::ggsave(file.path(od, "compare_sel_dome.png"), plot_compare_sel(ds$fits, gear = "Gillnet"), width = 6, height = 4.5, dpi = 100)
