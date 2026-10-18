@@ -38,7 +38,8 @@
 #' @return A list of class `"flicc_ensemble"` with `table` (year, spr = mixture
 #'   median, lwr, upr, mean_log, sd_within, sd_between, sd_total, Fap_mean,
 #'   Fap_min, Fap_max and, with `s`, brel, brel_lwr, brel_upr), `members`
-#'   (name, weight, AIC, dAIC, last-year SPR and its se) and `fits`.
+#'   (name, weight, AIC, dAIC, last-year SPR and its se; dAIC is `NA` when the
+#'   fits' data or likelihood differ, as AIC is then not comparable) and `fits`.
 #' @examples
 #' \dontrun{
 #' ds <- dome_sens_flicc(fit, gear = "Gillnet")
@@ -130,8 +131,10 @@ ensemble_flicc <- function(fits, weights = "equal", level = 0.95, s = NULL, spr_
     tab$brel <- br(tab$spr); tab$brel_lwr <- br(tab$lwr); tab$brel_upr <- br(tab$upr)
   }
   nl <- length(yrs)
+  comparable <- same_lik()
   members <- data.frame(name = names(fits), weight = round(w, 3),
-                        AIC = round(aic, 2), dAIC = round(aic - min(aic, na.rm = TRUE), 2),
+                        AIC = round(aic, 2),
+                        dAIC = if (comparable) round(aic - min(aic, na.rm = TRUE), 2) else NA_real_,
                         SPR_last = round(exp(MU[nl, ]), 3), se_log_last = round(SE[nl, ], 3),
                         row.names = NULL)
   structure(list(table = tab, members = members, fits = fits, weights = w, level = level, s = s),
