@@ -17,6 +17,44 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.align = "center",
                       fig.width = 7, fig.height = 4.5, message = FALSE, warning = FALSE)
 ```
 
+# FLicc: a framework for length-interval catch curves
+
+FLicc fits **length-interval catch curves (ICC)**: equilibrium models that
+explain the length composition of the catch by growth, natural mortality,
+fishing mortality and selectivity, integrated over length intervals (bins).
+It brings the two main lines of length-based per-recruit assessment into one
+framework, built on FLR (Kell et al. 2007) and fitted with TMB (Kristensen et
+al. 2016):
+
+- **fishblicc** (Medley, *Bayesian Length Interval Catch Curve*), whose
+  formulation FLicc follows most closely: steady-state length-interval
+  survival with individual Linf gamma-distributed around the von Bertalanffy
+  mean, constant mortality within each length interval, several gears with
+  their own selectivity (logistic, normal and double-sided normal), and a
+  negative-binomial likelihood. FLicc's `pop_model = "gamma"` with
+  `obs_model = "nb"` reproduces this setup (section *Reproducing fishblicc*);
+  FLicc fits it by maximum likelihood in TMB instead of Bayesian estimation in
+  Stan.
+- **LBSPR** (Hordyk et al. 2015, 2016), whose growth-type-group (GTG)
+  formulation is FLicc's default population model (`pop_model = "gtg"`): Linf
+  varies between growth-type groups, each with its own survival through the
+  length classes, and status is expressed as the spawning potential ratio.
+
+On this common basis FLicc adds what a routine assessment and management
+procedure needs: several years fitted jointly with shared selectivity and a
+random walk on F, alternative observation models (multinomial,
+Dirichlet-multinomial with estimated precision, negative binomial), treatment
+of the tail of the composition, reference points with steepness, length-based
+indicators, residual diagnostics, and use as the estimation model of an MSE in
+FLR.
+
+The names of the models and options in FLicc credit these sources: fishblicc
+for the length-interval catch-curve formulation, multi-gear selectivity and the
+gamma growth model; LBSPR for the GTG model and the SPR-based use of length
+data in data-limited fisheries.
+
+## About this guide
+
 This guide extends the introductory vignette (`vignettes/FLicc_intro_vignette.Rmd`).
 It walks through a complete assessment with the built-in splendid alfonsino data,
 with explicit **checks** at each step (what to look at, what is a red flag, what
@@ -1811,3 +1849,43 @@ plot_eqcurves(eqstk_fishblicc)
 *Planned: a worked example of a rebuilding stock, refitted year by year, to show
 how SPR, the tail cut and sigmaF respond over time; estimated Dirichlet-multinomial
 overdispersion.*
+
+# References
+
+Hordyk, A., Ono, K., Valencia, S., Loneragan, N. and Prince, J. (2015). A novel
+length-based empirical estimation method of spawning potential ratio (SPR), and
+tests of its performance, for small-scale, data-poor fisheries. *ICES Journal of
+Marine Science* 72(1): 217-231. doi:10.1093/icesjms/fsu004
+
+Hordyk, A.R., Ono, K., Prince, J.D. and Walters, C.J. (2016). A simple
+length-structured model based on life history ratios and incorporating
+size-dependent selectivity: application to spawning potential ratios for
+data-poor stocks. *Canadian Journal of Fisheries and Aquatic Sciences* 73(12):
+1787-1799. doi:10.1139/cjfas-2015-0422
+
+Kell, L.T., Mosqueira, I., Grosjean, P., Fromentin, J.-M., Garcia, D., Hillary,
+R., Jardim, E., Mardle, S., Pastoors, M.A., Poos, J.J., Scott, F. and Scott,
+R.D. (2007). FLR: an open-source framework for the evaluation and development of
+management strategies. *ICES Journal of Marine Science* 64(4): 640-646.
+doi:10.1093/icesjms/fsm012
+
+Kristensen, K., Nielsen, A., Berg, C.W., Skaug, H. and Bell, B.M. (2016). TMB:
+automatic differentiation and Laplace approximation. *Journal of Statistical
+Software* 70(5): 1-21. doi:10.18637/jss.v070.i05
+
+Medley, P.A.H. fishblicc: Bayesian Length Interval Catch Curve. R package,
+<https://github.com/PaulAHMedley/fishblicc>
+
+Sampson, D.B. and Scott, R.D. (2011). A spatial model for fishery age-selection
+at the population level. *Canadian Journal of Fisheries and Aquatic Sciences*.
+doi:10.1139/f2011-044
+
+Thorson, J.T., Johnson, K.F., Methot, R.D. and Taylor, I.G. (2017). Model-based
+estimates of effective sample size in stock assessment models using the
+Dirichlet-multinomial distribution. *Fisheries Research* 192: 84-93.
+doi:10.1016/j.fishres.2016.06.005
+
+Trijoulet, V., Albertsen, C.M., Kristensen, K., Legault, C.M., Miller, T.J. and
+Nielsen, A. (2023). Model validation for compositional data in stock assessment
+models: calculating residuals with correct properties. *Fisheries Research* 257:
+106487. doi:10.1016/j.fishres.2022.106487

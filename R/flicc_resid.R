@@ -69,7 +69,7 @@ pbetabinom_flicc <- function(x, N, a, b) {
 #'   observed count gives \eqn{u = F(o-1) + v [F(o) - F(o-1)]}, \eqn{v \sim U(0,1)},
 #'   and \eqn{r = \Phi^{-1}(u)}. Under a correct model the residuals are
 #'   independent standard normal (Trijoulet et al. 2023, Fisheries Research
-#'   261: 106487). The last bin of each composition is determined by the others
+#'   257: 106487). The last bin of each composition is determined by the others
 #'   and has no residual. Counts are rounded to integers for this step. For the
 #'   negative binomial (independent bins) the PIT residual of each bin is used.
 #'

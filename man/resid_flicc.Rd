@@ -13,7 +13,7 @@ resid_flicc(fit, type = c("pearson", "osa"), seed = 1)
 }
 \value{A data frame with gear, year, len, lmid, obs, exp (n p), n and resid.}
 \description{
-Residuals of the observed length compositions by gear, year and bin, consistent with the likelihood (effective sample size, observation model, tail cut, plus group). \code{"pearson"}: (o - n p)/sqrt(V) with the variance of the observation model (multinomial n p (1-p); Dirichlet-multinomial the same times (n + alpha0)/(1 + alpha0), alpha0 = n; negative binomial mu + mu^2/phi). \code{"osa"}: one-step-ahead randomized quantile (PIT) residuals from the decomposition into conditional binomials (multinomial) or beta-binomials (Dirichlet-multinomial), independent N(0,1) under a correct model (Trijoulet et al. 2023, Fisheries Research 261: 106487); the last bin of each composition has no residual; counts are rounded to integers for this step.
+Residuals of the observed length compositions by gear, year and bin, consistent with the likelihood (effective sample size, observation model, tail cut, plus group). \code{"pearson"}: (o - n p)/sqrt(V) with the variance of the observation model (multinomial n p (1-p); Dirichlet-multinomial the same times (n + alpha0)/(1 + alpha0), alpha0 = n; negative binomial mu + mu^2/phi). \code{"osa"}: one-step-ahead randomized quantile (PIT) residuals from the decomposition into conditional binomials (multinomial) or beta-binomials (Dirichlet-multinomial), independent N(0,1) under a correct model (Trijoulet et al. 2023, Fisheries Research 257: 106487); the last bin of each composition has no residual; counts are rounded to integers for this step.
 }
 \examples{
 \dontrun{
