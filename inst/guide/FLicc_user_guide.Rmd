@@ -772,6 +772,51 @@ group):
   independent standard normal (Trijoulet et al. 2023), so QQ plots and tests
   are valid.
 
+**How OSA residuals work.** A composition is not a set of independent
+numbers: with $n$ fish measured, a high count in one bin forces lower counts
+elsewhere. OSA residuals step through the bins of one composition, from small
+to large, and ask at each step a conditional question:
+
+- bin 1: of all $n$ fish, how many should be in bin 1? Binomial$(n, \pi_1)$;
+- bin 2: of the fish not in bin 1, how many should be in bin 2?
+  Binomial$(n - o_1, \pi_2/(1-\pi_1))$; and so on. The last bin is determined
+  by the others and has no residual.
+
+The observed count is located in its predicted distribution: at the 97.5th
+percentile, $u = 0.975$ and $r = \Phi^{-1}(0.975) = 1.96$. Because counts are
+whole numbers, $u$ is drawn at random within the step of the distribution where
+the count falls (the "randomized" part). For the Dirichlet-multinomial the
+binomials are beta-binomials, so its extra variance is included.
+
+"One step ahead" refers to stepping through the bins, not through time. In
+models with random effects, OSA residuals step through time and re-estimate the
+random effects at each step. FLicc has no random effects by default (F is
+estimated each year, the random walk is a penalty), so the expected compositions
+are fixed once the model is fitted and the residuals are exact and cheap.
+
+Reading them:
+
+- **Size**: about 5% beyond $\pm 2$, almost none beyond $\pm 3$.
+- **Sign**: each residual is conditional on the smaller bins. A positive
+  residual at length $L$ means that, of the fish still present at $L$ or
+  larger, more were in bin $L$ than predicted: fish "drop out" faster than the
+  model expects (higher mortality or falling selectivity), as in a catch curve.
+  A negative residual means more fish carried on to larger sizes.
+- **Spread**: an sd well above 1 means the data are noisier than the effective
+  sample size and observation model allow (intervals too narrow); well below 1,
+  that the noise is overstated.
+- **Process variation**: the model does not include year-class strength, so
+  strong and weak year classes appear as structure in the residuals (runs along
+  the cohort tracks, mean-length runs) rather than as noise.
+- **Few data per parameter**: residuals are computed at parameters estimated
+  from the same data, so they shrink towards zero (sd below 1) when there are
+  few data per parameter, e.g. a fit to a single year. A single year also gives
+  no between-year diagnostics, and a year-class bump within one composition
+  cannot be told apart from a selectivity misfit at those lengths. Across years,
+  cohorts move along the growth tracks while selectivity misfit stays at the
+  same length; the joint fit with shared selectivity is what lets the residuals
+  separate the two.
+
 ```{r resid, fig.height = 4.5}
 res_osa <- resid_flicc(fit, type = "osa")
 c(mean = mean(res_osa$resid, na.rm = TRUE), sd = sd(res_osa$resid, na.rm = TRUE))
@@ -811,6 +856,23 @@ ppc <- ppc_flicc(fit, nsim = 300)
 ppc$coverage
 ppc$plot
 ```
+
+```{r resid-numbers, include = FALSE}
+osa_sd <- round(sd(res_osa$resid, na.rm = TRUE), 2)
+sdz <- setNames(lmr$runs$sd_z, as.character(lmr$runs$gear))
+out_lmean <- with(ppc$coverage[ppc$coverage$stat == "Lmean", ],
+                  setNames(round(100 * share_outside_95), as.character(gear)))
+```
+
+In this fit the OSA residuals have sd `r osa_sd`, so the bin-to-bin noise
+within a year is `r if (osa_sd < 0.9) "smaller than" else if (osa_sd > 1.1) "larger than" else "close to"`
+what the observation model allows. The mean lengths, however, vary between years
+with an sd of `r sdz["Trawl"]` (trawl) and `r sdz["Gillnet"]` (gillnet) in
+standardized units, and `r out_lmean["Trawl"]`% and `r out_lmean["Gillnet"]`% of
+the observed mean lengths lie outside their 95% predictive intervals. Where the
+between-year variation is large while the within-year noise is not, the misfit
+is not sampling noise: whole compositions shift between years, as year classes
+pass through, which the equilibrium model cannot follow.
 
 About 5% of the observed values should lie outside the 95% intervals. Many more
 means that the effective sample size or the observation model understate the
