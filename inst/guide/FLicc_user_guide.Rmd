@@ -654,6 +654,24 @@ Here the cut narrows the range across no to moderate doming from
 `r ds$table$SPR_last[2]`-`r ds$table$SPR_last[4]` to
 `r ds_cut$table$SPR_last[2]`-`r ds_cut$table$SPR_last[4]`.
 
+**Integrating the dome levels.** Instead of reporting the dome levels side by
+side, they can be combined into one estimate with `ensemble_flicc()`. For each
+year the ensemble is the mixture of the members' distributions of log SPR,
+$\sum_i w_i\,N(\mu_i, se_i^2)$; its variance is the within-fit part
+$\sum_i w_i se_i^2$ plus the between-fit part $\sum_i w_i(\mu_i-\bar\mu)^2$,
+and the median and interval are quantiles of the mixture. Equal weights are the
+natural choice for assumptions the data cannot distinguish; Akaike weights
+(`weights = "aic"`) are only allowed when all members use the same data and
+likelihood, which holds for the dome levels but not, for example, across tail
+cuts.
+
+```{r dome-ensemble, fig.height = 4}
+ens <- ensemble_flicc(ds$fits[-1])     # the four dome levels, equal weights
+ens$members
+tail(ens$table[, c("year", "spr", "lwr", "upr", "sd_within", "sd_between")], 3)
+plot_ensemble_flicc(ens)
+```
+
 The sensitivity is meant for gears assumed asymptotic. For a gear already fitted
 as a dome (here the trawl, estimated right-hand SD about
 `r round(exp(fit200$par$mpd[fit200$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
