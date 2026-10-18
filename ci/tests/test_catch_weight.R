@@ -45,3 +45,11 @@ stopifnot(!is.null(f$report$catch_share_n), abs(mean(f$report$catch_share[["Traw
 p <- plot_len(f)
 od <- if (dir.exists("out/tests")) "out/tests" else "."
 ggplot2::ggsave(file.path(od, "plot_len_pooled.png"), p, width = 7, height = 8, dpi = 100)
+
+## catch_units = "numbers" (fishblicc convention): predicted numbers shares match the input
+fn <- fiticc(lfdess(lfd, ess.g = 200), stklen, sel_fun = sf, catch_by_gear = cbg,
+             settings = list(CVL = 0.1, obs_model = "dm", catch_units = "numbers"))
+csn <- fn$obj$report(fn$obj$env$last.par.best)$catch_share
+cat("catch_units numbers: reported shares", round(colMeans(csn), 3), " SPR", round(sprcur_flicc(fn), 3), "\n")
+stopifnot(max(abs(sweep(csn, 2, cbg))) < 0.05,
+          max(abs(fn$obj$report(fn$obj$env$last.par.best)$catch_share_n - csn)) < 1e-10)

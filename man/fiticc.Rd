@@ -41,7 +41,7 @@ Supported options include \code{"logistic"}, \code{"normal"},
 and \code{"dsnormal"}.}
 
 \item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
-in weight (e.g. landings in tonnes); matched to the predicted catch in weight.
+in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
 Must sum to 1.}
 
 \item{settings}{Named list of model settings. Key options include:
@@ -61,6 +61,8 @@ growth formulation.}
   when \code{pop_model = "gamma"}).\}
 
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
+
+\\item\{\code{catch_units}\}\{Units of \code{catch_by_gear}: \code{"weight"} (default; predicted catch-at-length times weight at length is compared with the input shares, e.g. landings in tonnes) or \code{"numbers"} (predicted catch in numbers, as in fishblicc).\}
 
 \\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"fixed"} (default, alpha0 = n), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"saturating"} (alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
 

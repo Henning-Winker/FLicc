@@ -26,7 +26,7 @@ It brings the two main lines of length-based per-recruit assessment into one
 framework, built on FLR (Kell et al. 2007) and fitted with TMB (Kristensen et
 al. 2016):
 
-- **fishblicc** (Medley, *Bayesian Length Interval Catch Curve*), whose
+- **fishblicc** (Medley 2025), whose
   formulation FLicc follows most closely: steady-state length-interval
   survival with individual Linf gamma-distributed around the von Bertalanffy
   mean, constant mortality within each length interval, several gears with
@@ -55,17 +55,21 @@ data in data-limited fisheries.
 
 ## About this guide
 
-This guide extends the introductory vignette (`vignettes/FLicc_intro_vignette.Rmd`).
-It walks through a complete assessment with the built-in splendid alfonsino data,
-with explicit **checks** at each step (what to look at, what is a red flag, what
-to do about it), and documents the options added in FLicc 1.0.9 and 1.0.10:
-fishing mortality over time, effective sample size, missing data, tail
-treatment, reference points with steepness, length-based indicators
-and use inside an MSE. Monte-Carlo ensembles over life-history uncertainty
-(`mc_flicc()`) will be documented separately. Recommendations marked
-*simulation* come from tests with an alfonsino-like operating model
-(fixed-CV length-at-age, annual recruitment, Beverton-Holt h = 0.75, two gears,
-two-stage length sampling).
+The guide is in three parts. **Part I** goes through an assessment from the
+data to stock status: length-frequency data (including missing data), life
+history, selectivity, fitting and diagnostics, reference points and status, and
+length-based indicators, with explicit **checks** at each step (what to look
+at, what is a red flag, what to do about it). **Part II** documents the
+technical options for users who need them: effective sample size and
+observation models, fishing mortality over time, growth variability and
+life-history priors, the tail of the composition, the model equations and a
+comparison of models, and the reproduction of fishblicc. **Part III** covers
+use in management-strategy evaluation and summarises the checks and
+recommendations. The examples use the built-in splendid alfonsino data.
+Recommendations marked *simulation* come from tests with an alfonsino-like
+operating model (fixed-CV length-at-age, annual recruitment, Beverton-Holt
+h = 0.75, two gears, two-stage length sampling). Monte-Carlo ensembles over
+life-history uncertainty (`mc_flicc()`) will be documented separately.
 
 # Installation
 
@@ -236,16 +240,17 @@ sprcur_flicc(fit1)
 
 That is a first assessment. Before using it, work through the checks of the
 following sections, in particular the effective sample size (section *Effective
-sample size*): the raw counts used here usually overstate the information in
+sample size and observation models*): the raw counts used here usually overstate the information in
 the data, which makes the intervals too narrow. The reference fit used in the
-rest of this guide differs from `fit1` only in that respect (ESS 200 per gear
-and year, Dirichlet-multinomial likelihood).
+rest of this guide (next section) differs from `fit1` only in that respect: it
+uses the Dirichlet-multinomial likelihood with an estimated precision, which
+lets the data set their own weight.
 
 # Workflow and defaults
 
 1. **Data**: length frequencies by gear as `FLQuants` (Quick start); check sample sizes, gaps and the tail.
-2. **Effective sample size**: rescale the counts to the information they carry.
-3. **Life history**: `FLPar` and `stocklen()`; check Linf against the largest fish.
+2. **Life history**: `FLPar` and `stocklen()`; check Linf against the largest fish.
+3. **Selectivity**: choose the shape per gear; dome sensitivity.
 4. **Fit**: `fiticc()`; check convergence, residuals, selectivity and retrospective consistency.
 5. **Status**: SPR, Fspr, steepness-corrected biomass, length-based indicators.
 6. **Uncertainty**: sensitivity runs (selectivity dome, CVL, Linf, tail cut).
@@ -255,6 +260,25 @@ A plain `fiticc()` call uses the GTG population model, a multinomial likelihood,
 fixed growth (Linf, CVL) and natural mortality, and a random walk on log F with
 its standard deviation fixed at `sigmaF = 0.3`. These defaults are fast and
 stable; every other option is a deliberate change.
+
+## The reference fit
+
+The rest of the guide uses one reference fit of the alfonsino data: the raw
+counts, a double-sided normal (dome) selectivity for the trawl and a logistic
+one for the gillnet, catch shares of 70% and 30% by weight, CVL = 0.1, and the
+Dirichlet-multinomial likelihood with the precision estimated from the data
+(`dm_theta = "saturating"`, section *Effective sample size and observation
+models*).
+
+```{r reference-fit}
+sel_fun <- c("dsnormal", "logistic")
+cbg <- c(0.7, 0.3)
+fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+sprcur_flicc(fit)
+```
+
+# Part I: Assessment basics {.unnumbered .part}
 
 # Length-frequency data
 
@@ -283,7 +307,7 @@ plot_lfdn(lfd)
 | **Why** | The information in a composition depends on how many independent samples (trips, hauls, landings) it comes from, not only on the number of fish. |
 | **Look for** | Gear-years with very few fish or few occupied bins (labels), years where one gear is missing, strong changes in the gear mix between years. |
 | **Red flags** | Gear-years with < 50 fish or < 10 occupied bins; a gear present only in some years; combined sample size dominated by one gear in some years and another in others. |
-| **Action** | Set effective sample sizes per gear (section *Effective sample size*); consider dropping or pooling very poor gear-years; check that `catch_by_gear` reflects the catch, not the sampling, split. |
+| **Action** | Set effective sample sizes per gear (section *Effective sample size and observation models*); consider dropping or pooling very poor gear-years; check that `catch_by_gear` reflects the catch, not the sampling, split. |
 
 ## Check 2: consistency of the compositions
 
@@ -331,221 +355,27 @@ plot_zlcc(lfd$Trawl, lhpar)
 | **Red flags** | Strongly curved descending limbs (dome-shaped selectivity, recruitment pulses), slopes jumping between years (sampling noise or changing selectivity). |
 | **Action** | Consider `dsnormal` selectivity or a tail cut; expect noisy annual F and keep the random walk. |
 
-# Effective sample size
-
-## How the sample size enters the likelihood
-
-For gear $g$ in year $y$, with observed counts $y_{g,y,l}$, total
-$n_{g,y} = \sum_l y_{g,y,l}$ and predicted proportions $\pi_{g,y,l}$:
-
-- **Multinomial** (`obs_model = "mn"`): $-\log L = -\sum_l y_{g,y,l} \log \pi_{g,y,l}$.
-  The weight of a composition is proportional to $n_{g,y}$.
-- **Negative binomial** (`"nb"`): counts with mean $n_{g,y}\pi_{g,y,l}$ and
-  overdispersion $\phi$ (estimated), variance $\mu + \mu^2/\phi$.
-- **Dirichlet-multinomial** (`"dm"`): the compositions are drawn from a Dirichlet
-  with mean $\pi_{g,y}$ and precision $\alpha_0$; in FLicc $\alpha_0 = n_{g,y}$.
-  The variance of the proportions is inflated by
-  $(n + \alpha_0)/(1 + \alpha_0) \approx 2$, so a DM fit at sample size $n$ carries
-  about the information of a multinomial with $n/2$. Its log-gamma form also
-  penalises single-bin misfits less than the multinomial, which makes it more
-  robust with messy real data.
-
-`lfdess(lfd, ess.g)` rescales each gear-year to the given effective sample size
-(ESS), keeping the proportions; empty gear-years stay empty.
-
-## Why very large sample sizes do harm
-
-Measured fish are not independent: fish from one haul or trip share its length
-structure. Raw counts (often thousands) therefore overstate the information by
-an order of magnitude. With an overstated sample size:
-
-- the likelihood is dominated by small structural misfits (growth model, binning,
-  selectivity shape) rather than the signal, so estimates and their standard
-  errors are overconfident;
-- log-likelihood differences between alternative assumptions become huge, so
-  AIC weights across an ensemble collapse onto a few draws and likelihood profiles
-  become jagged or multimodal;
-- any discrete effect (a fish entering or leaving the range of the largest growth
-  group) is multiplied by $n$.
-
-## Choosing the effective sample size
-
-Empirically, ESS of about 150-200 per gear-year has given the most stable
-assessments and ensemble profiles, and 1000 or more behaved poorly in
-Monte-Carlo profiling. Practical rules:
-
-- Base ESS on the number of independent sampling units (trips, hauls, vessels)
-  where known, e.g. a few fish-equivalents per unit; otherwise start at 150-200 per
-  gear-year and test 100 and 300.
-- Use the same ESS for gears of similar sampling quality; reduce it for gears
-  with few trips.
-- Prefer `obs_model = "dm"` with real data. With the default fixed precision it
-  halves the nominal ESS; with an estimated precision
-  (`dm_theta = "saturating"`, next section) the data choose their own weight:
-  then give it the **raw counts or an ESS of at least 500**, not a reduced ESS.
-- With the multinomial or the fixed Dirichlet-multinomial, never fit raw counts
-  of several thousand fish per year without rescaling.
-
-The demonstration below fits the alfonsino data at five effective sample sizes
-(`ess_values`), once with the multinomial and once with the Dirichlet-multinomial,
-and once more with the raw counts. `lfdess()` rescales the compositions to the
-given ESS; `Map()` runs one fit per value. For each fit the table shows the
-last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
-`spr_ci_flicc()`) and the largest absolute gradient at the optimum.
-
-```{r ess-demo}
-sel_fun <- c("dsnormal", "logistic")
-cbg <- c(0.7, 0.3)
-stklen <- stocklen(lfd, lhpar, m_model = "constant")
-
-ess_values <- c(50, 100, 200, 500, 1000)
-
-# multinomial: one fit per ESS
-fits_mn <- Map(function(ess) {
-  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "mn"))
-}, ess_values)
-names(fits_mn) <- paste0("mn_", ess_values)
-
-# Dirichlet-multinomial: one fit per ESS
-fits_dm <- Map(function(ess) {
-  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm"))
-}, ess_values)
-names(fits_dm) <- paste0("dm_", ess_values)
-
-# raw counts (no rescaling)
-fit_raw_mn <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                     settings = list(CVL = 0.1, obs_model = "mn"))
-fit_raw_dm <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                     settings = list(CVL = 0.1, obs_model = "dm"))
-raw_n <- round(mean(quantSums(lfd[["Trawl"]])))   # fish per year, trawl
-
-fits_mn <- c(fits_mn, raw = list(fit_raw_mn))
-fits_dm <- c(fits_dm, raw = list(fit_raw_dm))
-
-# standard error of log SPR in the last year
-se_logspr <- function(fit) tail(spr_ci_flicc(fit)$se_log, 1)
-ess_table <- data.frame(
-  ESS        = c(ess_values, paste0("raw (~", raw_n, ")")),
-  SPR_mn     = round(sapply(fits_mn, sprcur_flicc), 3),
-  SPR_dm     = round(sapply(fits_dm, sprcur_flicc), 3),
-  se_mn      = round(sapply(fits_mn, se_logspr), 3),
-  se_dm      = round(sapply(fits_dm, se_logspr), 3),
-  maxgrad_dm = signif(sapply(fits_dm, function(fit) fit$max_gradient), 2),
-  row.names  = NULL)
-ess_table
-```
-
-Three things change with the effective sample size:
-
-- **Precision**: the standard error of log SPR shrinks roughly with $1/\sqrt{n}$;
-  with large ESS the intervals reflect the sampling of individual fish, not of
-  the fishery.
-- **Convergence**: the maximum gradient grows at large ESS (here up to
-  `r ess_table$maxgrad_dm[5]` at ESS 1000 with `dm`), a sign that the
-  likelihood surface becomes sharp and ragged.
-- **The estimate itself, for `dm`**: with the multinomial the last-year SPR changes
-  little (`r paste(range(ess_table$SPR_mn), collapse = " to ")`),
-  but with the Dirichlet-multinomial it ranges from
-  `r ess_table$SPR_dm[1]` at ESS 50 to `r ess_table$SPR_dm[5]` at ESS 1000.
-  At low ESS the compositions carry little weight against the random walk and
-  the catch-share constraint; estimates stabilise from about ESS 150-200 upward.
-
-The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
-moderate; with the thousands of fish per year common in market sampling the
-effects above are much stronger, also for the AIC weights of a Monte-Carlo
-ensemble.
-
-SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
-for the raw counts:
-
-```{r ess-plot, fig.height = 4}
-plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
-```
-
-## Letting the data choose their weight: estimated Dirichlet-multinomial precision
-
-With the default `dm_theta = "fixed"` the Dirichlet precision is
-$\alpha_0 = n$, so the effective sample size the likelihood uses is
-$$
-n_{eff} = \frac{n\,(1 + \alpha_0)}{n + \alpha_0} = \frac{1 + n}{2} \approx \frac{n}{2},
-$$
-proportional to the input ESS, as shown above. FLicc can instead estimate the
-precision by gear (Thorson et al. 2017):
-
-| `dm_theta` | $\alpha_0$ | $n_{eff}$ | as the input ESS grows |
-|---|---|---|---|
-| `"fixed"` (default) | $n$ | $\approx n/2$ | grows without limit |
-| `"linear"` | $\theta n$, $\theta$ estimated | $(1 + \theta n)/(1 + \theta)$ | grows, at a rate set by $\theta$ |
-| `"saturating"` | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
-
-With `"saturating"`, once the input sample size is well above $\beta$ the
-effective sample size no longer depends on it: the data estimate how much each
-composition can count. The input matters only if it is *below* what the data
-support. Then there is no overdispersion to estimate, $\beta$ runs towards
-infinity, and the model becomes a multinomial at the input sample size; a weak
-prior (`dm_prior_sd = 2`, centred close to a multinomial) keeps it finite. For
-this reason, **with an estimated precision use the raw counts or an ESS of at
-least 500**, so that the data, not the input, set the weight.
-
-The fits below use the saturating Dirichlet-multinomial at ESS 500 and 1000 and
-on the raw counts; `neff_flicc()` reports the estimated effective sample size by
-gear and year.
-
-```{r dm-sat}
-dm_inputs <- list(ESS_500 = lfdess(lfd, ess.g = 500), ESS_1000 = lfdess(lfd, ess.g = 1000), raw = lfd)
-fits_dms <- Map(function(d) {
-  fiticc(d, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
-}, dm_inputs)
-
-neff_gear <- function(fit, g) { ne <- neff_flicc(fit); round(mean(ne$neff[ne$gear == g])) }
-dm_table <- data.frame(
-  input        = names(fits_dms),
-  SPR_last     = round(sapply(fits_dms, sprcur_flicc), 3),
-  se_log       = round(sapply(fits_dms, se_logspr), 3),
-  neff_Trawl   = sapply(fits_dms, neff_gear, g = "Trawl"),
-  neff_Gillnet = sapply(fits_dms, neff_gear, g = "Gillnet"),
-  row.names = NULL)
-dm_table
-plot_spr(c(fixed_ESS_200 = list(fits_dm$dm_200), fits_dms), ci = TRUE)
-```
-
-The last-year SPR is `r paste(unique(range(dm_table$SPR_last)), collapse = " to ")`
-whatever the input, against `r paste(range(ess_table$SPR_dm), collapse = " to ")`
-for the fixed precision over ESS 50 to 1000. The compositions support an
-effective sample size of about `r dm_table$neff_Trawl[3]` (trawl) and
-`r dm_table$neff_Gillnet[3]` (gillnet) fish per year; the fixed precision at
-ESS 200 used about 100.
-
-The estimated precision describes the noise *within* compositions. Year classes
-that shift whole compositions between years are a different kind of misfit, which
-the residual diagnostics (section *Residual diagnostics*) show and the precision
-does not absorb.
-
-# Missing data
+## Missing data
 
 FLicc handles missing gear-years directly: a gear-year without samples (all zero
 counts) contributes nothing to the composition likelihood, and its F is
-informed by the random walk from neighbouring years and by the catch-share
-constraint.
+informed by the random walk on F from neighbouring years (section *Fishing
+mortality over time*) and by the catch-share constraint. The example removes
+the gillnet samples of 2016 and 2017 and the trawl samples of 2020 and refits
+the reference model.
 
 ```{r missing}
-lfd200 <- lfdess(lfd, ess.g = 200)
-lfd_miss <- lfd200
+lfd_miss <- lfd
 lfd_miss[["Gillnet"]][, c("2016", "2017")] <- 0
 lfd_miss[["Trawl"]][, "2020"] <- 0
-fit200 <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                 settings = list(CVL = 0.1, obs_model = "dm"))
 fit_miss <- fiticc(lfd_miss, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                   settings = list(CVL = 0.1, obs_model = "dm"))
+                   settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
 flicc_convergence(fit_miss)
 ```
 
 ```{r missing-plot, fig.height = 4}
 plot_lfdn(lfd_miss)
-plot_spr(list(complete = fit200, gaps = fit_miss), ci = TRUE)
+plot_spr(list(complete = fit, gaps = fit_miss), ci = TRUE)
 ```
 
 Guidelines:
@@ -615,8 +445,8 @@ of 0.1 Linf. Selectivity is evaluated at bin mid-points and is constant over
 time.
 
 ```{r sel}
-plot_sel(fit200)
-selpars_flicc(fit200)
+plot_sel(fit)
+selpars_flicc(fit)
 ```
 
 ## Fixing selectivity parameters
@@ -625,8 +455,8 @@ selpars_flicc(fit200)
 experiments:
 
 ```{r sel-fixed, eval = FALSE}
-fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-       settings = list(CVL = 0.1, obs_model = "dm"),
+fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+       settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"),
        sel_fixed = list(Gillnet = list(SL50 = 30, SL95 = 34)))   # logistic
 # dsnormal: list(mode = 24, lsd = 3, rsd = 1000)  (rsd = 1000: flat right limb)
 # normal:   list(mode = 24, sd = 4)
@@ -716,7 +546,7 @@ whose right-hand SD is fixed at a sequence of values (default
 other settings and data as in the base fit.
 
 ```{r dome-sens, fig.height = 4.5}
-ds <- dome_sens_flicc(fit200, gear = "Gillnet")
+ds <- dome_sens_flicc(fit, gear = "Gillnet")
 ds$table
 plot_dome_sens(ds)
 plot_dome_sens(ds, "spr", ci = TRUE)
@@ -734,9 +564,9 @@ status across the domes the data cannot reject. With a tail cut the scenarios
 differ less, because the bins where the dome acts are excluded:
 
 ```{r dome-sens-cut}
-fit200_cut <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                     settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))
-ds_cut <- dome_sens_flicc(fit200_cut, gear = "Gillnet", se = FALSE)
+fit_cut_sel <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", tail_cut = 47))
+ds_cut <- dome_sens_flicc(fit_cut_sel, gear = "Gillnet", se = FALSE)
 data.frame(scenario = ds$table$scenario, SPR_no_cut = ds$table$SPR_last,
            SPR_cut47 = ds_cut$table$SPR_last)
 ```
@@ -765,7 +595,7 @@ plot_ensemble_flicc(ens)
 
 The sensitivity is meant for gears assumed asymptotic. For a gear already fitted
 as a dome (here the trawl, estimated right-hand SD about
-`r round(exp(fit200$par$mpd[fit200$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
+`r round(exp(fit$par$mpd[fit$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
 wide right-hand SD forces a shape the data reject, which shows as very large dAIC.
 
 ## Choosing selectivity
@@ -788,85 +618,35 @@ wide right-hand SD forces a shape the data reject, which shows as very large dAI
 | **Red flags** | Very narrow domes; $\sigma_R$ at very small values for a gear expected to be logistic; L50 below the smallest sampled fish. |
 | **Action** | Compare logistic and dome by AIC and by status; fix parameters from external information; use a tail cut. |
 
-# Model
-
-## Fishing mortality and total mortality
-
-$F_{g,y}(L) = F_{g,y} S_g(L)$, $Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Gear shares of F
-are informed by `catch_by_gear` through a soft constraint on the predicted
-catch shares in weight (`catch.sd`, default 0.05):
-$$
-\log\frac{\hat C^w_{g,y}}{\hat C^w_{G,y}} \sim N\!\left(\log\frac{c_{g,y}}{c_{G,y}},\ \texttt{catch.sd}^2\right),
-\qquad \hat C^w_{g,y} = \sum_L C_{g,y}(L)\, W(L),
-$$
-where $c_{g,y}$ is `catch_by_gear` and $G$ the last gear. The predicted shares
-are in `fit$obj$report()$catch_share`.
-
-## Expected catch and length composition
-
-FLicc separates the **population model** (expected numbers at length under
-growth, M, F and selectivity) from the **observation model** (the likelihood
-that links the observed counts to the expected composition), so either can be
-changed without the other. With $N_i$ the expected number of fish entering
-length bin $i$, the expected catch of gear $g$ in bin $i$ is
-$$
-C_{i,g} = \frac{F_{i,g}}{Z_i}\left(N_i - N_{i+1}\right), \qquad Z_i = M_i + \sum_g F_{i,g},
-$$
-and the expected composition of gear $g$ is $\pi_{i,g} = C_{i,g} / \sum_i C_{i,g}$.
-
-## Population model
-
-`pop_model = "gtg"` (default, as LBSPR): growth-type groups
-$L_{\infty,h} = L_\infty(1 + \mathrm{CVL}\, z_h)$, $z_h$ on
-`seq(-maxsd, maxsd, length = ngtg)` (13 groups, `maxsd = 2`), weights
-$\omega_h \propto \phi(z_h)$. Within a group, survival across bin $i$ follows from
-the time needed to grow through it under von Bertalanffy growth:
-$$
-N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right)^{Z_i/k},
-\qquad N_i = \sum_h \omega_h N_{i,h}.
-$$
-
-`pop_model = "gamma"` follows fishblicc: Linf is gamma-distributed among
-individuals, and the numbers at length integrate survival over that distribution,
-$$
-N_i = \int f(L_\infty)\, S_i(L_\infty)\, dL_\infty ,
-$$
-evaluated by Gauss-Laguerre quadrature (slower). Both are equilibrium models:
-each year is explained by the equilibrium at that year's F (section *Lag under
-changing F* on the consequences).
-
-## Observation model
-
-For gear $g$ in year $y$, with counts $\mathbf y_{g,y}$ and total $n_{g,y}$:
-
-- `obs_model = "mn"` (default): $\mathbf y_{g,y} \sim \text{Multinomial}(n_{g,y}, \boldsymbol\pi_{g,y})$.
-- `"nb"`: $y_{i,g,y} \sim \text{NB}(\mu, \phi)$ with $\mu = n_{g,y}\pi_{i,g,y}$ and
-  $\text{Var} = \mu + \mu^2/\phi$; $\phi$ is estimated.
-- `"dm"`: $\mathbf y_{g,y} \sim \text{Dirichlet-multinomial}(n_{g,y}, \alpha_0 \boldsymbol\pi_{g,y})$
-  with $\alpha_0 = n_{g,y}$.
-
-How the sample size enters each of them is explained in section *Effective
-sample size*; the three are compared on the same data in section *Population
-and observation models compared*.
-
-## Status: SPR
-
-$$
-\mathrm{SPR}_y = \frac{\sum_L N_{F_y}(L) W(L) P_{mat}(L)}{\sum_L N_0(L) W(L) P_{mat}(L)} .
-$$
-
 # Fitting and fit checks
 
-```{r fit}
-t0 <- system.time(
-  fit <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                settings = list(CVL = 0.1, obs_model = "dm"))
-)
-t0[["elapsed"]]
-sigmaF_flicc(fit)
-```
+## The model in brief
 
-From here on, `fit` is the reference fit (Dirichlet-multinomial, ESS 200).
+For each gear $g$ and year $y$, fishing mortality at length is the gear's F
+times its selectivity, $F_{g,y}(L) = F_{g,y}S_g(L)$, and total mortality is
+$Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Fish grow through the length bins
+following von Bertalanffy growth, with variation in Linf among fish; the
+expected length composition of each gear's catch follows from the numbers
+surviving to each length and the gear's F. Each year is fitted as an
+equilibrium at that year's F, with F linked between years by a random walk and
+selectivity shared by all years. Status is the spawning potential ratio,
+$$
+\mathrm{SPR}_y = \frac{\sum_L N_{F_y}(L) W(L) P_{mat}(L)}{\sum_L N_0(L) W(L) P_{mat}(L)} ,
+$$
+the spawning output per recruit at the year's F relative to the unfished state.
+The equations are in section *Model equations and comparison of models*.
+
+## Fitting the reference model
+
+The reference fit was made in section *The reference fit*; it takes under a
+second:
+
+```{r fit}
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating")))
+sigmaF_flicc(fit)
+neff_flicc(fit)[1:4, ]
+```
 
 ## Settings
 
@@ -1065,12 +845,12 @@ The model is refitted with the last one, two and three years removed (`peels`);
 with the SPR of the same year in the full fit.
 
 ```{r check-retro, fig.height = 4}
-yrs <- as.numeric(dimnames(lfd200[[1]])$year)
+yrs <- as.numeric(dimnames(lfd[[1]])$year)
 peels <- 1:3
 
 retro <- Map(function(p) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm"),
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"),
          years = head(yrs, -p), se = FALSE)
 }, peels)
 names(retro) <- paste0("peel", peels)
@@ -1088,398 +868,6 @@ round(mohn_rho, 3)
 | **Pass** | Mohn's rho for SPR within about ±0.2. |
 | **Red flags** | Consistent revisions in one direction (the terminal SPR is systematically revised up or down). |
 | **Action** | Check for trends in selectivity or sampling; in a rebuild, an equilibrium model is expected to under-estimate SPR at the end of the series (section *Lag under changing F*). |
-
-# Fishing mortality over time
-
-Log F by gear follows a random walk,
-$$
-\log F_{g,y} = \log F_{g,y-1} + \varepsilon_{g,y}, \qquad \varepsilon_{g,y} \sim N(0, \sigma_F^2).
-$$
-With selectivity $S_g(L)$ shared by all years, the model is fitted to all
-compositions at once; the objective is
-$$
--\log L = -\sum_{y} \log L_y\!\left(F_{\cdot,y}, S\right)
-          - \sum_{g,y>1} \log \phi\!\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right).
-$$
-Compared with fitting each year on its own (as LBSPR does), this has four
-advantages:
-
-- **Selectivity from all years.** The left limb of the compositions is
-  informed by every year, so selectivity is better determined and does not
-  absorb year-to-year sampling noise.
-- **Borrowing strength.** A year with few fish is fitted close to its
-  neighbours instead of producing an extreme F.
-- **Missing years.** A year without data of a gear still gets an F, bridged by
-  the random walk (section *Missing data*).
-- **Separation of signal and noise.** $\sigma_F$ sets how much of the
-  year-to-year change in the compositions is read as a change in F.
-
-The price is smoothing: with small $\sigma_F$ a real change in F is spread over
-several years (section *Lag under changing F*). The options below differ in how
-$\sigma_F$ is treated.
-
-The four options for $\sigma_F$ are fitted below to the same data (ESS 200,
-Dirichlet-multinomial). Only the F settings differ, so each option has its own
-`settings` list; `Map()` fits them in turn.
-
-```{r f-options}
-f_settings <- list(
-  fixed_0.3 = list(CVL = 0.1, obs_model = "dm", sigmaF = 0.3),                       # default
-  prior     = list(CVL = 0.1, obs_model = "dm", prior_sigmaF = c(log(0.5), 0.3, 1)), # penalised
-  F_re      = list(CVL = 0.1, obs_model = "dm", F_re = TRUE),                        # random effects
-  no_RW     = list(CVL = 0.1, obs_model = "dm", prior_sigmaF = FALSE))               # no random walk
-
-fits_F <- Map(function(set) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
-}, f_settings)
-
-data.frame(option   = names(fits_F),
-           sigmaF   = round(sapply(fits_F, sigmaF_flicc), 3),
-           SPR_last = round(sapply(fits_F, sprcur_flicc), 3),
-           se_log   = round(sapply(fits_F, se_logspr), 3),
-           row.names = NULL)
-```
-
-`sigmaF_flicc()` returns the fixed or estimated $\sigma_F$ (NA without a random
-walk). The SPR trajectories with 95% intervals, and the apical F by year
-(`report$Fap`):
-
-```{r f-options-plot, fig.height = 4}
-plot_spr(fits_F, ci = TRUE)
-
-F_by_option <- FLQuants(fixed_0.3 = fits_F$fixed_0.3$report$Fap,
-                        prior     = fits_F$prior$report$Fap,
-                        F_re      = fits_F$F_re$report$Fap,
-                        no_RW     = fits_F$no_RW$report$Fap)
-ggplot(F_by_option, aes(year, data, colour = qname)) +
-  geom_line(linewidth = 0.8) + geom_point(size = 1.5) +
-  labs(x = "Year", y = "Apical F", colour = NULL) + theme_bw()
-```
-
-The estimated $\sigma_F$ of the penalised and random-effects options is much
-smaller than 0.3, so their F trajectories are smoother; without a random walk F
-follows each year's composition. To see what $\sigma_F$ does, the next runs fix it
-at a range of values (`sigmaF_values`):
-
-```{r sigmaF-range, fig.height = 4}
-sigmaF_values <- c(0.05, 0.1, 0.3, 0.6, 1)
-
-fits_sigmaF <- Map(function(sF) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm", sigmaF = sF), se = FALSE)
-}, sigmaF_values)
-names(fits_sigmaF) <- paste0("sigmaF_", sigmaF_values)
-
-plot_spr(fits_sigmaF)
-data.frame(sigmaF   = sigmaF_values,
-           SPR_last = round(sapply(fits_sigmaF, sprcur_flicc), 3),
-           neg_logL = round(sapply(fits_sigmaF, function(fit) fit$opt$objective), 1))
-```
-
-Small values force F (and SPR) towards a flat line; from about 0.3 upward the
-trajectories change little. The objective (`neg_logL`) includes the random-walk
-penalty, which is why it cannot be used to choose $\sigma_F$ directly: it always
-favours the smallest value that the compositions tolerate.
-
-## Default: sigmaF fixed
-
-`sigmaF = 0.3` (the default) fixes the year-to-year standard deviation of log F,
-roughly a 30% typical annual change. It is fast, cannot collapse, and the
-simulations showed that it removes most of the smoothing lag (next section).
-Change it where fleet dynamics are known to be smoother (0.2) or more variable
-(0.5).
-
-## Estimating sigmaF with a prior (penalised)
-
-With `prior_sigmaF = c(mu, sd, 1)`, $\sigma_F$ is a fixed-effect parameter and the
-objective is
-$$
--\log L = -\log L_{data} - \sum_{g,y} \log \phi\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right)
-          - \log \phi\left(\log \sigma_F;\, \mu, sd\right).
-$$
-Each random-walk term contributes $-\log \sigma_F$, so the joint maximum favours
-small $\sigma_F$ with flat F whenever the data do not resist: the estimate is
-pulled down (here `r round(sigmaF_flicc(fits_F$prior), 3)`), and only the prior keeps it
-away from 0. Without a prior (`prior_sigmaF = c(NA, NA, 1)`) it collapses; FLicc
-warns.
-
-## F as random effects (`F_re = TRUE`)
-
-The log F are integrated out,
-$$
-L(\theta) = \int L_{data}(\theta, \mathbf F)\, p(\mathbf F \mid \sigma_F)\, d\mathbf F,
-$$
-by the Laplace approximation (TMB): for each value of the other parameters
-$\theta$ (selectivity, $\sigma_F$), the F path is optimised and the curvature
-around it enters the marginal likelihood. Consequences:
-
-- $\sigma_F$ is estimated from the marginal likelihood, which properly accounts for
-  the uncertainty of the F path (here `r round(sigmaF_flicc(fits_F$F_re), 3)`). It can still
-  go to small values when the compositions carry little year-to-year
-  information; a weak prior `c(log(0.3), 0.5, 1)` is used unless another is given.
-- Standard errors (e.g. of log SPR) include the uncertainty of the F process.
-- Fitting is slower:
-
-```{r f-re-time}
-system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$fixed_0.3))
-system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$F_re))
-```
-
-Use it for a final assessment and to estimate $\sigma_F$ once; then fix it for
-repeated fits: `sigmaF = sigmaF_flicc(fit_re)`. `F_re = TRUE` with `sigmaF` given
-keeps the random effects but fixes $\sigma_F$.
-
-## No random walk and separate years
-
-`prior_sigmaF = FALSE` estimates each year's F freely with shared selectivity
-(LBSPR fitted year by year, with common selectivity): no smoothing lag, but noisier
-F and no information for years without data. `by_year = TRUE` fits each year
-completely separately (including selectivity).
-
-| Option | Settings | sigmaF | Use |
-|---|---|---|---|
-| fixed (default) | `sigmaF = 0.3` | fixed | routine, MSE, ensembles |
-| penalised with prior | `prior_sigmaF = c(log(0.5), 0.3, 1)` | estimated, pulled down | comparison with earlier versions |
-| random effects | `F_re = TRUE` | marginal likelihood | final assessment; estimate sigmaF once |
-| no random walk | `prior_sigmaF = FALSE` | – | complete data, maximum responsiveness |
-| separate years | `by_year = TRUE` | – | checks of selectivity change |
-
-## Joint fit versus each year separately
-
-`by_year = TRUE` fits every year on its own and re-estimates all parameters,
-including selectivity, for each year: the LBSPR-style approach. The comparison
-below uses the same data and settings as the reference fit `fit`.
-
-```{r by-year, fig.height = 4}
-fit_by_year <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                      settings = list(CVL = 0.1, obs_model = "dm"), by_year = TRUE)
-
-plot_spr(list(joint = fit, by_year = fit_by_year))
-plot_sel(flicc_stklen(fit_by_year))
-```
-
-The by-year selectivities differ between years although the gears did not
-change; these differences are sampling noise taken up by selectivity, and they
-pass on to F and SPR. The joint fit estimates one selectivity per gear and gives
-a smoother, more precise SPR series. Use `by_year = TRUE` as a check for real
-changes in selectivity (a new mesh size, a change of fishing grounds), not as
-the main assessment.
-
-## Lag under changing F
-
-An equilibrium model explains each year's composition by the equilibrium at that
-year's F. After a change in F, the large fish adjust only over many years, so the
-estimated SPR lags behind (*simulation*, rebuild from 3x to 0.7x Fmsy):
-
-| F model | SPR trend recovered, no cut | with cut at 0.8 Linf |
-|---|---|---|
-| sigmaF estimated (collapsing) | 14% | 26% |
-| sigmaF fixed 0.3 | 27% | 50% |
-| sigmaF fixed 1 | 29% | 57% |
-| no random walk | 30% | 59% |
-
-The smoothing lag of the random walk is largely removed at sigmaF = 0.3; larger
-values add little responsiveness but more year-to-year noise (+10 to +50%). The
-rest of the lag comes from the data (the tail carries the memory of past F) and
-from recruitment rising during recovery under a stock-recruitment relationship.
-In a rebuild from deep depletion the equilibrium model stays pessimistic.
-
-# Growth variability and life-history priors
-
-## CVL
-
-`CVL` is the coefficient of variation of Linf among growth-type groups. It sets how
-far individual growth spreads the length composition, mostly in the tail: the
-fastest-growing groups determine how many fish occur near and beyond Linf. It is
-fixed at its input value unless `CVL.sd` is given; typical values are 0.07-0.15.
-
-The sensitivity below refits the model for three CVL values (`cvl_values`),
-without and with a tail cut at 47 cm; `Map()` runs one fit per value.
-
-```{r cvl-sens, fig.height = 4}
-cvl_values <- c(0.07, 0.10, 0.13)
-
-fits_cvl <- Map(function(cvl) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = cvl, obs_model = "dm"), se = FALSE)
-}, cvl_values)
-names(fits_cvl) <- paste0("CVL_", cvl_values)
-
-fits_cvl_cut <- Map(function(cvl) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = cvl, obs_model = "dm", tail_cut = 47), se = FALSE)
-}, cvl_values)
-names(fits_cvl_cut) <- paste0("CVL_", cvl_values, "_cut47")
-
-cvl_table <- data.frame(CVL       = cvl_values,
-                        SPR_no_cut = round(sapply(fits_cvl, sprcur_flicc), 3),
-                        SPR_cut47  = round(sapply(fits_cvl_cut, sprcur_flicc), 3),
-                        row.names = NULL)
-cvl_table
-plot_spr(c(fits_cvl, fits_cvl_cut))
-```
-
-Status is sensitive to CVL because CVL shapes the tail: here SPR ranges
-`r min(cvl_table$SPR_no_cut)`-`r max(cvl_table$SPR_no_cut)` over CVL 0.07-0.13
-without a cut and `r min(cvl_table$SPR_cut47)`-`r max(cvl_table$SPR_cut47)` with a
-cut at 47 cm.
-
-## maxsd and ngtg
-
-The growth groups are placed at $z_h$ on `seq(-maxsd, maxsd, length = ngtg)` with
-normal weights. Truncating the normal at `maxsd` reduces the realised CV of the
-groups below CVL and caps the largest group at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$:
-
-The realised spread can be computed directly from the group positions `z` and
-their normal weights `w`; the factor multiplies CVL:
-
-```{r maxsd-cv}
-z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (default)
-w <- dnorm(z) / sum(dnorm(z))
-sqrt(sum(w * z^2))                        # realised CV factor
-
-z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19
-w <- dnorm(z) / sum(dnorm(z))
-sqrt(sum(w * z^2))
-
-55.7 * (1 + c(2, 3) * 0.1)                # largest group Linf for maxsd 2 and 3
-```
-
-With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
-CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
-groups matters little beyond about 13.
-
-The fits below compare the two settings (`maxsd_values` with matching
-`ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
-parallel.
-
-```{r maxsd-sens}
-maxsd_values <- c(2, 3)
-ngtg_values  <- c(13, 19)
-
-fits_maxsd <- Map(function(maxsd, ngtg) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm", maxsd = maxsd, ngtg = ngtg), se = FALSE)
-}, maxsd_values, ngtg_values)
-
-fits_maxsd_cut <- Map(function(maxsd, ngtg) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm", maxsd = maxsd, ngtg = ngtg,
-                         tail_cut = 47), se = FALSE)
-}, maxsd_values, ngtg_values)
-
-data.frame(maxsd      = maxsd_values,
-           ngtg       = ngtg_values,
-           SPR_no_cut = round(sapply(fits_maxsd, sprcur_flicc), 3),
-           SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
-```
-
-Recommendation: keep the LBSPR default for comparability and treat `maxsd = 3`
-as a sensitivity; with a tail cut the choice matters little, because the
-affected bins lie far above the cut. The effective CV matters when CVL is taken
-from external growth studies: with `maxsd = 2`, a CVL input of 0.1 corresponds
-to a realised spread of about 0.09.
-
-## Estimating Linf, M/k and CVL with priors
-
-By default growth and natural mortality are fixed. `linf.sd`, `Mk.sd` and
-`CVL.sd` estimate them with normal priors on the log scale around the inputs:
-$$
-\log L_\infty \sim N(\log L_\infty^{in}, \texttt{linf.sd}^2), \quad
-\log (M/k) \sim N(\log (M/k)^{in}, \texttt{Mk.sd}^2), \quad
-\log \mathrm{CVL} \sim N(\log \mathrm{CVL}^{in}, \texttt{CVL.sd}^2),
-$$
-so each sd is approximately a CV (e.g. `linf.sd = 0.05`: about ±10% at 95%).
-
-The fit below estimates all three with priors. The estimates are on the log
-scale: $L_\infty$ = `exp(log_Linf)`, $M/k$ = `exp(log_Mk)` and CVL =
-`1 / sqrt(exp(log_Galpha))`; the column `se` is approximately the posterior CV
-(for `log_Galpha` divide by 2).
-
-```{r priors, fig.height = 4}
-fit_pri <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                  settings = list(CVL = 0.1, obs_model = "dm",
-                                  linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25))
-
-est <- fit_pri$par[fit_pri$par$par %in% c("log_Linf", "log_Mk", "log_Galpha"), ]
-est
-exp(est$mpd[est$par == "log_Linf"])            # Linf (input 55.7)
-exp(est$mpd[est$par == "log_Mk"])              # M/k  (input 0.162 / 0.08 = 2.03)
-1 / sqrt(exp(est$mpd[est$par == "log_Galpha"])) # CVL  (input 0.1)
-
-plot_spr(list(fixed = fit, priors = fit_pri), ci = TRUE)
-```
-
-```{r priors-numbers, include = FALSE}
-pp <- function(nm, col = "mpd") est[[col]][est$par == nm][1]
-```
-
-Here the length data pull Linf up to about `r round(exp(pp("log_Linf")), 1)`
-(posterior CV `r round(pp("log_Linf", "se"), 3)` against a prior CV of 0.05), and
-because a larger Linf means the fish in the catch are relatively younger, SPR
-drops markedly. The posterior CVs of M/k and CVL stay close to their prior CVs:
-the data say little about them. A shift of this size in Linf is a finding to
-check against growth studies, not a result to accept; run the assessment with
-Linf fixed at the alternative values as a sensitivity.
-
-Notes:
-
-- **k** is not estimated separately: the length model depends on M/k (and Z/k), so
-  uncertainty in k and M is expressed through `Mk.sd`. k still sets the time scale
-  of the annual F estimates (F is estimated as F/k).
-- Length data carry limited information on Linf and CVL, and both are confounded
-  with dome-shaped selectivity and the tail; a posterior CV close to the prior CV
-  means the data are uninformative. Large moves away from the input (several prior
-  SDs) indicate a conflict between the data and the life history, to be
-  investigated rather than accepted.
-- For ensembles, drawing the life-history parameters and keeping them fixed in
-  each fit (`mc_flicc()`) is usually better behaved than estimating them.
-
-# Tail of the length composition
-
-## Tail cut
-
-`tail_cut = L` excludes bins with lower bound $\geq L$ from the likelihood;
-observed and predicted compositions are truncated and the predictions
-renormalised,
-$$
-\pi_{l \mid L < L_{cut}} = \pi_l \Big/ \sum_{l' : L_{l'} < L_{cut}} \pi_{l'} .
-$$
-This is exact conditioning: the model still describes the whole population with
-its input CVL, SPR and reference points use all lengths, and CVL needs no
-adjustment. `tail_cut` is an **absolute length** (as `Lplus`), so all sensitivity
-runs and ensemble draws use the same bins. (Values <= 1.5 are read as a fraction
-of Linf, with a warning.)
-
-```{r tailcut, fig.height = 4}
-fit_cut <- fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                  settings = list(CVL = 0.1, obs_model = "dm", tail_cut = 47))  # ~0.85 x Linf
-fit_cut$tmb_data$LLB[fit_cut$tmb_data$cut_bin + 1]
-plot_spr(list(no_cut = fit, cut_47 = fit_cut), ci = TRUE)
-```
-
-*Simulation* (stable F, correct Linf unless stated):
-
-| | no cut | cut at 0.80-0.85 x Linf |
-|---|---|---|
-| CVL input 0.07 / 0.10 / 0.13 (true 0.1) | +9 / -1 / -11% | +13 / +9 / +4% |
-| strong dome on one gear fitted as logistic | -17% | +1% |
-| SPR trend recovered in a rebuild (sigmaF 0.3) | 27% | ~50% |
-| Linf input 0.9 / 1.1 x true | +91 / -40% | +74 / -28% |
-
-The cut halves the CVL sensitivity, removes the bias of a strong unmodelled dome
-and roughly doubles responsiveness; it costs a small positive bias (+7 to +10%)
-and more noise under stable F, and does not remove the Linf sensitivity.
-Starting value: 0.80-0.85 x Linf, fixed across fits.
-
-## Plus group, robust likelihood, GTG range
-
-- `Lplus = L` pools bins with lower bound $\geq L$ into one (the total counts, the
-  shape does not).
-- `rob_eps = 0.001` bounds the cost of a few fish in bins the model barely reaches.
-- The largest growth group stops at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$; with
-  `maxsd = 2` the effective CV is about 0.9 x CVL. Fish beyond it get near-zero
-  probability; a tail cut makes this irrelevant.
 
 # Reference points and status
 
@@ -1712,30 +1100,658 @@ indicator and the likelihood use the same bins; `tail_cut = FALSE` uses all bins
 | **Red flags** | Gears disagreeing strongly (selectivity misfit or sampling); indicator noise much larger than the SPR trend. |
 | **Action** | Use the more informative gear; pool gears (`pool` in `flicc.sa()`); smooth in the harvest control rule. |
 
-# Use in an MSE
+# Part II: Technical options {.unnumbered .part}
 
-`flicc.sa()` wraps `fiticc()` as the estimation step of an `mse` management
-procedure, with `lbi.hcr()`, `rfb.flicc.hcr()` and `flicc.is()` for the
-harvest control rule and implementation:
+# Effective sample size and observation models
 
-```{r mse, eval = FALSE}
-est <- mseCtrl(method = flicc.sa, args = list(
-  lhpar = lhpar, sel_fun = sel_fun, ess.g = 200,
-  settings = list(obs_model = "dm", CVL = 0.1,
-                  sigmaF = 0.3,      # fixed (or the F_re estimate from the real data)
-                  tail_cut = 47,     # absolute length, the same in every iteration
-                  spr_ref = 40),
-  spr = 40))
+## How the sample size enters the likelihood
+
+For gear $g$ in year $y$, with observed counts $y_{g,y,l}$, total
+$n_{g,y} = \sum_l y_{g,y,l}$ and predicted proportions $\pi_{g,y,l}$:
+
+- **Multinomial** (`obs_model = "mn"`): $-\log L = -\sum_l y_{g,y,l} \log \pi_{g,y,l}$.
+  The weight of a composition is proportional to $n_{g,y}$.
+- **Negative binomial** (`"nb"`): counts with mean $n_{g,y}\pi_{g,y,l}$ and
+  overdispersion $\phi$ (estimated), variance $\mu + \mu^2/\phi$.
+- **Dirichlet-multinomial** (`"dm"`): the compositions are drawn from a Dirichlet
+  with mean $\pi_{g,y}$ and precision $\alpha_0$; in FLicc $\alpha_0 = n_{g,y}$.
+  The variance of the proportions is inflated by
+  $(n + \alpha_0)/(1 + \alpha_0) \approx 2$, so a DM fit at sample size $n$ carries
+  about the information of a multinomial with $n/2$. Its log-gamma form also
+  penalises single-bin misfits less than the multinomial, which makes it more
+  robust with messy real data.
+
+`lfdess(lfd, ess.g)` rescales each gear-year to the given effective sample size
+(ESS), keeping the proportions; empty gear-years stay empty.
+
+## Why very large sample sizes do harm
+
+Measured fish are not independent: fish from one haul or trip share its length
+structure. Raw counts (often thousands) therefore overstate the information by
+an order of magnitude. With an overstated sample size:
+
+- the likelihood is dominated by small structural misfits (growth model, binning,
+  selectivity shape) rather than the signal, so estimates and their standard
+  errors are overconfident;
+- log-likelihood differences between alternative assumptions become huge, so
+  AIC weights across an ensemble collapse onto a few draws and likelihood profiles
+  become jagged or multimodal;
+- any discrete effect (a fish entering or leaving the range of the largest growth
+  group) is multiplied by $n$.
+
+## Choosing the effective sample size
+
+Empirically, ESS of about 150-200 per gear-year has given the most stable
+assessments and ensemble profiles, and 1000 or more behaved poorly in
+Monte-Carlo profiling. Practical rules:
+
+- Base ESS on the number of independent sampling units (trips, hauls, vessels)
+  where known, e.g. a few fish-equivalents per unit; otherwise start at 150-200 per
+  gear-year and test 100 and 300.
+- Use the same ESS for gears of similar sampling quality; reduce it for gears
+  with few trips.
+- Prefer `obs_model = "dm"` with real data. With the default fixed precision it
+  halves the nominal ESS; with an estimated precision
+  (`dm_theta = "saturating"`, next section) the data choose their own weight:
+  then give it the **raw counts or an ESS of at least 500**, not a reduced ESS.
+- With the multinomial or the fixed Dirichlet-multinomial, never fit raw counts
+  of several thousand fish per year without rescaling.
+
+The demonstration below fits the alfonsino data at five effective sample sizes
+(`ess_values`), once with the multinomial and once with the Dirichlet-multinomial,
+and once more with the raw counts. `lfdess()` rescales the compositions to the
+given ESS; `Map()` runs one fit per value. For each fit the table shows the
+last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
+`spr_ci_flicc()`) and the largest absolute gradient at the optimum.
+
+```{r ess-demo}
+sel_fun <- c("dsnormal", "logistic")
+cbg <- c(0.7, 0.3)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+ess_values <- c(50, 100, 200, 500, 1000)
+
+# multinomial: one fit per ESS
+fits_mn <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "mn"))
+}, ess_values)
+names(fits_mn) <- paste0("mn_", ess_values)
+
+# Dirichlet-multinomial: one fit per ESS
+fits_dm <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm"))
+}, ess_values)
+names(fits_dm) <- paste0("dm_", ess_values)
+
+# raw counts (no rescaling)
+fit_raw_mn <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "mn"))
+fit_raw_dm <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm"))
+raw_n <- round(mean(quantSums(lfd[["Trawl"]])))   # fish per year, trawl
+
+fits_mn <- c(fits_mn, raw = list(fit_raw_mn))
+fits_dm <- c(fits_dm, raw = list(fit_raw_dm))
+
+# standard error of log SPR in the last year
+se_logspr <- function(fit) tail(spr_ci_flicc(fit)$se_log, 1)
+ess_table <- data.frame(
+  ESS        = c(ess_values, paste0("raw (~", raw_n, ")")),
+  SPR_mn     = round(sapply(fits_mn, sprcur_flicc), 3),
+  SPR_dm     = round(sapply(fits_dm, sprcur_flicc), 3),
+  se_mn      = round(sapply(fits_mn, se_logspr), 3),
+  se_dm      = round(sapply(fits_dm, se_logspr), 3),
+  maxgrad_dm = signif(sapply(fits_dm, function(fit) fit$max_gradient), 2),
+  row.names  = NULL)
+ess_table
 ```
 
-- `se = FALSE` is used inside `flicc.sa()`; fixed sigmaF avoids its estimation in
-  every year and iteration.
-- The tail cut and sigmaF both trade responsiveness against stability; tune them
-  together with the smoothing of the harvest control rule.
-- Expect the equilibrium model to be pessimistic during a rebuild and optimistic
-  while F increases.
+Three things change with the effective sample size:
 
-# Population and observation models compared
+- **Precision**: the standard error of log SPR shrinks roughly with $1/\sqrt{n}$;
+  with large ESS the intervals reflect the sampling of individual fish, not of
+  the fishery.
+- **Convergence**: the maximum gradient grows at large ESS (here up to
+  `r ess_table$maxgrad_dm[5]` at ESS 1000 with `dm`), a sign that the
+  likelihood surface becomes sharp and ragged.
+- **The estimate itself, for `dm`**: with the multinomial the last-year SPR changes
+  little (`r paste(range(ess_table$SPR_mn), collapse = " to ")`),
+  but with the Dirichlet-multinomial it ranges from
+  `r ess_table$SPR_dm[1]` at ESS 50 to `r ess_table$SPR_dm[5]` at ESS 1000.
+  At low ESS the compositions carry little weight against the random walk and
+  the catch-share constraint; estimates stabilise from about ESS 150-200 upward.
+
+The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
+moderate; with the thousands of fish per year common in market sampling the
+effects above are much stronger, also for the AIC weights of a Monte-Carlo
+ensemble.
+
+SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
+for the raw counts:
+
+```{r ess-plot, fig.height = 4}
+plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
+```
+
+## Letting the data choose their weight: estimated Dirichlet-multinomial precision
+
+With the default `dm_theta = "fixed"` the Dirichlet precision is
+$\alpha_0 = n$, so the effective sample size the likelihood uses is
+$$
+n_{eff} = \frac{n\,(1 + \alpha_0)}{n + \alpha_0} = \frac{1 + n}{2} \approx \frac{n}{2},
+$$
+proportional to the input ESS, as shown above. FLicc can instead estimate the
+precision by gear (Thorson et al. 2017):
+
+| `dm_theta` | $\alpha_0$ | $n_{eff}$ | as the input ESS grows |
+|---|---|---|---|
+| `"fixed"` (default) | $n$ | $\approx n/2$ | grows without limit |
+| `"linear"` | $\theta n$, $\theta$ estimated | $(1 + \theta n)/(1 + \theta)$ | grows, at a rate set by $\theta$ |
+| `"saturating"` | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
+
+With `"saturating"`, once the input sample size is well above $\beta$ the
+effective sample size no longer depends on it: the data estimate how much each
+composition can count. The input matters only if it is *below* what the data
+support. Then there is no overdispersion to estimate, $\beta$ runs towards
+infinity, and the model becomes a multinomial at the input sample size; a weak
+prior (`dm_prior_sd = 2`, centred close to a multinomial) keeps it finite. For
+this reason, **with an estimated precision use the raw counts or an ESS of at
+least 500**, so that the data, not the input, set the weight.
+
+The fits below use the saturating Dirichlet-multinomial at ESS 500 and 1000 and
+on the raw counts; `neff_flicc()` reports the estimated effective sample size by
+gear and year.
+
+```{r dm-sat}
+dm_inputs <- list(ESS_500 = lfdess(lfd, ess.g = 500), ESS_1000 = lfdess(lfd, ess.g = 1000), raw = lfd)
+fits_dms <- Map(function(d) {
+  fiticc(d, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+}, dm_inputs)
+
+neff_gear <- function(fit, g) { ne <- neff_flicc(fit); round(mean(ne$neff[ne$gear == g])) }
+dm_table <- data.frame(
+  input        = names(fits_dms),
+  SPR_last     = round(sapply(fits_dms, sprcur_flicc), 3),
+  se_log       = round(sapply(fits_dms, se_logspr), 3),
+  neff_Trawl   = sapply(fits_dms, neff_gear, g = "Trawl"),
+  neff_Gillnet = sapply(fits_dms, neff_gear, g = "Gillnet"),
+  row.names = NULL)
+dm_table
+plot_spr(c(fixed_ESS_200 = list(fits_dm$dm_200), fits_dms), ci = TRUE)
+```
+
+The last-year SPR is `r paste(unique(range(dm_table$SPR_last)), collapse = " to ")`
+whatever the input, against `r paste(range(ess_table$SPR_dm), collapse = " to ")`
+for the fixed precision over ESS 50 to 1000. The compositions support an
+effective sample size of about `r dm_table$neff_Trawl[3]` (trawl) and
+`r dm_table$neff_Gillnet[3]` (gillnet) fish per year; the fixed precision at
+ESS 200 used about 100.
+
+The estimated precision describes the noise *within* compositions. Year classes
+that shift whole compositions between years are a different kind of misfit, which
+the residual diagnostics (section *Residual diagnostics*) show and the precision
+does not absorb.
+
+# Fishing mortality over time
+
+Log F by gear follows a random walk,
+$$
+\log F_{g,y} = \log F_{g,y-1} + \varepsilon_{g,y}, \qquad \varepsilon_{g,y} \sim N(0, \sigma_F^2).
+$$
+With selectivity $S_g(L)$ shared by all years, the model is fitted to all
+compositions at once; the objective is
+$$
+-\log L = -\sum_{y} \log L_y\!\left(F_{\cdot,y}, S\right)
+          - \sum_{g,y>1} \log \phi\!\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right).
+$$
+Compared with fitting each year on its own (as LBSPR does), this has four
+advantages:
+
+- **Selectivity from all years.** The left limb of the compositions is
+  informed by every year, so selectivity is better determined and does not
+  absorb year-to-year sampling noise.
+- **Borrowing strength.** A year with few fish is fitted close to its
+  neighbours instead of producing an extreme F.
+- **Missing years.** A year without data of a gear still gets an F, bridged by
+  the random walk (section *Missing data*).
+- **Separation of signal and noise.** $\sigma_F$ sets how much of the
+  year-to-year change in the compositions is read as a change in F.
+
+The price is smoothing: with small $\sigma_F$ a real change in F is spread over
+several years (section *Lag under changing F*). The options below differ in how
+$\sigma_F$ is treated.
+
+The four options for $\sigma_F$ are fitted below to the same data (raw counts,
+Dirichlet-multinomial with estimated precision). Only the F settings differ, so each option has its own
+`settings` list; `Map()` fits them in turn.
+
+```{r f-options}
+f_settings <- list(
+  fixed_0.3 = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", sigmaF = 0.3),                       # default
+  prior     = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", prior_sigmaF = c(log(0.5), 0.3, 1)), # penalised
+  F_re      = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", F_re = TRUE),                        # random effects
+  no_RW     = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", prior_sigmaF = FALSE))               # no random walk
+
+fits_F <- Map(function(set) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+}, f_settings)
+
+data.frame(option   = names(fits_F),
+           sigmaF   = round(sapply(fits_F, sigmaF_flicc), 3),
+           SPR_last = round(sapply(fits_F, sprcur_flicc), 3),
+           se_log   = round(sapply(fits_F, se_logspr), 3),
+           row.names = NULL)
+```
+
+`sigmaF_flicc()` returns the fixed or estimated $\sigma_F$ (NA without a random
+walk). The SPR trajectories with 95% intervals, and the apical F by year
+(`report$Fap`):
+
+```{r f-options-plot, fig.height = 4}
+plot_spr(fits_F, ci = TRUE)
+
+F_by_option <- FLQuants(fixed_0.3 = fits_F$fixed_0.3$report$Fap,
+                        prior     = fits_F$prior$report$Fap,
+                        F_re      = fits_F$F_re$report$Fap,
+                        no_RW     = fits_F$no_RW$report$Fap)
+ggplot(F_by_option, aes(year, data, colour = qname)) +
+  geom_line(linewidth = 0.8) + geom_point(size = 1.5) +
+  labs(x = "Year", y = "Apical F", colour = NULL) + theme_bw()
+```
+
+The estimated $\sigma_F$ of the penalised and random-effects options is much
+smaller than 0.3, so their F trajectories are smoother; without a random walk F
+follows each year's composition. To see what $\sigma_F$ does, the next runs fix it
+at a range of values (`sigmaF_values`):
+
+```{r sigmaF-range, fig.height = 4}
+sigmaF_values <- c(0.05, 0.1, 0.3, 0.6, 1)
+
+fits_sigmaF <- Map(function(sF) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", sigmaF = sF), se = FALSE)
+}, sigmaF_values)
+names(fits_sigmaF) <- paste0("sigmaF_", sigmaF_values)
+
+plot_spr(fits_sigmaF)
+data.frame(sigmaF   = sigmaF_values,
+           SPR_last = round(sapply(fits_sigmaF, sprcur_flicc), 3),
+           neg_logL = round(sapply(fits_sigmaF, function(fit) fit$opt$objective), 1))
+```
+
+Small values force F (and SPR) towards a flat line; from about 0.3 upward the
+trajectories change little. The objective (`neg_logL`) includes the random-walk
+penalty, which is why it cannot be used to choose $\sigma_F$ directly: it always
+favours the smallest value that the compositions tolerate.
+
+## Default: sigmaF fixed
+
+`sigmaF = 0.3` (the default) fixes the year-to-year standard deviation of log F,
+roughly a 30% typical annual change. It is fast, cannot collapse, and the
+simulations showed that it removes most of the smoothing lag (next section).
+Change it where fleet dynamics are known to be smoother (0.2) or more variable
+(0.5).
+
+## Estimating sigmaF with a prior (penalised)
+
+With `prior_sigmaF = c(mu, sd, 1)`, $\sigma_F$ is a fixed-effect parameter and the
+objective is
+$$
+-\log L = -\log L_{data} - \sum_{g,y} \log \phi\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right)
+          - \log \phi\left(\log \sigma_F;\, \mu, sd\right).
+$$
+Each random-walk term contributes $-\log \sigma_F$, so the joint maximum favours
+small $\sigma_F$ with flat F whenever the data do not resist: the estimate is
+pulled down (here `r round(sigmaF_flicc(fits_F$prior), 3)`), and only the prior keeps it
+away from 0. Without a prior (`prior_sigmaF = c(NA, NA, 1)`) it collapses; FLicc
+warns.
+
+## F as random effects (`F_re = TRUE`)
+
+The log F are integrated out,
+$$
+L(\theta) = \int L_{data}(\theta, \mathbf F)\, p(\mathbf F \mid \sigma_F)\, d\mathbf F,
+$$
+by the Laplace approximation (TMB): for each value of the other parameters
+$\theta$ (selectivity, $\sigma_F$), the F path is optimised and the curvature
+around it enters the marginal likelihood. Consequences:
+
+- $\sigma_F$ is estimated from the marginal likelihood, which properly accounts for
+  the uncertainty of the F path (here `r round(sigmaF_flicc(fits_F$F_re), 3)`). It can still
+  go to small values when the compositions carry little year-to-year
+  information; a weak prior `c(log(0.3), 0.5, 1)` is used unless another is given.
+- Standard errors (e.g. of log SPR) include the uncertainty of the F process.
+- Fitting is slower:
+
+```{r f-re-time}
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$fixed_0.3))
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$F_re))
+```
+
+Use it for a final assessment and to estimate $\sigma_F$ once; then fix it for
+repeated fits: `sigmaF = sigmaF_flicc(fit_re)`. `F_re = TRUE` with `sigmaF` given
+keeps the random effects but fixes $\sigma_F$.
+
+## No random walk and separate years
+
+`prior_sigmaF = FALSE` estimates each year's F freely with shared selectivity
+(LBSPR fitted year by year, with common selectivity): no smoothing lag, but noisier
+F and no information for years without data. `by_year = TRUE` fits each year
+completely separately (including selectivity).
+
+| Option | Settings | sigmaF | Use |
+|---|---|---|---|
+| fixed (default) | `sigmaF = 0.3` | fixed | routine, MSE, ensembles |
+| penalised with prior | `prior_sigmaF = c(log(0.5), 0.3, 1)` | estimated, pulled down | comparison with earlier versions |
+| random effects | `F_re = TRUE` | marginal likelihood | final assessment; estimate sigmaF once |
+| no random walk | `prior_sigmaF = FALSE` | – | complete data, maximum responsiveness |
+| separate years | `by_year = TRUE` | – | checks of selectivity change |
+
+## Joint fit versus each year separately
+
+`by_year = TRUE` fits every year on its own and re-estimates all parameters,
+including selectivity, for each year: the LBSPR-style approach. The comparison
+below uses the same data and settings as the reference fit `fit`.
+
+```{r by-year, fig.height = 4}
+fit_by_year <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                      settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"), by_year = TRUE)
+
+plot_spr(list(joint = fit, by_year = fit_by_year))
+plot_sel(flicc_stklen(fit_by_year))
+```
+
+The by-year selectivities differ between years although the gears did not
+change; these differences are sampling noise taken up by selectivity, and they
+pass on to F and SPR. The joint fit estimates one selectivity per gear and gives
+a smoother, more precise SPR series. Use `by_year = TRUE` as a check for real
+changes in selectivity (a new mesh size, a change of fishing grounds), not as
+the main assessment.
+
+## Lag under changing F
+
+An equilibrium model explains each year's composition by the equilibrium at that
+year's F. After a change in F, the large fish adjust only over many years, so the
+estimated SPR lags behind (*simulation*, rebuild from 3x to 0.7x Fmsy):
+
+| F model | SPR trend recovered, no cut | with cut at 0.8 Linf |
+|---|---|---|
+| sigmaF estimated (collapsing) | 14% | 26% |
+| sigmaF fixed 0.3 | 27% | 50% |
+| sigmaF fixed 1 | 29% | 57% |
+| no random walk | 30% | 59% |
+
+The smoothing lag of the random walk is largely removed at sigmaF = 0.3; larger
+values add little responsiveness but more year-to-year noise (+10 to +50%). The
+rest of the lag comes from the data (the tail carries the memory of past F) and
+from recruitment rising during recovery under a stock-recruitment relationship.
+In a rebuild from deep depletion the equilibrium model stays pessimistic.
+
+# Growth variability and life-history priors
+
+## CVL
+
+`CVL` is the coefficient of variation of Linf among growth-type groups. It sets how
+far individual growth spreads the length composition, mostly in the tail: the
+fastest-growing groups determine how many fish occur near and beyond Linf. It is
+fixed at its input value unless `CVL.sd` is given; typical values are 0.07-0.15.
+
+The sensitivity below refits the model for three CVL values (`cvl_values`),
+without and with a tail cut at 47 cm; `Map()` runs one fit per value.
+
+```{r cvl-sens, fig.height = 4}
+cvl_values <- c(0.07, 0.10, 0.13)
+
+fits_cvl <- Map(function(cvl) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm", dm_theta = "saturating"), se = FALSE)
+}, cvl_values)
+names(fits_cvl) <- paste0("CVL_", cvl_values)
+
+fits_cvl_cut <- Map(function(cvl) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm", dm_theta = "saturating", tail_cut = 47), se = FALSE)
+}, cvl_values)
+names(fits_cvl_cut) <- paste0("CVL_", cvl_values, "_cut47")
+
+cvl_table <- data.frame(CVL       = cvl_values,
+                        SPR_no_cut = round(sapply(fits_cvl, sprcur_flicc), 3),
+                        SPR_cut47  = round(sapply(fits_cvl_cut, sprcur_flicc), 3),
+                        row.names = NULL)
+cvl_table
+plot_spr(c(fits_cvl, fits_cvl_cut))
+```
+
+Status is sensitive to CVL because CVL shapes the tail: here SPR ranges
+`r min(cvl_table$SPR_no_cut)`-`r max(cvl_table$SPR_no_cut)` over CVL 0.07-0.13
+without a cut and `r min(cvl_table$SPR_cut47)`-`r max(cvl_table$SPR_cut47)` with a
+cut at 47 cm.
+
+## maxsd and ngtg
+
+The growth groups are placed at $z_h$ on `seq(-maxsd, maxsd, length = ngtg)` with
+normal weights. Truncating the normal at `maxsd` reduces the realised CV of the
+groups below CVL and caps the largest group at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$:
+
+The realised spread can be computed directly from the group positions `z` and
+their normal weights `w`; the factor multiplies CVL:
+
+```{r maxsd-cv}
+z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (default)
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))                        # realised CV factor
+
+z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))
+
+55.7 * (1 + c(2, 3) * 0.1)                # largest group Linf for maxsd 2 and 3
+```
+
+With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
+CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
+groups matters little beyond about 13.
+
+The fits below compare the two settings (`maxsd_values` with matching
+`ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
+parallel.
+
+```{r maxsd-sens}
+maxsd_values <- c(2, 3)
+ngtg_values  <- c(13, 19)
+
+fits_maxsd <- Map(function(maxsd, ngtg) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", maxsd = maxsd, ngtg = ngtg), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+fits_maxsd_cut <- Map(function(maxsd, ngtg) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", maxsd = maxsd, ngtg = ngtg,
+                         tail_cut = 47), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+data.frame(maxsd      = maxsd_values,
+           ngtg       = ngtg_values,
+           SPR_no_cut = round(sapply(fits_maxsd, sprcur_flicc), 3),
+           SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
+```
+
+Recommendation: keep the LBSPR default for comparability and treat `maxsd = 3`
+as a sensitivity; with a tail cut the choice matters little, because the
+affected bins lie far above the cut. The effective CV matters when CVL is taken
+from external growth studies: with `maxsd = 2`, a CVL input of 0.1 corresponds
+to a realised spread of about 0.09.
+
+## Estimating Linf, M/k and CVL with priors
+
+By default growth and natural mortality are fixed. `linf.sd`, `Mk.sd` and
+`CVL.sd` estimate them with normal priors on the log scale around the inputs:
+$$
+\log L_\infty \sim N(\log L_\infty^{in}, \texttt{linf.sd}^2), \quad
+\log (M/k) \sim N(\log (M/k)^{in}, \texttt{Mk.sd}^2), \quad
+\log \mathrm{CVL} \sim N(\log \mathrm{CVL}^{in}, \texttt{CVL.sd}^2),
+$$
+so each sd is approximately a CV (e.g. `linf.sd = 0.05`: about ±10% at 95%).
+
+The fit below estimates all three with priors. The estimates are on the log
+scale: $L_\infty$ = `exp(log_Linf)`, $M/k$ = `exp(log_Mk)` and CVL =
+`1 / sqrt(exp(log_Galpha))`; the column `se` is approximately the posterior CV
+(for `log_Galpha` divide by 2).
+
+```{r priors, fig.height = 4}
+fit_pri <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating",
+                                  linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25))
+
+est <- fit_pri$par[fit_pri$par$par %in% c("log_Linf", "log_Mk", "log_Galpha"), ]
+est
+exp(est$mpd[est$par == "log_Linf"])            # Linf (input 55.7)
+exp(est$mpd[est$par == "log_Mk"])              # M/k  (input 0.162 / 0.08 = 2.03)
+1 / sqrt(exp(est$mpd[est$par == "log_Galpha"])) # CVL  (input 0.1)
+
+plot_spr(list(fixed = fit, priors = fit_pri), ci = TRUE)
+```
+
+```{r priors-numbers, include = FALSE}
+pp <- function(nm, col = "mpd") est[[col]][est$par == nm][1]
+```
+
+Here the length data pull Linf up to about `r round(exp(pp("log_Linf")), 1)`
+(posterior CV `r round(pp("log_Linf", "se"), 3)` against a prior CV of 0.05), and
+because a larger Linf means the fish in the catch are relatively younger, SPR
+drops markedly. The posterior CVs of M/k and CVL stay close to their prior CVs:
+the data say little about them. A shift of this size in Linf is a finding to
+check against growth studies, not a result to accept; run the assessment with
+Linf fixed at the alternative values as a sensitivity.
+
+Notes:
+
+- **k** is not estimated separately: the length model depends on M/k (and Z/k), so
+  uncertainty in k and M is expressed through `Mk.sd`. k still sets the time scale
+  of the annual F estimates (F is estimated as F/k).
+- Length data carry limited information on Linf and CVL, and both are confounded
+  with dome-shaped selectivity and the tail; a posterior CV close to the prior CV
+  means the data are uninformative. Large moves away from the input (several prior
+  SDs) indicate a conflict between the data and the life history, to be
+  investigated rather than accepted.
+- For ensembles, drawing the life-history parameters and keeping them fixed in
+  each fit (`mc_flicc()`) is usually better behaved than estimating them.
+
+# Tail of the length composition
+
+## Tail cut
+
+`tail_cut = L` excludes bins with lower bound $\geq L$ from the likelihood;
+observed and predicted compositions are truncated and the predictions
+renormalised,
+$$
+\pi_{l \mid L < L_{cut}} = \pi_l \Big/ \sum_{l' : L_{l'} < L_{cut}} \pi_{l'} .
+$$
+This is exact conditioning: the model still describes the whole population with
+its input CVL, SPR and reference points use all lengths, and CVL needs no
+adjustment. `tail_cut` is an **absolute length** (as `Lplus`), so all sensitivity
+runs and ensemble draws use the same bins. (Values <= 1.5 are read as a fraction
+of Linf, with a warning.)
+
+```{r tailcut, fig.height = 4}
+fit_cut <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", tail_cut = 47))  # ~0.85 x Linf
+fit_cut$tmb_data$LLB[fit_cut$tmb_data$cut_bin + 1]
+plot_spr(list(no_cut = fit, cut_47 = fit_cut), ci = TRUE)
+```
+
+*Simulation* (stable F, correct Linf unless stated):
+
+| | no cut | cut at 0.80-0.85 x Linf |
+|---|---|---|
+| CVL input 0.07 / 0.10 / 0.13 (true 0.1) | +9 / -1 / -11% | +13 / +9 / +4% |
+| strong dome on one gear fitted as logistic | -17% | +1% |
+| SPR trend recovered in a rebuild (sigmaF 0.3) | 27% | ~50% |
+| Linf input 0.9 / 1.1 x true | +91 / -40% | +74 / -28% |
+
+The cut halves the CVL sensitivity, removes the bias of a strong unmodelled dome
+and roughly doubles responsiveness; it costs a small positive bias (+7 to +10%)
+and more noise under stable F, and does not remove the Linf sensitivity.
+Starting value: 0.80-0.85 x Linf, fixed across fits.
+
+## Plus group, robust likelihood, GTG range
+
+- `Lplus = L` pools bins with lower bound $\geq L$ into one (the total counts, the
+  shape does not).
+- `rob_eps = 0.001` bounds the cost of a few fish in bins the model barely reaches.
+- The largest growth group stops at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$; with
+  `maxsd = 2` the effective CV is about 0.9 x CVL. Fish beyond it get near-zero
+  probability; a tail cut makes this irrelevant.
+
+# Model equations and comparison of models
+
+## Fishing mortality and total mortality
+
+$F_{g,y}(L) = F_{g,y} S_g(L)$, $Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Gear shares of F
+are informed by `catch_by_gear` through a soft constraint on the predicted
+catch shares (`catch.sd`, default 0.05), in weight by default:
+$$
+\log\frac{\hat C^w_{g,y}}{\hat C^w_{G,y}} \sim N\!\left(\log\frac{c_{g,y}}{c_{G,y}},\ \texttt{catch.sd}^2\right),
+\qquad \hat C^w_{g,y} = \sum_L C_{g,y}(L)\, W(L),
+$$
+where $c_{g,y}$ is `catch_by_gear` and $G$ the last gear. The predicted shares
+are in `fit$report$catch_share`. With `settings$catch_units = "numbers"` the
+shares are compared in numbers, $\hat C_{g,y} = \sum_L C_{g,y}(L)$, as in
+fishblicc (Medley 2025); use this when the catch split is known in numbers.
+
+## Expected catch and length composition
+
+FLicc separates the **population model** (expected numbers at length under
+growth, M, F and selectivity) from the **observation model** (the likelihood
+that links the observed counts to the expected composition), so either can be
+changed without the other. With $N_i$ the expected number of fish entering
+length bin $i$, the expected catch of gear $g$ in bin $i$ is
+$$
+C_{i,g} = \frac{F_{i,g}}{Z_i}\left(N_i - N_{i+1}\right), \qquad Z_i = M_i + \sum_g F_{i,g},
+$$
+and the expected composition of gear $g$ is $\pi_{i,g} = C_{i,g} / \sum_i C_{i,g}$.
+
+## Population model
+
+`pop_model = "gtg"` (default, as LBSPR): growth-type groups
+$L_{\infty,h} = L_\infty(1 + \mathrm{CVL}\, z_h)$, $z_h$ on
+`seq(-maxsd, maxsd, length = ngtg)` (13 groups, `maxsd = 2`), weights
+$\omega_h \propto \phi(z_h)$. Within a group, survival across bin $i$ follows from
+the time needed to grow through it under von Bertalanffy growth:
+$$
+N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right)^{Z_i/k},
+\qquad N_i = \sum_h \omega_h N_{i,h}.
+$$
+
+`pop_model = "gamma"` follows fishblicc: Linf is gamma-distributed among
+individuals, and the numbers at length integrate survival over that distribution,
+$$
+N_i = \int f(L_\infty)\, S_i(L_\infty)\, dL_\infty ,
+$$
+evaluated by Gauss-Laguerre quadrature (slower). Both are equilibrium models:
+each year is explained by the equilibrium at that year's F (section *Lag under
+changing F* on the consequences).
+
+## Observation model
+
+For gear $g$ in year $y$, with counts $\mathbf y_{g,y}$ and total $n_{g,y}$:
+
+- `obs_model = "mn"` (default): $\mathbf y_{g,y} \sim \text{Multinomial}(n_{g,y}, \boldsymbol\pi_{g,y})$.
+- `"nb"`: $y_{i,g,y} \sim \text{NB}(\mu, \phi)$ with $\mu = n_{g,y}\pi_{i,g,y}$ and
+  $\text{Var} = \mu + \mu^2/\phi$; $\phi$ is estimated.
+- `"dm"`: $\mathbf y_{g,y} \sim \text{Dirichlet-multinomial}(n_{g,y}, \alpha_0 \boldsymbol\pi_{g,y})$
+  with $\alpha_0 = n_{g,y}$ (`dm_theta = "fixed"`) or estimated (`"linear"`,
+  `"saturating"`).
+
+How the sample size enters each of them is explained in section *Effective
+sample size and observation models*; the models are compared on the same data
+below.
+
+## Comparison of models
 
 The population model (`gtg` or `gamma`) and the observation model (`mn`, `dm`,
 `nb`) can be combined freely. The four fits below differ only in these two
@@ -1744,12 +1760,12 @@ settings; `Map()` runs one fit per list of settings.
 ```{r model-compare, fig.height = 4}
 model_settings <- list(
   gtg_mn   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "mn"),
-  gtg_dm   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "dm"),
+  gtg_dm   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "dm", dm_theta = "saturating"),
   gtg_nb   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "nb"),
   gamma_nb = list(CVL = 0.1, pop_model = "gamma", obs_model = "nb"))   # as fishblicc
 
 fits_model <- Map(function(set) {
-  fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
 }, model_settings)
 
 data.frame(model    = names(fits_model),
@@ -1762,9 +1778,9 @@ plot_spr(fits_model, ci = TRUE)
 The gamma model integrates over Linf numerically and is slower:
 
 ```{r model-time}
-system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = model_settings$gtg_nb))
-system.time(fiticc(lfd200, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = model_settings$gamma_nb))
 ```
 
@@ -1785,7 +1801,9 @@ the sensitivity to the approximation of growth variability, differences between
 FLicc includes the Bombay duck example of fishblicc (three gears) to check
 consistency with fishblicc. Natural mortality decreases with length
 (`m_model = "inverse"`, $M(L) = M\, L_{ref} / L$ with $L_{ref} = 21.9$), and
-Linf, M/k and CVL are estimated with priors as in fishblicc:
+Linf, M/k and CVL are estimated with priors as in fishblicc. fishblicc
+compares the relative catch of each gear in numbers of fish (Medley 2025), so
+the catch shares are given in numbers here (`catch_units = "numbers"`):
 
 ```{r fishblicc-data}
 data("fishblicc_example")
@@ -1801,7 +1819,8 @@ fit_fishblicc <- fiticc(lfd_fishblicc, stklen_fishblicc,
                         catch_by_gear = c(0.1802070, 0.2101353, 0.6096577),
                         settings = list(pop_model = "gamma", obs_model = "nb",
                                         CVL = 0.14, CVL.sd = 0.1,
-                                        linf.sd = 2 / 40, Mk.sd = 0.1))
+                                        linf.sd = 2 / 40, Mk.sd = 0.1,
+                                        catch_units = "numbers"))
 flicc_convergence(fit_fishblicc)
 sprcur_flicc(fit_fishblicc)
 ```
@@ -1816,6 +1835,31 @@ eqstk_fishblicc <- eqstklen(fit_fishblicc, s = 0.7)
 eqstk_fishblicc@refpts
 plot_eqcurves(eqstk_fishblicc)
 ```
+
+# Part III: Management {.unnumbered .part}
+
+# Use in an MSE
+
+`flicc.sa()` wraps `fiticc()` as the estimation step of an `mse` management
+procedure, with `lbi.hcr()`, `rfb.flicc.hcr()` and `flicc.is()` for the
+harvest control rule and implementation:
+
+```{r mse, eval = FALSE}
+est <- mseCtrl(method = flicc.sa, args = list(
+  lhpar = lhpar, sel_fun = sel_fun, ess.g = NULL,   # raw counts
+  settings = list(obs_model = "dm", dm_theta = "saturating", CVL = 0.1,
+                  sigmaF = 0.3,      # fixed (or the F_re estimate from the real data)
+                  tail_cut = 47,     # absolute length, the same in every iteration
+                  spr_ref = 40),
+  spr = 40))
+```
+
+- `se = FALSE` is used inside `flicc.sa()`; fixed sigmaF avoids its estimation in
+  every year and iteration.
+- The tail cut and sigmaF both trade responsiveness against stability; tune them
+  together with the smoothing of the harvest control rule.
+- Expect the equilibrium model to be pessimistic during a rebuild and optimistic
+  while F increases.
 
 # Summary of checks and recommendations
 
@@ -1873,7 +1917,9 @@ Kristensen, K., Nielsen, A., Berg, C.W., Skaug, H. and Bell, B.M. (2016). TMB:
 automatic differentiation and Laplace approximation. *Journal of Statistical
 Software* 70(5): 1-21. doi:10.18637/jss.v070.i05
 
-Medley, P.A.H. fishblicc: Bayesian Length Interval Catch Curve. R package,
+Medley, P.A.H. (2025). A new Bayesian catch curve stock assessment model for
+the analysis of length data from multi-gear fisheries. *ICES Journal of Marine
+Science* 82(12): fsaf224. doi:10.1093/icesjms/fsaf224. R package fishblicc:
 <https://github.com/PaulAHMedley/fishblicc>
 
 Sampson, D.B. and Scott, R.D. (2011). A spatial model for fishery age-selection

@@ -3,7 +3,7 @@
 #' @param lfd named list of FLQuant objects, one per gear
 #' @param stklen FLStockLen-like object with matching years
 #' @param sel_fun selectivity function per gear
-#' @param catch_by_gear numeric vector of relative catch by gear, in weight
+#' @param catch_by_gear numeric vector of relative catch by gear (in weight unless settings$catch_units = "numbers")
 #' @param settings list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd
 #' @param years optional vector of years to include
 #'
@@ -126,6 +126,9 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                            stop("Supported obs_model options are 'nb', 'mn', 'dm'")
   )
 
+  catch_units <- if (!is.null(settings$catch_units)) settings$catch_units else "weight"
+  if (!catch_units %in% c("weight", "numbers"))
+    stop("settings$catch_units must be \"weight\" or \"numbers\".")
   dm_theta <- if (!is.null(settings$dm_theta)) settings$dm_theta else "fixed"
   dm_type <- switch(dm_theta, fixed = 0L, linear = 1L, saturating = 2L,
                     stop("settings$dm_theta must be \"fixed\", \"linear\" or \"saturating\"."))
@@ -274,6 +277,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     catch_sd   = catch_sd,
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
+    catch_units = as.integer(catch_units == "weight"),
     dm_type    = as.integer(dm_type),
     dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
                   else rep(log(10), ngear),
@@ -465,8 +469,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param sel_fun Character vector giving the selectivity function for each
 #'   gear. Supported options include \code{"logistic"}, \code{"normal"}, and
 #'   \code{"dsnormal"}.
-#' @param catch_by_gear Relative catch by gear in weight (e.g. landings in
-#'   tonnes), matched to the predicted catch in weight. Can be supplied as a numeric
+#' @param catch_by_gear Relative catch by gear, in weight (e.g. landings in
+#'   tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 #'   vector or as an \code{FLQuants} object.
 #' @param settings A named list of model settings. Recognized elements are
 #'   \code{CVL}, \code{GL}, \code{catch.sd}, and \code{prior_sigmaF}. Missing
@@ -547,6 +551,7 @@ fiticc_core <- function(lfd, stklen,
     obs_model = "mn",
     dm_theta = "fixed",
     dm_shared = FALSE,
+    catch_units = "weight",
     dm_prior_sd = 2,
     ngtg = 13,
     maxsd = 2,
@@ -906,7 +911,7 @@ fiticc_core <- function(lfd, stklen,
 #'   and \code{"dsnormal"}.
 #'
 #' @param catch_by_gear Numeric vector of relative catch proportions by gear,
-#'   in weight (e.g. landings in tonnes); matched to the predicted catch in weight.
+#'   in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
 #'   Must sum to 1.
 #'
 #' @param settings Named list of model settings. Key options include:
@@ -926,6 +931,11 @@ fiticc_core <- function(lfd, stklen,
 #'       when \code{pop_model = "gamma"}).}
 #'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
+#'
+#'     \item{\code{catch_units}}{Units of \code{catch_by_gear}: \code{"weight"}
+#'       (default; predicted catch-at-length times weight at length is compared
+#'       with the input shares, e.g. landings in tonnes) or \code{"numbers"}
+#'       (predicted catch in numbers, as in fishblicc).}
 #'
 #'     \item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
 #'       (\code{obs_model = "dm"}): \code{"fixed"} (default, \eqn{\alpha_0 = n}),

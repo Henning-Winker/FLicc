@@ -266,6 +266,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
+  DATA_INTEGER(catch_units); // 1: catch_by_gear in weight (default), 0: in numbers
   DATA_INTEGER(dm_type);     // 0: alpha0 = n (fixed), 1: alpha0 = theta n, 2: alpha0 = beta
   DATA_VECTOR(dm_prior_mu);  // weak prior on log_dm by gear (keeps it finite without overdispersion)
   DATA_SCALAR(dm_prior_sd);  // <= 0: no prior
@@ -354,7 +355,7 @@ Type objective_function<Type>::operator() ()
   vector<Type> spr_y(nyear);
   matrix<Type> N_y(nlen, nyear);
   matrix<Type> plen_all_y(nlen, nyear);
-  matrix<Type> catch_share(nyear, ngear);   // predicted catch shares in weight
+  matrix<Type> catch_share(nyear, ngear);   // predicted catch shares (units of catch_units)
   matrix<Type> catch_share_n(nyear, ngear); // predicted catch shares in numbers
   matrix<Type> dm_alpha0(nyear, ngear);     // Dirichlet precision used
   matrix<Type> dm_neff(nyear, ngear);       // effective sample size n (1 + a0) / (n + a0)
@@ -458,12 +459,14 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    // predicted gear shares of the catch in weight (catch-at-length x weight
-    // at length), compared with catch_by_gear (e.g. landings in tonnes)
+    // predicted gear shares of the catch, compared with catch_by_gear:
+    // in weight (catch_units = 1, default; e.g. landings in tonnes) or in
+    // numbers (catch_units = 0, as in fishblicc)
     vector<Type> pred_share(ngear);
     for(int g = 0; g < ngear; g++) {
       pred_share(g) = Type(0);
-      for(int l = 0; l < nlen; l++) pred_share(g) += Cpred(l,g) * wt(l,y);
+      for(int l = 0; l < nlen; l++)
+        pred_share(g) += (catch_units == 1) ? Type(Cpred(l,g) * wt(l,y)) : Type(Cpred(l,g));
     }
     vector<Type> pred_pgear(ngear);
     Type pred_total = Type(0);
