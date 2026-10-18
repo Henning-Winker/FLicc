@@ -33,6 +33,9 @@ comp_data_flicc <- function(fit) {
   list(comp = out, obs_model = fit$obs_model, phi = phi)
 }
 
+# integer year axis
+year_axis_flicc <- function() ggplot2::scale_x_continuous(breaks = function(x) unique(round(pretty(x))))
+
 # variance inflation of the Dirichlet-multinomial with precision alpha0 = n
 dm_factor_flicc <- function(n) (n + n) / (1 + n)
 
@@ -168,7 +171,9 @@ plot_resid_bubble <- function(x, type = c("pearson", "osa"), cohorts = FALSE, co
     if (is.null(fit)) stop("cohort tracks need the fit: plot_resid_bubble(r, fit = fit, cohorts = TRUE)")
     linf <- as.numeric(fit$report$lhpar["linf"]); k <- as.numeric(fit$report$lhpar["k"])
     yrs <- range(d$year)
-    births <- seq(yrs[1] - 40, yrs[2], by = cohort_by)
+    a_min <- -log(1 - min(min(d$lmid) / linf, 0.99)) / k      # age at the smallest length
+    a_max <- -log(1 - min(0.9, max(d$lmid) / linf)) / k         # age at 0.9 Linf (or the largest length)
+    births <- seq(floor(yrs[1] - a_max), ceiling(yrs[2] - a_min), by = cohort_by)
     tr <- do.call(rbind, lapply(births, function(b) {
       yy <- seq(yrs[1], yrs[2], by = 0.25)
       data.frame(year = yy, lmid = linf * (1 - exp(-k * (yy - b))), cohort = b)
@@ -183,7 +188,7 @@ plot_resid_bubble <- function(x, type = c("pearson", "osa"), cohorts = FALSE, co
                                labels = c(positive = "observed > expected", negative = "observed < expected"),
                                name = NULL) +
     ggplot2::scale_size_area(max_size = max_size, name = "|residual|") +
-    ggplot2::facet_wrap(~gear, scales = "free_y") +
+    ggplot2::facet_wrap(~gear, scales = "free_y") + year_axis_flicc() +
     ggplot2::labs(x = "Year", y = "Length",
                   title = paste0(if (type == "osa") "OSA" else "Pearson", " residuals of the length compositions")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom", panel.grid.minor = ggplot2::element_blank())
@@ -279,7 +284,7 @@ lmean_resid_flicc <- function(fit) {
     ggplot2::geom_segment(ggplot2::aes(xend = year, yend = 0), colour = "grey50") +
     ggplot2::geom_point(ggplot2::aes(colour = out), size = 2) +
     ggplot2::scale_colour_manual(values = c(`FALSE` = "black", `TRUE` = "#E41A1C"), guide = "none") +
-    ggplot2::facet_wrap(~gear) +
+    ggplot2::facet_wrap(~gear) + year_axis_flicc() +
     ggplot2::labs(x = "Year", y = "Standardized residual of mean length",
                   title = "Mean-length residuals and runs test") +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
@@ -386,7 +391,7 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
     ggplot2::geom_point(ggplot2::aes(y = obs, colour = outside), size = 1.8) +
     ggplot2::scale_colour_manual(values = c(`FALSE` = "black", `TRUE` = "#E41A1C"),
                                  labels = c(`FALSE` = "inside 95%", `TRUE` = "outside 95%"), name = NULL) +
-    ggplot2::facet_grid(stat ~ gear, scales = "free_y") +
+    ggplot2::facet_grid(stat ~ gear, scales = "free_y") + year_axis_flicc() +
     ggplot2::labs(x = "Year", y = NULL,
                   title = paste0("Posterior predictive check (", if (isTRUE(par_draws)) "with parameter uncertainty" else "plug-in", ")")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
