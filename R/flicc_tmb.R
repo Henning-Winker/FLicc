@@ -275,6 +275,9 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
     dm_type    = as.integer(dm_type),
+    dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
+                  else rep(log(10), ngear),
+    dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 2,
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -445,7 +448,7 @@ init_tmb_flicc <- function(tmb_data) {
     log_Fk     = log_Fk,
     Sm         = Sm,
     log_phi    = log(10),
-    log_dm     = rep(if (isTRUE(tmb_data$dm_type == 2L)) log(100) else 0, length(tmb_data$gear_names)),
+    log_dm     = if (!is.null(tmb_data$dm_prior_mu)) as.numeric(tmb_data$dm_prior_mu) else rep(0, length(tmb_data$gear_names)),
     log_sigmaF = tmb_data$prior_sigmaF_mean
   )
 }
@@ -544,6 +547,7 @@ fiticc_core <- function(lfd, stklen,
     obs_model = "mn",
     dm_theta = "fixed",
     dm_shared = FALSE,
+    dm_prior_sd = 2,
     ngtg = 13,
     maxsd = 2,
     Mpow = 0,
@@ -933,6 +937,12 @@ fiticc_core <- function(lfd, stklen,
 #'
 #'     \item{\code{dm_shared}}{Logical; one precision parameter for all gears
 #'       instead of one per gear (default \code{FALSE}).}
+#'
+#'     \item{\code{dm_prior_sd}}{SD of a weak normal prior on the log precision
+#'       (default 2; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
+#'       or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
+#'       matters when the data show no overdispersion (input sample size below
+#'       what the data support), where it keeps the precision finite.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}

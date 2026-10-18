@@ -66,6 +66,8 @@ growth formulation.}
 
 \\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
 
+\\item\{\code{dm_prior_sd}\}\{SD of a weak normal prior on the log precision (default 2; 0 = none), centred on beta = 10 max(n) (saturating) or theta = 10 (linear), i.e. close to a multinomial. It only matters when the data show no overdispersion, where it keeps the precision finite.\}
+
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
 

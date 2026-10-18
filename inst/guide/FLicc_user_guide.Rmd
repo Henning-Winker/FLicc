@@ -341,8 +341,12 @@ Monte-Carlo profiling. Practical rules:
   gear-year and test 100 and 300.
 - Use the same ESS for gears of similar sampling quality; reduce it for gears
   with few trips.
-- Prefer `obs_model = "dm"` with real data; remember it halves the nominal ESS.
-- Never fit raw counts of several thousand fish per year without rescaling.
+- Prefer `obs_model = "dm"` with real data. With the default fixed precision it
+  halves the nominal ESS; with an estimated precision
+  (`dm_theta = "saturating"`, next section) the data choose their own weight:
+  then give it the **raw counts or an ESS of at least 500**, not a reduced ESS.
+- With the multinomial or the fixed Dirichlet-multinomial, never fit raw counts
+  of several thousand fish per year without rescaling.
 
 The demonstration below fits the alfonsino data at five effective sample sizes
 (`ess_values`), once with the multinomial and once with the Dirichlet-multinomial,
@@ -422,8 +426,65 @@ for the raw counts:
 plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
 ```
 
-*Open issue*: estimating the DM precision (overdispersion) instead of fixing
-$\alpha_0 = n$ would let the data choose their own weight; this is planned.
+## Letting the data choose their weight: estimated Dirichlet-multinomial precision
+
+With the default `dm_theta = "fixed"` the Dirichlet precision is
+$\alpha_0 = n$, so the effective sample size the likelihood uses is
+$$
+n_{eff} = \frac{n\,(1 + \alpha_0)}{n + \alpha_0} = \frac{1 + n}{2} \approx \frac{n}{2},
+$$
+proportional to the input ESS, as shown above. FLicc can instead estimate the
+precision by gear (Thorson et al. 2017):
+
+| `dm_theta` | $\alpha_0$ | $n_{eff}$ | as the input ESS grows |
+|---|---|---|---|
+| `"fixed"` (default) | $n$ | $\approx n/2$ | grows without limit |
+| `"linear"` | $\theta n$, $\theta$ estimated | $(1 + \theta n)/(1 + \theta)$ | grows, at a rate set by $\theta$ |
+| `"saturating"` | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
+
+With `"saturating"`, once the input sample size is well above $\beta$ the
+effective sample size no longer depends on it: the data estimate how much each
+composition can count. The input matters only if it is *below* what the data
+support. Then there is no overdispersion to estimate, $\beta$ runs towards
+infinity, and the model becomes a multinomial at the input sample size; a weak
+prior (`dm_prior_sd = 2`, centred close to a multinomial) keeps it finite. For
+this reason, **with an estimated precision use the raw counts or an ESS of at
+least 500**, so that the data, not the input, set the weight.
+
+The fits below use the saturating Dirichlet-multinomial at ESS 500 and 1000 and
+on the raw counts; `neff_flicc()` reports the estimated effective sample size by
+gear and year.
+
+```{r dm-sat}
+dm_inputs <- list(ESS_500 = lfdess(lfd, ess.g = 500), ESS_1000 = lfdess(lfd, ess.g = 1000), raw = lfd)
+fits_dms <- Map(function(d) {
+  fiticc(d, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+}, dm_inputs)
+
+neff_gear <- function(fit, g) { ne <- neff_flicc(fit); round(mean(ne$neff[ne$gear == g])) }
+dm_table <- data.frame(
+  input        = names(fits_dms),
+  SPR_last     = round(sapply(fits_dms, sprcur_flicc), 3),
+  se_log       = round(sapply(fits_dms, se_logspr), 3),
+  neff_Trawl   = sapply(fits_dms, neff_gear, g = "Trawl"),
+  neff_Gillnet = sapply(fits_dms, neff_gear, g = "Gillnet"),
+  row.names = NULL)
+dm_table
+plot_spr(c(fixed_ESS_200 = list(fits_dm$dm_200), fits_dms), ci = TRUE)
+```
+
+The last-year SPR is `r paste(unique(range(dm_table$SPR_last)), collapse = " to ")`
+whatever the input, against `r paste(range(ess_table$SPR_dm), collapse = " to ")`
+for the fixed precision over ESS 50 to 1000. The compositions support an
+effective sample size of about `r dm_table$neff_Trawl[3]` (trawl) and
+`r dm_table$neff_Gillnet[3]` (gillnet) fish per year; the fixed precision at
+ESS 200 used about 100.
+
+The estimated precision describes the noise *within* compositions. Year classes
+that shift whole compositions between years are a different kind of misfit, which
+the residual diagnostics (section *Residual diagnostics*) show and the precision
+does not absorb.
 
 # Missing data
 
@@ -1665,7 +1726,7 @@ plot_eqcurves(eqstk_fishblicc)
 | Topic | Recommendation |
 |---|---|
 | Observation model | `dm` with real data |
-| Sample size | ESS about 150-200 per gear-year; never raw thousands |
+| Sample size | `dm` with `dm_theta = "saturating"` on raw counts or ESS >= 500 (the data set their weight); with fixed precision or `mn`, ESS about 150-200 per gear-year, never raw thousands |
 | Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
 | Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |

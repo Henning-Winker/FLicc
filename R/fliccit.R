@@ -605,6 +605,8 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_Fmax    <- as.numeric(Fmax)
   td$brp_only    <- 1L
   if (is.null(td$dm_type)) td$dm_type <- 0L        # fits made before dm_theta
+  if (is.null(td$dm_prior_mu)) td$dm_prior_mu <- rep(0, length(fit$tmb_data$gear_names))
+  if (is.null(td$dm_prior_sd)) td$dm_prior_sd <- 0
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
   # full parameter set at the optimum, including random effects (F_re = TRUE)

@@ -267,6 +267,8 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
   DATA_INTEGER(dm_type);     // 0: alpha0 = n (fixed), 1: alpha0 = theta n, 2: alpha0 = beta
+  DATA_VECTOR(dm_prior_mu);  // weak prior on log_dm by gear (keeps it finite without overdispersion)
+  DATA_SCALAR(dm_prior_sd);  // <= 0: no prior
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -804,6 +806,9 @@ Type objective_function<Type>::operator() ()
 
     // optional prior on sigmaF (prior_sigmaF_sd <= 0: none, e.g. when F is a
     // random effect and sigmaF is estimated from the marginal likelihood)
+    if(obs_model == 3 && dm_type > 0 && dm_prior_sd > Type(0)) {
+      for(int g = 0; g < ngear; g++) nll -= dnorm(log_dm(g), dm_prior_mu(g), dm_prior_sd, true);
+    }
     if(prior_sigmaF_sd > Type(0)) {
       nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
     }
