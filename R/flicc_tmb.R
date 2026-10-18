@@ -1642,10 +1642,11 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
 #' The Newton decrement \eqn{\frac12 g'H^{-1}g} (from the Newton polishing in
 #' [fiticc()]) is the expected further improvement in log-likelihood and does
 #' not depend on the scale of the objective or of the parameters, unlike the
-#' gradient. The overall tier is "ok" when the Hessian is positive definite,
-#' the decrement is below 0.001 and the gradient below `grad_tol`; "warning"
-#' when the Hessian is positive definite but the decrement is up to 0.1 or the
-#' gradient above `grad_tol`; "fail" otherwise.
+#' gradient. With a positive definite Hessian and a decrement available, the
+#' overall tier is "ok" when the decrement is below 0.001 and "warning" when it
+#' is up to 0.1, whatever the gradient; without a decrement (`newton = 0`) the
+#' gradient is compared with `grad_tol` instead. The tier is "fail" when the
+#' Hessian is not positive definite or the decrement is above 0.1.
 #'
 #' @examples
 #' \dontrun{

@@ -25,7 +25,10 @@ diagnostics_flicc <- function(fit) {
 conv_tier_flicc <- function(objective, pd, dec, max_grad,
                             dec_ok = 1e-3, dec_fail = 0.1, grad_tol = 0.01) {
   if (!is.finite(objective) || isFALSE(pd) || (is.finite(dec) && dec > dec_fail)) return("fail")
-  if ((is.finite(dec) && dec > dec_ok) || (is.finite(max_grad) && max_grad > grad_tol)) return("warning")
+  # with a positive definite Hessian and a Newton decrement, judge by the
+  # decrement only (scale-free); otherwise fall back to the gradient
+  if (isTRUE(pd) && is.finite(dec)) return(if (dec > dec_ok) "warning" else "ok")
+  if (is.finite(max_grad) && max_grad > grad_tol) return("warning")
   "ok"
 }
 
