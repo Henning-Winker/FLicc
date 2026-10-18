@@ -614,6 +614,59 @@ right limb, i.e. no dome; smaller values give mild (about 0.6 Linf), moderate
 (0.4 Linf) and strong (0.25 Linf) doming. `sel_curve_flicc()` returns the
 values of a curve.
 
+## Gear selectivity, availability and population selectivity
+
+The selectivity $S_g(L)$ that FLicc estimates for a gear is not the selectivity
+of the gear itself (its contact or mesh selectivity) but the **population
+selectivity**: the relative fishing mortality at length for the stock as a
+whole, which combines the gear's contact selectivity with the availability of
+fish of each size to where the fleet fishes. Sampson and Scott (2011) showed
+with a spatial model of linked subpopulations that population selectivity
+becomes dome-shaped even when every subpopulation is fished with the same
+asymptotic gear, unless fishing mortality is uniform across them: older fish
+accumulate in less-fished areas, a "cryptic biomass" that escapes capture. The
+shape depends on the gear, the level and spatial distribution of fishing
+effort, and the movement of fish between areas.
+
+Consequences for FLicc:
+
+- **A logistic gear does not imply logistic population selectivity.** The
+  question is whether the fleet's fishing mortality reaches the large fish in
+  proportion, not only what the mesh or hook does.
+- **Slight doming is a plausible state of nature**, particularly where large
+  fish move deeper, offshore or into areas that are fished less. This is the
+  rationale for running the dome sensitivity routinely (next section) and, where
+  the doming level is uncertain, for integrating it with `ensemble_flicc()`.
+- **The dome is an assumption about fish that are not seen.** A fitted dome
+  tells the model that large fish are present but not caught, so they continue
+  to grow and spawn, and SPR increases. That is right if they are in a refuge,
+  and optimistic if they are missing because they died (higher F or natural
+  mortality of large fish). Length data alone cannot separate the two, and a
+  better likelihood for a stronger dome is not evidence that the cryptic
+  biomass exists; the doming level should be informed by knowledge of the
+  fishery and the stock's distribution.
+- **Data by area can be used as separate gears** ("areas as fleets"): each area
+  then has its own selectivity, which removes the part of the dome that comes
+  from mixing areas with different size compositions.
+- **The tail cut** conditions on the fish below the cut and so reduces the
+  dependence on the assumed dome, which acts on the largest fish.
+- Because population selectivity depends on where and how hard the fleet fishes,
+  it can change when the effort distribution changes substantially. With a
+  stable fishery a constant selectivity is a reasonable assumption; a change of
+  sign of the residuals between periods (section *Residual diagnostics*) is the
+  signal to check.
+
+| Situation | Population selectivity | In FLicc |
+|---|---|---|
+| Fleet covers the stock's range evenly, or fish mix well | close to gear selectivity | logistic base; dome sensitivity as a check |
+| Fishing concentrated where small and mid-sized fish are; large fish less available | dome plausible | dome sensitivity; ensemble over mild to moderate domes or tail cut |
+| Length data available by area | dome partly from the mix of areas | areas as separate gears |
+| Substantial change in where or how the fleet fishes | may change | check residuals by period; `by_year` |
+
+*Reference*: Sampson, D.B. and Scott, R.D. (2011). A spatial model for fishery
+age-selection at the population level. *Canadian Journal of Fisheries and
+Aquatic Sciences*. doi:10.1139/f2011-044.
+
 ## Dome sensitivity: a recommended standard run
 
 Slight doming (large fish less selected or less available) is hard to detect
