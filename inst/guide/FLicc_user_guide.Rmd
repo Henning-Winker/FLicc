@@ -599,6 +599,43 @@ as a dome (here the trawl, estimated right-hand SD about
 `r round(exp(fit$par$mpd[fit$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
 wide right-hand SD forces a shape the data reject, which shows as very large dAIC.
 
+## Comparing selectivity functions
+
+`plot_compare_sel()` draws the fitted selectivity of a list of fits, one panel
+per gear and one colour per fit. The example refits the reference model with
+four selectivity functions for the gillnet, keeping the trawl as a
+double-sided normal: logistic; double-sided normal with the right-hand SD fixed
+at 1000 (a flat right limb, close to the logistic in shape); normal (a
+symmetric dome); and double-sided normal with both SDs estimated. The vectors
+`gill_fun` and `gill_fix` hold the gillnet function and the fixed parameters of
+each run, and `Map()` fits one model per pair.
+
+```{r compare-sel, fig.height = 4.5}
+gill_fun <- c(logistic = "logistic", dsnormal_rsd1000 = "dsnormal",
+              normal = "normal", dsnormal = "dsnormal")
+gill_fix <- list(NULL, list(rsd = 1000), NULL, NULL)
+fits_sel <- Map(function(fun, fix) {
+  fiticc(lfd, stklen, sel_fun = c("dsnormal", fun), catch_by_gear = cbg,
+         sel_fixed = if (is.null(fix)) NULL else list(Gillnet = fix),
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+}, gill_fun, gill_fix)
+plot_compare_sel(fits_sel)
+sel_tab <- data.frame(fit = names(fits_sel),
+                      AIC = sapply(fits_sel, function(f) round(AIC(LLflicc(f)), 1)),
+                      SPR_last = sapply(fits_sel, function(f) round(sprcur_flicc(f), 3)),
+                      row.names = NULL)
+sel_tab$dAIC <- sel_tab$AIC - min(sel_tab$AIC)
+sel_tab
+```
+
+The trawl panel shows how far the trawl estimate moves when only the gillnet
+shape changes. Over the four gillnet functions the last-year
+SPR ranges from `r min(sel_tab$SPR_last)` to `r max(sel_tab$SPR_last)`, with
+dAIC from 0 to `r max(sel_tab$dAIC)`. As with the dome sensitivity, read the
+comparison together with gear knowledge: a better fit for a dome does not show
+that large fish are less selected, because a shortage of large fish can also
+come from F.
+
 ## Choosing selectivity
 
 - Use logistic unless gear knowledge (gillnet mesh, hook size, availability of
