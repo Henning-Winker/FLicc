@@ -281,7 +281,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     dm_type    = as.integer(dm_type),
     dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
                   else rep(log(10), ngear),
-    dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 2,
+    dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 1,
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -489,6 +489,7 @@ init_tmb_flicc <- function(tmb_data) {
 #'   free parameter vector after applying any TMB parameter mapping.
 #' @param FLRreport Logical; if \code{TRUE}, convert reported outputs using
 #'   \code{as_FLQuants()}.
+#' @param newton Maximum number of Newton polishing steps (0 = none).
 #'
 #' @details
 #' \code{fiticc_core()} prepares the TMB data using \code{data_tmb_flicc()},
@@ -536,7 +537,8 @@ fiticc_core <- function(lfd, stklen,
                      grad_tol = 1e-3,
                      control = list(),
                      FLRreport=FALSE,
-                     se = TRUE) {
+                     se = TRUE,
+                     newton = 3) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -552,7 +554,7 @@ fiticc_core <- function(lfd, stklen,
     dm_theta = "fixed",
     dm_shared = FALSE,
     catch_units = "weight",
-    dm_prior_sd = 2,
+    dm_prior_sd = 1,
     ngtg = 13,
     maxsd = 2,
     Mpow = 0,
@@ -786,6 +788,41 @@ fiticc_core <- function(lfd, stklen,
     control = ctrl
   )
 
+  # Newton polishing: a few Newton steps from the nlminb solution using the
+  # Hessian of the objective (AD for fixed-effects models, finite differences
+  # of the gradient with random effects). Steps that do not lower the
+  # objective are rejected. Also gives the Hessian check and the Newton
+  # decrement 0.5 g'H^-1 g (expected remaining improvement in log-likelihood).
+  hess_fun <- function(p) {
+    H <- if (is.null(random)) tryCatch(obj$he(p), error = function(e) NULL) else NULL
+    if (is.null(H)) H <- tryCatch(stats::optimHess(p, obj$fn, obj$gr), error = function(e) NULL)
+    if (is.null(H) || any(!is.finite(H))) return(NULL)
+    (H + t(H)) / 2
+  }
+  newton_state <- function(p) {
+    g <- as.numeric(obj$gr(p))
+    H <- hess_fun(p)
+    R <- if (is.null(H)) NULL else tryCatch(chol(H), error = function(e) NULL)
+    if (is.null(R)) return(list(pd = if (is.null(H)) NA else FALSE, dec = NA_real_, step = NULL,
+                                max_grad = max(abs(g), na.rm = TRUE)))
+    step <- as.numeric(backsolve(R, forwardsolve(t(R), g)))
+    list(pd = TRUE, dec = 0.5 * sum(g * step), step = step, max_grad = max(abs(g), na.rm = TRUE))
+  }
+  polish <- function(opt, nsteps) {
+    st <- newton_state(opt$par); k <- 0L
+    while (k < nsteps && isTRUE(st$pd) && is.finite(st$dec) && st$dec > 1e-12) {
+      p_new <- opt$par - st$step
+      f_new <- tryCatch(obj$fn(p_new), error = function(e) NA_real_)
+      if (!is.finite(f_new) || f_new > opt$objective + 1e-10) break
+      opt$par[] <- p_new; opt$objective <- f_new; k <- k + 1L
+      st <- newton_state(opt$par)
+    }
+    opt$newton <- list(steps = k, hess_pd = st$pd, decrement = st$dec, max_gradient = st$max_grad)
+    opt
+  }
+  newton <- as.integer(newton)
+  if (newton > 0L) opt <- polish(opt, newton)
+
   restart_log <- data.frame(
     restart = 0L,
     objective = opt$objective,
@@ -826,12 +863,15 @@ fiticc_core <- function(lfd, stklen,
     )
 
     if (accept) {
+      opt_new$newton <- opt$newton
       opt <- opt_new
+      n_restart_used <- n_restart_used + 1L
     } else {
       break
     }
   }
 
+  if (newton > 0L && n_restart_used > 0L) opt <- polish(opt, newton)
   opt$max_gradient <- max(abs(obj$gr(opt$par)), na.rm = TRUE)
   opt$n_restarts <- n_restart_used
   opt$restart_log <- restart_log
@@ -886,6 +926,13 @@ fiticc_core <- function(lfd, stklen,
   fit$restart_log <- opt$restart_log
 
   fit$logLik <- LLflicc(fit)
+  fit$diagnostics <- diagnostics_flicc(fit)
+  # a polished fit with a positive definite Hessian and a negligible Newton
+  # decrement is converged, whatever nlminb's stopping code
+  if (identical(fit$diagnostics$conv_tier, "ok") && !identical(as.integer(fit$opt$convergence), 0L)) {
+    fit$opt$convergence_nlminb <- fit$opt$convergence
+    fit$opt$convergence <- 0L
+  }
 
 
   if(FLRreport){fit$report <- as_FLQuants(fit,stklen)} else {fit$report$FLReport=FALSE}
@@ -949,7 +996,7 @@ fiticc_core <- function(lfd, stklen,
 #'       instead of one per gear (default \code{FALSE}).}
 #'
 #'     \item{\code{dm_prior_sd}}{SD of a weak normal prior on the log precision
-#'       (default 2; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
+#'       (default 1; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
 #'       or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
 #'       matters when the data show no overdispersion (input sample size below
 #'       what the data support), where it keeps the precision finite.}
@@ -1048,8 +1095,18 @@ fiticc_core <- function(lfd, stklen,
 #' @param control Optional list of control arguments passed to \code{nlminb()}.
 #'   Values supplied here override the FLicc defaults.
 #' @param se Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
-#'   standard errors or Hessian check, but faster (useful in an MSE).
+#'   standard errors, but faster (useful in an MSE). The Hessian is still
+#'   checked by the Newton polishing.
 #'   Default \code{TRUE}.
+#' @param newton Integer. Maximum number of Newton steps after \code{nlminb()}
+#'   (default 3; 0 = none). Each step uses the Hessian of the objective and is
+#'   kept only if it lowers the objective. This drives the gradient of a
+#'   well-defined optimum to near zero, checks that the Hessian is positive
+#'   definite and gives the Newton decrement (see \code{\link{flicc_convergence}}).
+#' @param verbose Logical. If \code{TRUE} (default), print a message when the
+#'   convergence check gives a warning or failure, or when an estimated
+#'   Dirichlet-multinomial precision is at its upper bound. The same
+#'   information is always stored in \code{fit$diagnostics}.
 #' @param by_year Logical. If \code{TRUE}, the model is fitted independently
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
@@ -1135,7 +1192,9 @@ fiticc <- function(lfd, stklen,
                    n_restart = 3,
                    grad_tol = 1e-3,
                    control = list(),
-                   se = TRUE) {
+                   se = TRUE,
+                   newton = 3,
+                   verbose = TRUE) {
 
 
      if(by_year){
@@ -1173,7 +1232,8 @@ fiticc <- function(lfd, stklen,
          se = se,
          grad_tol = grad_tol,
          control = control,
-         FLRreport = TRUE
+         FLRreport = TRUE,
+         newton = newton
          )}
       )
       repy <-  fity[[1]]$report
@@ -1216,7 +1276,8 @@ fiticc <- function(lfd, stklen,
     se = se,
     grad_tol = grad_tol,
     control = control,
-    FLRreport = FLRreport
+    FLRreport = FLRreport,
+    newton = newton
   )
 
   if(pop_model_flicc(fit1)%in%"gtg")  safe_fit = FALSE
@@ -1247,7 +1308,8 @@ fiticc <- function(lfd, stklen,
         se = se,
         grad_tol = grad_tol,
         control = control,
-        FLRreport = FLRreport
+        FLRreport = FLRreport,
+        newton = newton
       ),
       error = function(e) NULL
     )
@@ -1267,6 +1329,7 @@ fiticc <- function(lfd, stklen,
   )
   }
 
+  if (isTRUE(verbose)) messages_flicc(fit_final)
   fit_final
 }
 
@@ -1321,6 +1384,10 @@ need_refit_flicc <- function(fit, grad_tol = 0.02) {
     return(TRUE)
 
   if (!is.null(fit$rep$pdHess) && !isTRUE(fit$rep$pdHess))
+    return(TRUE)
+
+  # Hessian check from the Newton polishing (available without sdreport)
+  if (!is.null(fit$diagnostics$hess_pd) && isFALSE(fit$diagnostics$hess_pd))
     return(TRUE)
 
 
@@ -1572,6 +1639,14 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
 #' then for `fit$sdrep$pdHess`. The eigenvalue check recomputes a numerical
 #' Hessian using `stats::optimHess()`.
 #'
+#' The Newton decrement \eqn{\frac12 g'H^{-1}g} (from the Newton polishing in
+#' [fiticc()]) is the expected further improvement in log-likelihood and does
+#' not depend on the scale of the objective or of the parameters, unlike the
+#' gradient. The overall tier is "ok" when the Hessian is positive definite,
+#' the decrement is below 0.001 and the gradient below `grad_tol`; "warning"
+#' when the Hessian is positive definite but the decrement is up to 0.1 or the
+#' gradient above `grad_tol`; "fail" otherwise.
+#'
 #' @examples
 #' \dontrun{
 #' fit <- fiticc(lfds, stock, lhpar)
@@ -1621,34 +1696,48 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
 
   min_eig <- if (!inherits(eig, "try-error")) min(eig, na.rm = TRUE) else NA_real_
 
+  dg <- fit$diagnostics
+  dec <- if (!is.null(dg$decrement)) dg$decrement else NA_real_
+  tier <- conv_tier_flicc(fit$opt$objective,
+                          if (is.na(pdHess)) (if (is.finite(min_eig)) min_eig > eig_tol else NA) else isTRUE(pdHess),
+                          dec, max_grad, grad_tol = grad_tol)
+
   out <- data.frame(
     check = c(
       "Optimizer finished normally",
       "Gradient is acceptable",
       "Hessian is positive definite",
       "Standard errors available",
-      "Hessian eigenvalues are positive"
+      "Hessian eigenvalues are positive",
+      "Newton decrement is negligible",
+      "Overall"
     ),
     value = c(
       paste0(opt_code, " - ", opt_msg),
       signif(max_grad, 4),
       as.character(pdHess),
       paste0(n_par - n_nan_se, " / ", n_par, " parameters"),
-      signif(min_eig, 4)
+      signif(min_eig, 4),
+      signif(dec, 3),
+      tier
     ),
     passed = c(
       identical(opt_code, 0L),
       isTRUE(max_grad < grad_tol),
       isTRUE(pdHess),
       isTRUE(n_nan_se == 0),
-      isTRUE(min_eig > eig_tol)
+      isTRUE(min_eig > eig_tol),
+      if (is.na(dec)) NA else dec <= 1e-3,
+      tier != "fail"
     ),
     interpretation = c(
       "The optimizer found a numerical optimum.",
       "The fit is close to a stationary point.",
       "The model curvature is well behaved.",
       "Uncertainty could be estimated for all parameters.",
-      "No flat or negative curvature directions were detected."
+      "No flat or negative curvature directions were detected.",
+      "Expected further gain in log-likelihood (0.5 g'H^-1 g) is below 0.001; NA without Newton polishing.",
+      "ok: converged; warning: usable, but check the gradient or decrement; fail: do not use."
     ),
     stringsAsFactors = FALSE
   )

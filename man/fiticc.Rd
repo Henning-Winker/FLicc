@@ -26,7 +26,9 @@ fiticc(
   n_restart = 3,
   grad_tol = 0.001,
   control = list(),
-  se = TRUE
+  se = TRUE,
+  newton = 3,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -68,7 +70,7 @@ growth formulation.}
 
 \\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
 
-\\item\{\code{dm_prior_sd}\}\{SD of a weak normal prior on the log precision (default 2; 0 = none), centred on beta = 10 max(n) (saturating) or theta = 10 (linear), i.e. close to a multinomial. It only matters when the data show no overdispersion, where it keeps the precision finite.\}
+\\item\{\code{dm_prior_sd}\}\{SD of a weak normal prior on the log precision (default 1; 0 = none), centred on beta = 10 max(n) (saturating) or theta = 10 (linear), i.e. close to a multinomial. It only matters when the data show no overdispersion, where it keeps the precision finite.\}
 
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
@@ -156,8 +158,19 @@ automatic restarts and by the optional safe-fit check. Default is
 Values supplied here override the FLicc defaults.}
 
 \item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
-standard errors or Hessian check, but faster (useful in an MSE).
-Default \code{TRUE}.}
+standard errors, but faster (useful in an MSE). The Hessian is still
+checked by the Newton polishing. Default \code{TRUE}.}
+
+\item{newton}{Integer. Maximum number of Newton steps after \code{nlminb()}
+(default 3; 0 = none). Each step uses the Hessian of the objective and is
+kept only if it lowers the objective. This drives the gradient of a
+well-defined optimum to near zero, checks that the Hessian is positive
+definite and gives the Newton decrement (see \code{\link{flicc_convergence}}).}
+
+\item{verbose}{Logical. If \code{TRUE} (default), print a message when the
+convergence check gives a warning or failure, or when an estimated
+Dirichlet-multinomial precision is at its upper bound. The same
+information is always stored in \code{fit$diagnostics}.}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} containing:

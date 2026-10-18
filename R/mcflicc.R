@@ -384,7 +384,8 @@ mc_flicc <- function(
         catch_by_gear = fit$report$catch_by_gear,
         settings = settings_i,
         start = fit$opt$par,
-        n_restart = n_restart
+        n_restart = n_restart,
+        verbose = FALSE
       ),
       silent = TRUE
     )

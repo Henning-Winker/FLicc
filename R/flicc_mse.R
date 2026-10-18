@@ -696,7 +696,7 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
       try(fiticc(
         lfd = lfd_i, stklen = stklen_i, sel_fun = sf,
         catch_by_gear = cbg_i, settings = settings,
-        iter = 1, compile = compile, silent = !verbose, dll = dll,
+        iter = 1, compile = compile, silent = !verbose, verbose = verbose, dll = dll,
         n_restart = n_restart, grad_tol = grad_tol, ...
       ), silent = TRUE)
     }

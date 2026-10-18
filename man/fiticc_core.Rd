@@ -22,7 +22,8 @@ fiticc_core(
   grad_tol = 0.001,
   control = list(),
   FLRreport = FALSE,
-  se = TRUE
+  se = TRUE,
+  newton = 3
 )
 }
 \arguments{
@@ -66,6 +67,8 @@ free parameter vector after applying any TMB parameter mapping.}
 \code{as_FLQuants()}.}
 
 \item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped.}
+
+\item{newton}{Maximum number of Newton polishing steps (0 = none).}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} with optimizer results, sdreport
