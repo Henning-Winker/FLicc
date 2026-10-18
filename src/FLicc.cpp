@@ -266,6 +266,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
+  DATA_INTEGER(dm_type);     // 0: alpha0 = n (fixed), 1: alpha0 = theta n, 2: alpha0 = beta
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -275,6 +276,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER_MATRIX(log_Fk);   // nyear x ngear
   PARAMETER_VECTOR(Sm);
   PARAMETER(log_phi);
+  PARAMETER_VECTOR(log_dm);  // DM precision by gear: log theta (linear) or log beta (saturating)
   PARAMETER(log_sigmaF); // random walk F
 
   Type nll = 0.0;
@@ -352,6 +354,9 @@ Type objective_function<Type>::operator() ()
   matrix<Type> plen_all_y(nlen, nyear);
   matrix<Type> catch_share(nyear, ngear);   // predicted catch shares in weight
   matrix<Type> catch_share_n(nyear, ngear); // predicted catch shares in numbers
+  matrix<Type> dm_alpha0(nyear, ngear);     // Dirichlet precision used
+  matrix<Type> dm_neff(nyear, ngear);       // effective sample size n (1 + a0) / (n + a0)
+  dm_alpha0.setZero(); dm_neff.setZero();
   matrix<Type> sel_joint(nlen, nyear);
   matrix<Type> Fk_l(nlen, nyear);
 
@@ -622,11 +627,16 @@ Type objective_function<Type>::operator() ()
         }
 
       } else if(obs_model == 3) {
-        // Dirichlet-multinomial on within-gear compositions
-        // Here the observed total over retained bins acts as fixed
-        // ESS / precision (= obs_gear(g) without a tail cut)
+        // Dirichlet-multinomial on within-gear compositions. Precision:
+        //  dm_type 0: alpha0 = n (n = observed total over retained bins)
+        //  dm_type 1: alpha0 = theta n (linear, Thorson et al. 2017)
+        //  dm_type 2: alpha0 = beta (saturating: n_eff -> beta + 1 as n grows)
         if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
           Type alpha0 = o_tot;
+          if(dm_type == 1) alpha0 = exp(log_dm(g)) * o_tot;
+          if(dm_type == 2) alpha0 = exp(log_dm(g));
+          dm_alpha0(y, g) = alpha0;
+          dm_neff(y, g) = o_tot * (Type(1) + alpha0) / (o_tot + alpha0);
           nll -= lgamma(alpha0);
           nll += lgamma(o_tot + alpha0);
           for(int k = 0; k < nb; k++) {
@@ -832,6 +842,8 @@ Type objective_function<Type>::operator() ()
   REPORT(spr_y);      // nyear x 1
   REPORT(catch_share); // nyear x ngear, predicted catch shares in weight
   REPORT(catch_share_n); // nyear x ngear, predicted catch shares in numbers
+  REPORT(dm_alpha0);
+  REPORT(dm_neff);
   REPORT(Fk);         // nyear x ngear on natural scale
   REPORT(sigmaF);
   REPORT(N_y);

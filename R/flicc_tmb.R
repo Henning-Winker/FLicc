@@ -126,6 +126,10 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                            stop("Supported obs_model options are 'nb', 'mn', 'dm'")
   )
 
+  dm_theta <- if (!is.null(settings$dm_theta)) settings$dm_theta else "fixed"
+  dm_type <- switch(dm_theta, fixed = 0L, linear = 1L, saturating = 2L,
+                    stop("settings$dm_theta must be \"fixed\", \"linear\" or \"saturating\"."))
+
   pop_model <- if (!is.null(settings$pop_model)) settings$pop_model else "gamma"
 
   pop_model_code <- switch(pop_model,
@@ -270,6 +274,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     catch_sd   = catch_sd,
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
+    dm_type    = as.integer(dm_type),
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -440,6 +445,7 @@ init_tmb_flicc <- function(tmb_data) {
     log_Fk     = log_Fk,
     Sm         = Sm,
     log_phi    = log(10),
+    log_dm     = rep(if (isTRUE(tmb_data$dm_type == 2L)) log(100) else 0, length(tmb_data$gear_names)),
     log_sigmaF = tmb_data$prior_sigmaF_mean
   )
 }
@@ -536,6 +542,8 @@ fiticc_core <- function(lfd, stklen,
     catch.sd = 0.05,
     pop_model = "gtg",
     obs_model = "mn",
+    dm_theta = "fixed",
+    dm_shared = FALSE,
     ngtg = 13,
     maxsd = 2,
     Mpow = 0,
@@ -673,6 +681,14 @@ fiticc_core <- function(lfd, stklen,
   # NEW: phi only relevant for NB
   if (settings$obs_model != "nb") {
     map$log_phi <- factor(NA)
+  }
+  # Dirichlet-multinomial precision: estimated by gear (or shared) only for
+  # obs_model = "dm" with dm_theta "linear" or "saturating"
+  ng <- length(tmb_data$gear_names)
+  if (settings$obs_model != "dm" || isTRUE(tmb_data$dm_type == 0L)) {
+    map$log_dm <- factor(rep(NA, ng))
+  } else if (isTRUE(settings$dm_shared)) {
+    map$log_dm <- factor(rep(1, ng))
   }
 
   rw_on <- length(unique(years)) > 1 && isTRUE(tmb_data$prior_sigmaF_use == 1L)
@@ -906,6 +922,17 @@ fiticc_core <- function(lfd, stklen,
 #'       when \code{pop_model = "gamma"}).}
 #'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
+#'
+#'     \item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
+#'       (\code{obs_model = "dm"}): \code{"fixed"} (default, \eqn{\alpha_0 = n}),
+#'       \code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
+#'       \code{"saturating"} (\eqn{\alpha_0 = \beta} estimated; the effective
+#'       sample size \eqn{n(1+\beta)/(n+\beta)} levels off at \eqn{\beta + 1}, so
+#'       the fit becomes insensitive to the input sample size). Thorson et al.
+#'       (2017, Fisheries Research 192: 84-93).}
+#'
+#'     \item{\code{dm_shared}}{Logical; one precision parameter for all gears
+#'       instead of one per gear (default \code{FALSE}).}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}

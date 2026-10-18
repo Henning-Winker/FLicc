@@ -26,8 +26,9 @@ comp_data_flicc <- function(fit) {
     n <- sum(o)
     if (!(n > 0) || !(sum(p) > 0)) next
     p <- pmax(p / sum(p), 1e-12); p <- p / sum(p)
+    a0 <- if (!is.null(rp$dm_alpha0) && rp$dm_alpha0[y, g] > 0) rp$dm_alpha0[y, g] else n
     out[[length(out) + 1]] <- list(gear = td$gear_names[g], year = td$year_names[y],
-                                   len = Lb, lmid = Lm, obs = o, p = p, n = n)
+                                   len = Lb, lmid = Lm, obs = o, p = p, n = n, a0 = a0)
   }
   phi <- tryCatch(exp(fit$obj$env$parList()$log_phi), error = function(e) NA_real_)
   list(comp = out, obs_model = fit$obs_model, phi = phi)
@@ -36,8 +37,8 @@ comp_data_flicc <- function(fit) {
 # integer year axis
 year_axis_flicc <- function() ggplot2::scale_x_continuous(breaks = function(x) unique(round(pretty(x))))
 
-# variance inflation of the Dirichlet-multinomial with precision alpha0 = n
-dm_factor_flicc <- function(n) (n + n) / (1 + n)
+# variance inflation of the Dirichlet-multinomial with precision alpha0
+dm_factor_flicc <- function(n, a0 = n) (n + a0) / (1 + a0)
 
 # beta-binomial cdf at x for N trials, shape a, b (vectorised over x)
 pbetabinom_flicc <- function(x, N, a, b) {
@@ -56,8 +57,9 @@ pbetabinom_flicc <- function(x, N, a, b) {
 #'
 #' * `type = "pearson"`: \eqn{(o - n p) / \sqrt{V}}, with the variance of the
 #'   observation model: \eqn{V = n p (1 - p)} (multinomial), the same multiplied
-#'   by \eqn{(n + \alpha_0)/(1 + \alpha_0)} with \eqn{\alpha_0 = n}
-#'   (Dirichlet-multinomial), or \eqn{\mu + \mu^2/\phi} with \eqn{\mu = n p}
+#'   by \eqn{(n + \alpha_0)/(1 + \alpha_0)} with the precision \eqn{\alpha_0}
+#'   of the fit (Dirichlet-multinomial; \eqn{\alpha_0 = n} unless `dm_theta` is
+#'   estimated), or \eqn{\mu + \mu^2/\phi} with \eqn{\mu = n p}
 #'   (negative binomial). Pearson residuals of a composition are correlated
 #'   (they sum to about zero) and are not normal for small expected counts;
 #'   they are best read in bubble plots.
@@ -97,7 +99,7 @@ resid_flicc <- function(fit, type = c("pearson", "osa"), seed = 1) {
     if (type == "pearson") {
       V <- switch(om,
         nb = n * p + (n * p)^2 / cd$phi,
-        dm = n * p * (1 - p) * dm_factor_flicc(n),
+        dm = n * p * (1 - p) * dm_factor_flicc(n, z$a0),
         n * p * (1 - p))
       r <- (o - n * p) / sqrt(V)
     } else {
@@ -112,7 +114,7 @@ resid_flicc <- function(fit, type = c("pearson", "osa"), seed = 1) {
           if (rem_n <= 0 || rem_p <= 1e-12) break
           q <- min(max(p[k] / rem_p, 1e-12), 1 - 1e-12)
           if (om == "dm") {
-            a0 <- N
+            a0 <- z$a0
             a <- a0 * p[k]; b <- a0 * max(rem_p - p[k], 1e-12)
             lo <- pbetabinom_flicc(oi[k] - 1, rem_n, a, b); hi <- pbetabinom_flicc(oi[k], rem_n, a, b)
           } else {
@@ -253,7 +255,7 @@ lmean_resid_flicc <- function(fit) {
   tab <- do.call(rbind, lapply(cd$comp, function(z) {
     L <- z$lmid; n <- z$n
     ex <- sum(L * z$p); vl <- sum(L^2 * z$p) - ex^2
-    f <- switch(cd$obs_model, dm = dm_factor_flicc(n),
+    f <- switch(cd$obs_model, dm = dm_factor_flicc(n, z$a0),
                 nb = 1 + n * sum(z$p^2 * (L - ex)^2) / max(cd$phi * vl, 1e-12), 1)
     se <- sqrt(vl / n * f)
     ob <- sum(L * z$obs) / n
@@ -294,7 +296,7 @@ lmean_resid_flicc <- function(fit) {
 #' Approximate posterior predictive checks of the length compositions
 #'
 #' Simulates length compositions from the fitted observation model
-#' (multinomial, Dirichlet-multinomial with \eqn{\alpha_0 = n}, or negative
+#' (multinomial, Dirichlet-multinomial with the fitted precision, or negative
 #' binomial) at the fitted expected compositions and sample sizes, and compares
 #' summary statistics of the observed compositions with their predictive
 #' distribution by gear and year. With `par_draws = TRUE` the parameters are
@@ -367,7 +369,7 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
       }
       cnt <- switch(om,
         nb = stats::rnbinom(K, mu = n * p, size = cd$phi),
-        dm = { a <- stats::rgamma(K, shape = n * p); stats::rmultinom(1, round(n), a / sum(a))[, 1] },
+        dm = { a <- stats::rgamma(K, shape = z$a0 * p); stats::rmultinom(1, round(n), a / sum(a))[, 1] },
         stats::rmultinom(1, round(n), p)[, 1])
       stats_of(cnt, z$lmid, z$len)
     }, numeric(4))
@@ -396,4 +398,33 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
                   title = paste0("Posterior predictive check (", if (isTRUE(par_draws)) "with parameter uncertainty" else "plug-in", ")")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
   list(table = tab, coverage = cov, plot = p)
+}
+
+#' Effective sample sizes of the length compositions
+#'
+#' For each gear and year: the input sample size \eqn{n} (after `lfdess()`,
+#' within the retained bins), the Dirichlet-multinomial precision
+#' \eqn{\alpha_0} and the effective sample size it implies,
+#' \eqn{n_{eff} = n(1 + \alpha_0)/(n + \alpha_0)}. With `dm_theta = "fixed"`
+#' (\eqn{\alpha_0 = n}) \eqn{n_{eff} \approx n/2}; with `"saturating"` it
+#' levels off at \eqn{\beta + 1}. For the multinomial \eqn{n_{eff} = n}.
+#'
+#' @param fit A fitted FLicc object.
+#' @return A data frame with gear, year, n, alpha0 and neff.
+#' @examples
+#' \dontrun{
+#' fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+#'               settings = list(obs_model = "dm", dm_theta = "saturating"))
+#' neff_flicc(fit)
+#' }
+#' @export
+neff_flicc <- function(fit) {
+  cd <- comp_data_flicc(fit)
+  out <- do.call(rbind, lapply(cd$comp, function(z) {
+    a0 <- if (identical(cd$obs_model, "dm")) z$a0 else NA_real_
+    data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), n = z$n, alpha0 = a0,
+               neff = if (identical(cd$obs_model, "dm")) z$n * (1 + a0) / (z$n + a0) else z$n)
+  }))
+  out$gear <- factor(out$gear, levels = fit$tmb_data$gear_names)
+  out
 }

@@ -62,6 +62,10 @@ growth formulation.}
 
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
 
+\\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"fixed"} (default, alpha0 = n), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"saturating"} (alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
+
+\\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
+
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
 

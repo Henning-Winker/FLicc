@@ -604,6 +604,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_spawn   <- as.numeric(spawn_time)
   td$brp_Fmax    <- as.numeric(Fmax)
   td$brp_only    <- 1L
+  if (is.null(td$dm_type)) td$dm_type <- 0L        # fits made before dm_theta
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
   # full parameter set at the optimum, including random effects (F_re = TRUE)
@@ -614,6 +615,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   } else {
     fit$obj$env$parList(fit$opt$par)
   }
+  if (is.null(pl$log_dm)) pl$log_dm <- rep(0, length(fit$tmb_data$gear_names))
   # parameters fixed at the estimates (log_phi left free because TMB needs
   # at least one), so almost nothing is recorded on the AD tape and report()
   # runs one double evaluation including the brp block
