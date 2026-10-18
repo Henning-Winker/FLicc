@@ -44,7 +44,7 @@ for (om in c("mn", "dm")) for (ess in c(200, NA)) for (v in names(variants)) {
   vv <- variants[[v]]
   st <- list(CVL = 0.1, obs_model = om, dm_prior_sd = vv$sd)
   if (om == "dm") st$dm_theta <- "saturating"
-  tt <- replicate(3, system.time(f <- fiticc(d, stklen, sel_fun = sf, catch_by_gear = cbg, se = FALSE,
+  tt <- replicate(3, system.time(f <<- fiticc(d, stklen, sel_fun = sf, catch_by_gear = cbg, se = FALSE,
                                              newton = vv$newton, verbose = FALSE, settings = st))[["elapsed"]])
   sp[[length(sp) + 1]] <- data.frame(obs = om, ESS = ifelse(is.na(ess), "raw", ess), variant = v,
                                      sec = round(median(tt), 3), restarts = f$n_restarts,
