@@ -542,7 +542,8 @@ from length data, and an unmodelled dome is read as higher F. A sensitivity over
 fixed dome shapes is therefore recommended for every gear assumed logistic.
 `dome_sens_flicc()` refits the model with that gear as a double-sided normal
 whose right-hand SD is fixed at a sequence of values (default
-`c(1000, 0.6, 0.4, 0.25) x Linf`); the mode and left-hand SD are estimated, all
+`c(1000, 0.85, 0.7, 0.55, 0.4) x Linf`, from a flat right limb to a moderate
+dome in even steps; stronger domes can be given with `rsd`); the mode and left-hand SD are estimated, all
 other settings and data as in the base fit.
 
 ```{r dome-sens, fig.height = 4.5}
@@ -554,11 +555,11 @@ plot_dome_sens(ds, "spr", ci = TRUE)
 
 The run with `rsd = 1000` reproduces the logistic base fit (SPR
 `r ds$table$SPR_last[2]` vs `r ds$table$SPR_last[1]`), which is the check that the
-scenarios are comparable. For the gillnet, no, mild and moderate domes fit
-equally well (dAIC `r paste(ds$table$dAIC[2:4], collapse = ", ")`), while the
-strong dome is worse (dAIC `r ds$table$dAIC[5]`). The data therefore cannot tell
-whether large fish are fully selected or mildly less so, and over that range the
-last-year SPR goes from `r ds$table$SPR_last[2]` to `r ds$table$SPR_last[4]`.
+scenarios are comparable. For the gillnet the dome levels fit about equally
+well (dAIC `r paste(ds$table$dAIC[-1], collapse = ", ")` from no to moderate
+doming). The data therefore cannot tell whether large fish are fully selected
+or somewhat less so, and over that range the last-year SPR goes from
+`r ds$table$SPR_last[2]` to `r ds$table$SPR_last[6]`.
 Read the table as a sensitivity, not a model selection: report the range of
 status across the domes the data cannot reject. With a tail cut the scenarios
 differ less, because the bins where the dome acts are excluded:
@@ -572,8 +573,8 @@ data.frame(scenario = ds$table$scenario, SPR_no_cut = ds$table$SPR_last,
 ```
 
 Here the cut narrows the range across no to moderate doming from
-`r ds$table$SPR_last[2]`-`r ds$table$SPR_last[4]` to
-`r ds_cut$table$SPR_last[2]`-`r ds_cut$table$SPR_last[4]`.
+`r ds$table$SPR_last[2]`-`r ds$table$SPR_last[6]` to
+`r ds_cut$table$SPR_last[2]`-`r ds_cut$table$SPR_last[6]`.
 
 **Integrating the dome levels.** Instead of reporting the dome levels side by
 side, they can be combined into one estimate with `ensemble_flicc()`. For each
@@ -587,7 +588,7 @@ likelihood, which holds for the dome levels but not, for example, across tail
 cuts.
 
 ```{r dome-ensemble, fig.height = 4}
-ens <- ensemble_flicc(ds$fits[-1])     # the four dome levels, equal weights
+ens <- ensemble_flicc(ds$fits[-1])     # the five dome levels, equal weights
 ens$members
 tail(ens$table[, c("year", "spr", "lwr", "upr", "sd_within", "sd_between")], 3)
 plot_ensemble_flicc(ens)
@@ -1881,7 +1882,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | Observation model | `dm` with real data |
 | Sample size | `dm` with `dm_theta = "saturating"` on raw counts or ESS >= 500 (the data set their weight); with fixed precision or `mn`, ESS about 150-200 per gear-year, never raw thousands |
 | Growth | fix Linf and CVL; Linf is the main sensitivity; `maxsd = 3` as sensitivity |
-| Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.25 x Linf) |
+| Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.4 x Linf) |
 | Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |
 | F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate); `by_year = TRUE` only as a check |
 | Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |

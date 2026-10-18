@@ -75,7 +75,7 @@ for (r in c(1000, 22.3)) {
 }
 ds <- dome_sens_flicc(fit200, gear = "Gillnet")
 print(ds$table); print(ds$errors)
-stopifnot(nrow(ds$table) == 5, length(ds$errors) == 0, all(is.finite(ds$fits$rsd22.3$opt$par)))
+stopifnot(nrow(ds$table) == 6, length(ds$errors) == 0, all(is.finite(ds$fits$rsd22.3$opt$par)))
 for (nm in names(ds$fits)) { f <- ds$fits[[nm]]; cat(nm, "pdHess", f$rep$pdHess, "maxgrad", signif(f$max_gradient, 2), "\n") }
 fit_cut <- fs(tail_cut = 47)
 dsc <- dome_sens_flicc(fit_cut, gear = "Gillnet")

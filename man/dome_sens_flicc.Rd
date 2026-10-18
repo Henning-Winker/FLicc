@@ -7,7 +7,7 @@ dome_sens_flicc(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
 \arguments{
 \item{fit}{A fitted FLicc object (from \code{fiticc()}, with \code{FLRreport = TRUE}).}
 \item{gear}{Gear name (or index) whose selectivity is varied.}
-\item{rsd}{Right-hand standard deviations (length units). Default \code{c(1000, 0.6, 0.4, 0.25) * Linf}; 1000 gives a flat right limb (no dome).}
+\item{rsd}{Right-hand standard deviations (length units). Default \code{c(1000, 0.85, 0.7, 0.55, 0.4) * Linf} (flat to moderate doming in even steps); 1000 gives a flat right limb (no dome).}
 \item{fixed}{Optional further fixed parameters for this gear, e.g. \code{list(lsd = 4)}.}
 \item{se}{Passed to \code{fiticc()}.}
 \item{...}{Further arguments passed to \code{fiticc()}.}

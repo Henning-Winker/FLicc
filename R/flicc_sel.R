@@ -100,7 +100,8 @@ plot_selfun <- function(sel_fun = c("dsnormal", "logistic", "normal"), pars, len
 #' @param fit A fitted FLicc object (from [fiticc()], with `FLRreport = TRUE`).
 #' @param gear Gear name (or index) whose selectivity is varied.
 #' @param rsd Right-hand standard deviations (length units). Default
-#'   `c(1000, 0.6, 0.4, 0.25) * Linf`.
+#'   `c(1000, 0.85, 0.7, 0.55, 0.4) * Linf` (flat to
+#'   moderate doming in even steps).
 #' @param fixed Optional further fixed parameters for this gear, e.g.
 #'   `list(lsd = 4)`.
 #' @param se Passed to [fiticc()]; `TRUE` gives intervals for [plot_spr()].
@@ -122,7 +123,7 @@ dome_sens_flicc <- function(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
   if (is.na(g)) stop("Unknown gear: ", gear, ". Gears: ", paste(gears, collapse = ", "))
   if (is.null(fit$report$obslen)) stop("fit needs FLRreport = TRUE (the default of fiticc()).")
   linf <- as.numeric(fit$stklen@lhpar["linf"])
-  if (is.null(rsd)) rsd <- c(1000, round(c(0.6, 0.4, 0.25) * linf, 1))
+  if (is.null(rsd)) rsd <- c(1000, round(c(0.85, 0.7, 0.55, 0.4) * linf, 1))
   sel_fun <- c("logistic", "dsnormal", "normal")[fit$tmb_data$sel_type]
   sel_fun[g] <- "dsnormal"
   cbg <- fit$report$catch_by_gear
