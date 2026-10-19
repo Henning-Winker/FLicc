@@ -13,7 +13,8 @@ plot_mcsprdist(
   bw = 0.04,
   trim = 0.01,
   show_fit = TRUE,
-  weights = "aic"
+  weights = "aic",
+  ref = c(0.4, 0.2, 0.1)
 )
 }
 \arguments{
@@ -45,6 +46,9 @@ from \code{mc$fit$spr}.}
 
 \item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
   (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
+
+\item{ref}{SPR reference lines (default 0.4, 0.2, 0.1 in green, orange,
+red, as \code{plot_spr()}); \code{NULL} for none.}
 }
 \value{
 A \code{ggplot} object.

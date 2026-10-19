@@ -744,6 +744,8 @@ mc_spr_summary <- function(mc, years = NULL, dAIC_cut = NULL,
 #' @param show_fit Logical. If \code{TRUE}, show the original fitted SPR values
 #'   from \code{mc$fit$spr}.
 #'
+#' @param ref SPR reference lines (default 0.4, 0.2, 0.1 in green, orange,
+#'   red, as [plot_spr()]); `NULL` for none.
 #' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
 #'   (unweighted ensemble of the retained refits); see [mc_aic_weights()].
 #' @return A \code{ggplot} object.
@@ -752,7 +754,8 @@ mc_spr_summary <- function(mc, years = NULL, dAIC_cut = NULL,
 plot_mcsprdist <- function(mc, years = NULL, dAIC_cut = 20,
                            scale = 0.45, n = 300,
                            bw = 0.04, trim = 0.01,
-                           show_fit = TRUE, weights = "aic")  {
+                           show_fit = TRUE, weights = "aic",
+                           ref = c(0.4, 0.2, 0.1))  {
 
   if (!requireNamespace("ggplot2", quietly = TRUE))
     stop("Package 'ggplot2' is required.")
@@ -805,6 +808,8 @@ plot_mcsprdist <- function(mc, years = NULL, dAIC_cut = 20,
   }
 
   p <- ggplot2::ggplot() +
+    (if (length(ref)) ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                        colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref)))) +
     ggplot2::geom_polygon(
       data = dens_df,
       ggplot2::aes(x = x, y = spr, group = year_id),

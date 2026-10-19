@@ -159,7 +159,8 @@ ensemble_flicc <- function(fits, weights = "equal", level = 0.95, s = NULL, spr_
 #' @param x Output of [ensemble_flicc()].
 #' @param what `"spr"` or `"brel"`.
 #' @param members Logical; draw the member fits.
-#' @param ref Reference lines (proportions of SPR, or of the target for brel).
+#' @param ref Reference lines (default SPR 0.4, 0.2, 0.1 in green, orange,
+#'   red, as [plot_spr()]; for brel 1, 0.5, 0.25 of the target).
 #' @return A `ggplot` object.
 #' @export
 plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref = NULL) {
@@ -168,11 +169,11 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
   if (what == "brel") {
     if (is.null(tab$brel)) stop("what = \"brel\" needs s in ensemble_flicc().")
     tab$y <- tab$brel; tab$lo <- tab$brel_lwr; tab$hi <- tab$brel_upr
-    if (is.null(ref)) ref <- c(1, 0.5)
+    if (is.null(ref)) ref <- c(1, 0.5, 0.25)
     ylab <- "B / B target"
   } else {
     tab$y <- tab$spr; tab$lo <- tab$lwr; tab$hi <- tab$upr
-    if (is.null(ref)) ref <- c(0.4, 0.2)
+    if (is.null(ref)) ref <- c(0.4, 0.2, 0.1)
     ylab <- "SPR"
   }
   tg_of <- function(f) if (!is.null(f$report$spr_ref)) f$report$spr_ref[1] / 100 else 0.4
@@ -198,8 +199,8 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
     d$lab <- if (isTRUE(members)) sprintf("w = %.2f", d$w) else ""
     d$lab[d$type == "ensemble"] <- ""
     p <- ggplot2::ggplot(d, ggplot2::aes(member, y, colour = type)) +
-      ggplot2::geom_hline(yintercept = ref, linetype = c("solid", rep("dashed", length(ref) - 1)),
-                          colour = c("darkgreen", rep("orange", length(ref) - 1))) +
+      ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                          colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref))) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lo, ymax = hi), width = 0.25) +
       ggplot2::geom_point(ggplot2::aes(size = type)) +
       ggplot2::geom_text(ggplot2::aes(y = hi, label = lab), vjust = -0.6, size = 3, colour = "grey30") +
@@ -224,8 +225,8 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
                                 colour = "grey35", alpha = 0.7) +
       ggplot2::scale_linewidth(range = c(0.2, 1.2), guide = "none")
   }
-  p + ggplot2::geom_hline(yintercept = ref, linetype = c("solid", rep("dashed", length(ref) - 1)),
-                          colour = c("darkgreen", rep("orange", length(ref) - 1))) +
+  p + ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                          colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref))) +
     ggplot2::geom_line(ggplot2::aes(y = y), colour = "#08519C", linewidth = 1.1) +
     ggplot2::geom_point(ggplot2::aes(y = y), colour = "#08519C", size = 1.6) +
     ggplot2::scale_x_continuous(breaks = function(z) unique(round(pretty(z)))) +
