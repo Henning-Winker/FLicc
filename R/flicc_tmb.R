@@ -1836,11 +1836,16 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
       tier != "fail"
     ),
     interpretation = c(
-      "The optimizer found a numerical optimum.",
-      "The fit is close to a stationary point.",
-      "The model curvature is well behaved.",
-      "Uncertainty could be estimated for all parameters.",
-      "No flat or negative curvature directions were detected.",
+      if (identical(opt_code, 0L)) "The optimizer found a numerical optimum." else
+        "The optimizer stopped without reporting convergence.",
+      if (isTRUE(max_grad < grad_tol)) "The fit is close to a stationary point." else
+        "The gradient is not small: the fit may not be at an optimum.",
+      if (isTRUE(pdHess)) "The model curvature is well behaved." else
+        "The Hessian is not positive definite: a saddle point or a flat direction.",
+      if (isTRUE(n_nan_se == 0)) "Uncertainty could be estimated for all parameters." else
+        paste(n_nan_se, "parameter(s) without standard error: see fit$par[!is.finite(fit$par$se), ]."),
+      if (isTRUE(min_eig > eig_tol)) "No flat or negative curvature directions were detected." else
+        "Flat or negative curvature: some parameter(s) are not identified by the data.",
       "Expected further gain in log-likelihood (0.5 g'H^-1 g) is below 0.001; NA without Newton polishing.",
       "ok: converged; warning: usable, but check the gradient or decrement; fail: do not use."
     ),
