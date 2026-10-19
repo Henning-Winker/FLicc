@@ -377,12 +377,14 @@ plot_lbb <- function(x, year = NULL, smooth = FALSE) {
     ggplot2::geom_line(linewidth = 0.8) + ggplot2::geom_point(size = 1.3) +
     ggplot2::scale_colour_manual(values = c(Lc = "#0072B2", Lc_opt = "#0072B2", Lmean = "#D55E00", Lopt = "#D55E00")) +
     ggplot2::scale_linetype_manual(values = c(Lc = "solid", Lc_opt = "dashed", Lmean = "solid", Lopt = "dashed")) +
+    ggplot2::scale_x_continuous(breaks = function(z) unique(round(pretty(z)))) +
     ggplot2::labs(x = "Year", y = "Length", colour = NULL, linetype = NULL, title = "(b) Lengths") +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
   p3 <- ggplot2::ggplot(tab, ggplot2::aes(year, FM)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = FM_lcl, ymax = FM_ucl), fill = "grey80") +
     ggplot2::geom_line(linewidth = 0.8) + ggplot2::geom_point(size = 1.3) +
     ggplot2::geom_hline(yintercept = 1, linetype = "dashed", colour = "darkgreen") +
+    ggplot2::scale_x_continuous(breaks = function(z) unique(round(pretty(z)))) +
     ggplot2::labs(x = "Year", y = "F/M", title = "(c) F/M") + ggplot2::theme_bw()
   bfm <- attr(x$table, "BFM1B0")
   p4 <- ggplot2::ggplot(tab, ggplot2::aes(year, BB0)) +
@@ -390,6 +392,7 @@ plot_lbb <- function(x, year = NULL, smooth = FALSE) {
     ggplot2::geom_line(linewidth = 0.8) + ggplot2::geom_point(size = 1.3) +
     ggplot2::geom_hline(yintercept = bfm, linetype = "dashed", colour = "darkgreen") +
     ggplot2::geom_hline(yintercept = bfm / 2, linetype = "dotted", colour = "red") +
+    ggplot2::scale_x_continuous(breaks = function(z) unique(round(pretty(z)))) +
     ggplot2::labs(x = "Year", y = "B/B0", title = "(d) B/B0 (exploited biomass)") + ggplot2::theme_bw()
   patchwork::wrap_plots(p1, p2, p3, p4, ncol = 2)
 }
