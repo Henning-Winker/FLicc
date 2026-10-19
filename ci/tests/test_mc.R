@@ -12,6 +12,7 @@ t0 <- Sys.time()
 mc <- mc_flicc(fit, nsim = 12, cv = list(linf = 0.1, k = 0.1, M = 0.2, L50 = 0.1, CVL = 0.2), seed = 1)
 cat("time:", round(as.numeric(difftime(Sys.time(), t0, units = "secs"))), "s\n")
 print(table(mc$conv)); print(mc$ok)
+stopifnot(is.logical(mc$ok), !anyNA(mc$ok), !anyNA(mc$conv))
 # rsd stayed fixed in every successful refit
 print(mc$selpars[["Gillnet"]])
 rsd <- as.numeric(mc$selpars[["Gillnet"]]["rsd", ])[mc$ok]

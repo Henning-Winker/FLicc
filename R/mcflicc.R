@@ -321,12 +321,16 @@ mc_flicc <- function(
 
   is_flq <- vapply(mc, inherits, logical(1), "FLQuant")
   is_flp <- vapply(mc, inherits, logical(1), "FLPar")
+  # keep the names: mc gains further elements below, and a short logical
+  # index would be recycled over them
+  flq_names <- names(mc)[is_flq]
+  flp_names <- names(mc)[is_flp]
   #is_flqs <- vapply(mc, inherits, logical(1), "FLQuants")
-  for (nm in names(mc)[is_flq]) {
+  for (nm in flq_names) {
     mc[[nm]] <- FLCore::propagate(mc[[nm]], nsim)
   }
 
-  for (nm in names(mc)[is_flp]) {
+  for (nm in flp_names) {
     mc[[nm]] <- FLCore::propagate(mc[[nm]], nsim)
   }
   #for (nm in names(mc)[is_flqs]) {
@@ -344,7 +348,7 @@ mc_flicc <- function(
   mc$ok <- rep(FALSE, nsim)
   mc$conv <- rep("error", nsim)
   mc$logLik <- rep(NA_real_, nsim)
-  for (nm in names(mc)[is_flq]) mc[[nm]][] <- NA
+  for (nm in flq_names) mc[[nm]][] <- NA
 
   # 5. Paralell computing
   if (parallel) {
@@ -510,7 +514,7 @@ mc_flicc <- function(
       iter(mc$selpars[[g]], i) <- ri$selpars[[g]]
     }
 
-    for (nm in names(mc)[is_flq]) {
+    for (nm in flq_names) {
       if (!is.null(ri$report[[nm]]) &&
           inherits(ri$report[[nm]], "FLQuant")) {
         mc[[nm]][, , , , , i] <- ri$report[[nm]]
