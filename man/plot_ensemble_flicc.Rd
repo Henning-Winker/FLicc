@@ -15,4 +15,7 @@ plot_ensemble_flicc(x, what = c("spr", "brel"), members = TRUE, ref = NULL)
 \value{A \code{ggplot} object.}
 \description{
 Ensemble median and interval of SPR (or B/Btgt) by year, with the member fits as thin lines.
+With fewer than four years the plot shows error bars instead: each member's
+estimate and interval (labelled with its weight) and the ensemble median and
+interval, one panel per year.
 }

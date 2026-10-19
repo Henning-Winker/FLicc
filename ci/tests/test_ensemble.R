@@ -28,3 +28,16 @@ print(ensemble_flicc(list(no_cut = fit, cut47 = fcut))$members)
 od <- if (dir.exists("out/tests")) "out/tests" else "."
 ggplot2::ggsave(file.path(od, "ensemble_dome.png"), plot_ensemble_flicc(ens), width = 8, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "ensemble_dome_brel.png"), plot_ensemble_flicc(ens_aic, "brel"), width = 8, height = 4, dpi = 100)
+
+# few years: error-bar layout
+yrs <- dimnames(lfd[[1]])$year
+y1 <- yrs[which.max(sapply(yrs, function(y) min(sapply(lfd, function(x) sum(x[, y])))))]
+lfd1 <- FLQuants(lapply(lfd, function(x) x[, y1]))
+st1 <- stocklen(lfd1, lhpar, m_model = "constant")
+f1 <- fiticc(lfd1, st1, sel_fun = sf, catch_by_gear = cbg, settings = set0)
+ds1 <- dome_sens_flicc(f1, gear = "Gillnet", rsd = c(1000, 40))
+e1 <- ensemble_flicc(ds1$fits)
+print(e1$table)
+ggplot2::ggsave(file.path(od, "ensemble_1yr.png"), plot_ensemble_flicc(e1), width = 6, height = 4, dpi = 100)
+ggplot2::ggsave(file.path(od, "ensemble_1yr_brel.png"),
+                plot_ensemble_flicc(ensemble_flicc(ds1$fits, s = 0.75), "brel"), width = 6, height = 4, dpi = 100)
