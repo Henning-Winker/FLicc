@@ -50,3 +50,11 @@ selfcheck <- function(f, om) {
 }
 sc_dm <- selfcheck(fdm, "dm"); print(round(sc_dm, 3))
 stopifnot(abs(sc_dm["mean"]) < 0.1, abs(sc_dm["sd"] - 1) < 0.1)
+
+# residuals by length (single year and several years)
+od <- if (dir.exists("out/tests")) "out/tests" else "."
+p1 <- plot_resid_len(fdm)
+p2 <- plot_resid_len(fdm, years = "each", cap = 3)
+ggplot2::ggsave(file.path(od, "resid_len.png"), p1, width = 8, height = 4, dpi = 100)
+ggplot2::ggsave(file.path(od, "resid_len_each.png"), p2, width = 8, height = 4, dpi = 100)
+print(nrow(attr(p2, "capped")))

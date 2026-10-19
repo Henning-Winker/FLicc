@@ -212,6 +212,68 @@ plot_resid_qq <- function(x) {
     ggplot2::theme_bw()
 }
 
+#' Length-composition residuals by length
+#'
+#' Residuals against length, one panel per gear, as bars. Useful for any
+#' number of years and the natural residual plot for a single year, where the
+#' bubble plot ([plot_resid_bubble()]) collapses to one column. With several
+#' years the residuals are averaged over years (`years = "mean"`) or shown by
+#' year in colour (`years = "each"`).
+#'
+#' Systematic patterns point to the model rather than to noise: runs of
+#' positive and negative residuals along the length axis indicate a selectivity
+#' shape the model cannot follow (e.g. two modes), and large positive
+#' residuals at the largest lengths observed fish the model cannot produce
+#' (above the largest growth-type group's Linf, where the predicted proportion
+#' is floored at 1e-12). Residuals beyond `cap` are drawn at the cap, in red,
+#' and labelled with their value, so a single outlier does not hide the rest.
+#'
+#' @param x Output of [resid_flicc()] or a fitted FLicc object.
+#' @param type Residual type when `x` is a fit: `"pearson"` or `"osa"`.
+#' @param years `"mean"` (average over years) or `"each"`.
+#' @param cap Absolute residual at which bars are capped (default 5; `Inf`
+#'   for none).
+#' @return A `ggplot` object; the capped residuals are in attribute `"capped"`.
+#' @examples
+#' \dontrun{
+#' plot_resid_len(fit)
+#' plot_resid_len(fit, years = "each", cap = 4)
+#' }
+#' @export
+plot_resid_len <- function(x, type = c("pearson", "osa"), years = c("mean", "each"), cap = 5) {
+  type <- match.arg(type); years <- match.arg(years)
+  if (!is.data.frame(x)) x <- resid_flicc(x, type = type)
+  rtype <- if (!is.null(attr(x, "type"))) attr(x, "type") else type
+  d <- x[is.finite(x$resid), ]
+  d$L <- if (!is.null(d$lmid)) as.numeric(d$lmid) else as.numeric(as.character(d$len))
+  if (years == "mean" || length(unique(d$year)) == 1) {
+    d <- stats::aggregate(resid ~ gear + L, data = d, FUN = mean)
+    d$year <- "all"
+  } else {
+    d$year <- factor(d$year)
+  }
+  d$capped <- abs(d$resid) > cap
+  d$r <- pmax(pmin(d$resid, cap), -cap)
+  lab <- d[d$capped, ]
+  p <- ggplot2::ggplot(d, ggplot2::aes(L, r)) +
+    ggplot2::geom_hline(yintercept = c(-2, 2), linetype = "dashed", colour = "grey60") +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey30")
+  p <- if (years == "each" && length(unique(d$year)) > 1)
+    p + ggplot2::geom_col(ggplot2::aes(fill = year), position = "dodge", width = 0.9)
+  else p + ggplot2::geom_col(ggplot2::aes(fill = capped), width = 0.9) +
+    ggplot2::scale_fill_manual(values = c(`FALSE` = "grey35", `TRUE` = "#D6604D"), guide = "none")
+  if (nrow(lab))
+    p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(label = signif(resid, 3)),
+                                vjust = ifelse(lab$r > 0, -0.3, 1.2), size = 3, colour = "#D6604D")
+  p <- p + ggplot2::facet_wrap(~gear, scales = "free_x") +
+    (if (is.finite(cap)) ggplot2::coord_cartesian(ylim = c(-cap, cap) * 1.15) else NULL) +
+    ggplot2::labs(x = "Length", y = paste(if (rtype == "osa") "OSA" else "Pearson", "residual"),
+                  fill = "Year", title = "Length-composition residuals by length") +
+    ggplot2::theme_bw()
+  attr(p, "capped") <- x[is.finite(x$resid) & abs(x$resid) > cap, ]
+  p
+}
+
 # Wald-Wolfowitz runs test on the signs of x (one-sided: too few runs, i.e.
 # positive autocorrelation); returns the p-value
 runs_test_flicc <- function(x) {
