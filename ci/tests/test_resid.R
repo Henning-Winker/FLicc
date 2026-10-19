@@ -34,11 +34,13 @@ selfcheck <- function(f, om) {
   set.seed(42)
   sim <- f$tmb_data$obs
   td <- f$tmb_data
-  rpp <- f$obj$report(f$obj$env$last.par.best)$plen
+  rep0 <- f$obj$report(f$obj$env$last.par.best)
+  rpp <- rep0$plen
   for (g in seq_len(dim(sim)[3])) for (y in seq_len(dim(sim)[2])) {
     n <- round(sum(sim[, y, g])); if (n <= 0) next
     p <- rpp[, y, g] / sum(rpp[, y, g])
-    sim[, y, g] <- if (om == "dm") { a <- rgamma(length(p), shape = n * p); rmultinom(1, n, a / sum(a))[, 1] }
+    a0 <- if (!is.null(rep0$dm_alpha0) && rep0$dm_alpha0[y, g] > 0) rep0$dm_alpha0[y, g] else n   # fitted DM precision
+    sim[, y, g] <- if (om == "dm") { a <- rgamma(length(p), shape = a0 * p); rmultinom(1, n, a / sum(a))[, 1] }
                    else rmultinom(1, n, p)[, 1]
   }
   f2 <- f; f2$tmb_data$obs <- sim
