@@ -473,13 +473,15 @@ gn <- lfd[["Gillnet"]]
 Lmid_g <- as.numeric(dimnames(gn)$len) + 0.5
 Lmean_g <- round(sum(Lmid_g * apply(gn@.Data, 1, sum)) / sum(gn@.Data), 1)
 ref_L <- c(L50mat = 31.2, Lmean = Lmean_g, Linf = 55.7)
-plot_selfun("dsnormal", list(mode = 34, lsd = 4, rsd = c(1000, 33, 22, 14)), lfd = gn, ref = ref_L)
+plot_selfun("dsnormal", list(mode = 34, lsd = 4, rsd = c(1000, round(c(0.85, 0.7, 0.55, 0.4) * 55.7, 1))),
+            lfd = gn, ref = ref_L)
 plot_selfun("logistic", list(SL50 = c(28, 31, 34), SL95 = 37), lfd = gn, ref = ref_L)
 ```
 
 A double-sided normal with a very large right-hand SD (`rsd = 1000`) has a flat
-right limb, i.e. no dome; smaller values give mild (about 0.6 Linf), moderate
-(0.4 Linf) and strong (0.25 Linf) doming. `sel_curve_flicc()` returns the
+right limb, i.e. no dome; smaller values give increasing doming. The values
+shown, `c(1000, 0.85, 0.7, 0.55, 0.4) x Linf`, are the default levels of the dome
+sensitivity below, from no dome to a moderate one. `sel_curve_flicc()` returns the
 values of a curve.
 
 ## Gear selectivity, availability and population selectivity
