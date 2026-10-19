@@ -934,7 +934,9 @@ plot_mcpars <- function(mc,
 #' Produces faceted scatter plots for selected pairs of life-history parameters
 #' sampled during a FLicc Monte Carlo uncertainty run. Points are classified by
 #' delta AIC support. Fits with \code{dAIC <= dAIC_cut} are shown using a colour
-#' gradient, while less-supported fits are shown as open grey circles. The
+#' gradient, less-supported converged fits as open grey circles, and draws whose
+#' refit failed or did not converge (\code{mc$ok = FALSE}) as light grey
+#' crosses. The
 #' original fitted parameter combination stored in \code{mc$fit$lhpar} is shown
 #' as a blue star.
 #'
@@ -986,7 +988,9 @@ plot_mccor <- function(mc,
   names(wide) <- sub("^value\\.", "", names(wide))
 
   wide$dAIC <- mc_dAIC(mc)
-  wide$keep <- wide$dAIC <= dAIC_cut
+  conv_ok <- is.finite(wide$dAIC) & (if (is.null(mc$ok)) TRUE else mc$ok[wide$iter])
+  wide$keep <- conv_ok & wide$dAIC <= dAIC_cut
+  wide$failed <- !conv_ok
 
   pd <- data.frame()
   panel_levels <- character(length(pairs))
@@ -1007,7 +1011,8 @@ plot_mccor <- function(mc,
       x = wide[[z[1]]],
       y = wide[[z[2]]],
       dAIC = wide$dAIC,
-      keep = wide$keep
+      keep = wide$keep,
+      failed = wide$failed
     ))
   }
 
@@ -1015,7 +1020,13 @@ plot_mccor <- function(mc,
 
   p <- ggplot2::ggplot(pd, ggplot2::aes(x = x, y = y)) +
     ggplot2::geom_point(
-      data = pd[!pd$keep, ],
+      data = pd[pd$failed, ],
+      shape = 4,
+      colour = "grey80",
+      size = 1.2
+    ) +
+    ggplot2::geom_point(
+      data = pd[!pd$keep & !pd$failed, ],
       shape = 1,
       colour = "grey55",
       alpha = 0.75,
@@ -1042,11 +1053,7 @@ plot_mccor <- function(mc,
 
 
     get_fit_par <- function(z) {
-      if (z == "CVL") {
-        fit$settings$CVL
-      } else {
-        as.numeric(fit_lh[z])
-      }
+      as.numeric(fit_lh[z])
     }
 
     fit_pd <- data.frame()
