@@ -5,7 +5,7 @@
 \usage{
 lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
   Lm50 = NULL, a = 0.01, b = 3, k = 1, sel_fun = c("logistic", "normal"),
-  years = NULL, ess = NULL, pile = 1, by_year = TRUE, settings = list(), ...)
+  years = NULL, ess = NULL, pile = 1, by_year = TRUE, settings = list(), se = TRUE, ...)
 }
 \arguments{
 \item{lfd}{\code{FLQuants} (or \code{FLQuant}) of length frequencies; gears are pooled.}
@@ -33,6 +33,8 @@ lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
 \item{by_year}{\code{TRUE} (default, as LBB): years fitted separately; \code{FALSE}: joint fit with a random walk on F.}
 
 \item{settings}{Further \code{fiticc()} settings, overriding the LBB defaults.}
+
+\item{se}{Logical; standard errors (passed to \code{fiticc()}).}
 
 \item{...}{Passed to \code{fiticc()}.}
 }

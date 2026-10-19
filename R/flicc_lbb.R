@@ -156,6 +156,7 @@ lbb_pool_flicc <- function(lfd) {
 #'   `FALSE`: all years jointly with a random walk on F.
 #' @param settings Further [fiticc()] settings; they override the LBB defaults
 #'   (e.g. `obs_model`, `linf.sd`, `Mk.sd`).
+#' @param se Logical; standard errors (passed to [fiticc()]).
 #' @param ... Passed to [fiticc()].
 #' @return For `by_year = TRUE` a list of class `"flicc_lbb"` with `fits` (one
 #'   fit per year), `priors`, `table` ([lbbref_flicc()]) and the inputs; for
@@ -165,7 +166,7 @@ lbb_pool_flicc <- function(lfd) {
 lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
                       Lm50 = NULL, a = 0.01, b = 3, k = 1,
                       sel_fun = c("logistic", "normal"), years = NULL, ess = NULL, pile = 1,
-                      by_year = TRUE, settings = list(), ...) {
+                      by_year = TRUE, settings = list(), se = TRUE, ...) {
   sel_fun <- match.arg(sel_fun)
   x <- lbb_pool_flicc(lfd)
   x[is.na(x)] <- 0
@@ -191,7 +192,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
     lq <- FLCore::FLQuants(stats::setNames(list(xx), gname))
     if (!is.null(ess)) lq <- lfdess(lq, ess.g = ess)
     stk <- stocklen(lq, lhpar, m_model = "constant")
-    fiticc(lq, stk, sel_fun = sel_fun, catch_by_gear = 1, settings = set, ...)
+    fiticc(lq, stk, sel_fun = sel_fun, catch_by_gear = 1, settings = set, se = se, ...)
   }
   fits <- if (isTRUE(by_year)) {
     stats::setNames(lapply(yrs, function(y) tryCatch(fit_one(x[, y]), error = function(e) {
