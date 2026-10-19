@@ -219,6 +219,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
 #' @return `c(BB0 = , YR = )`.
 #' @export
 lbb_bh_flicc <- function(lens, Linf, MK, FK, gaus = FALSE, selpar1, selpar2) {
+  if (!all(is.finite(c(Linf, MK, FK, selpar1, selpar2)))) return(c(BB0 = NA_real_, YR = NA_real_))
   lens <- sort(unique(lens))
   Lx <- if (!gaus) lens[lens >= Linf * (selpar1 - 4.59 / selpar2)][1] else
     lens[lens >= Linf * (selpar1 - 3 * selpar2)][1]
@@ -250,7 +251,7 @@ lbb_bh_flicc <- function(lens, Linf, MK, FK, gaus = FALSE, selpar1, selpar2) {
   }
   BB0 <- sum(YR / FM) / sum(B)
   YRs <- sum(YR)
-  if (BB0 < 0.25) YRs <- YRs * BB0 / 0.25
+  if (is.finite(BB0) && BB0 < 0.25) YRs <- YRs * BB0 / 0.25
   c(BB0 = BB0, YR = YRs)
 }
 
@@ -289,7 +290,15 @@ lbbref_flicc <- function(x) {
     if (anyNA(mk)) mk <- rep(as.numeric(f$report$lhpar["M"]) / as.numeric(f$report$lhpar["k"]), 3)
     yi <- match(yr, as.character(f$tmb_data$year_names))
     fk <- ci(g("log_Fk", yi))
+    # selectivity parameters from the full parameter list (fixed ones included);
+    # standard errors only where estimated
+    smf <- tryCatch(f$obj$env$parList(par = f$obj$env$last.par.best)$Sm, error = function(e) NULL)
     s1 <- g("Sm", 1); s2 <- g("Sm", 2)
+    if (!is.null(smf)) {
+      fixed1 <- !is.finite(s1[1]) || abs(s1[1] - smf[1]) > 1e-8
+      s1 <- c(smf[1], if (fixed1) NA else s1[2])
+      s2 <- c(smf[2], NA)
+    }
     sp1 <- exp(s1[1]) * linf[1]; sp2 <- exp(s2[1]) * linf[1]
     obs <- as.numeric(x$lfd[, yr])
     obs[is.na(obs)] <- 0
