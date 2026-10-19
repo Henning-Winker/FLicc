@@ -2,11 +2,7 @@
 library(FLicc)
 if ("lbspr_test" %in% data(package = "FLicc")$results[, "Item"]) data("lbspr_test", package = "FLicc") else
   load(file.path(if (dir.exists("out/tests")) "out/tests" else ".", "lbspr_test.rda"))
-cat("class(lfd_lbspr):", class(lfd_lbspr), " data() items:",
-    data(package = "FLicc")$results[, "Item"], "\n")
-e1 <- new.env(); data("lbspr_test", package = "FLicc", envir = e1)
-cat("data() into env: class", class(e1$lfd_lbspr), "; lazydata class", class(FLicc::lfd_lbspr), "\n")
-print(try(stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")@range))
+stopifnot(inherits(lfd_lbspr, "FLQuants"), inherits(FLicc::lfd_lbspr, "FLQuants"))
 set_lbspr <- list(CVL = 0.1, ngtg = 13, maxsd = 2, obs_model = "mn")
 res <- lapply(dimnames(lfd_lbspr[[1]])$year, function(y) {
   lfd_y <- FLQuants(lapply(lfd_lbspr, function(x) x[, y]))
@@ -23,4 +19,4 @@ cat("max |spr_len - spr| =", max(abs(res$spr_len - res$spr)), "\n")
 cat("mean |spr - LBSPR| =", mean(abs(res$spr - res$LBSPR)),
     " mean |spr_rel - LBSPR| =", mean(abs(res$spr_rel - res$LBSPR)),
     " mean |spr_lbspr - LBSPR| =", mean(abs(res$spr_lbspr - res$LBSPR)), "\n")
-stopifnot(max(abs(res$spr_len - res$spr)) < 1e-6)
+stopifnot(max(abs(res$spr_len - res$spr)) < 1e-6, mean(abs(res$spr_lbspr - res$LBSPR)) < 0.005)

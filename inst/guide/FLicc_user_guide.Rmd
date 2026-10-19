@@ -1883,17 +1883,9 @@ included in FLicc as `data("lbspr_test")`, with LBSPR's estimates for these
 data:
 
 ```{r lbspr-data}
-data("lbspr_test", package = "FLicc")   # lfd_lbspr, lhpar_lbspr, lbspr_est
+data("lbspr_test")   # lfd_lbspr, lhpar_lbspr, lbspr_est
 lfd_lbspr
 lhpar_lbspr          # k only scales F and M; F/M and SPR depend on M/k = 1.5
-```
-
-```{r lbspr-data-check, include = FALSE}
-message("class(lfd_lbspr): ", paste(class(lfd_lbspr), collapse = " "))
-if (!inherits(lfd_lbspr, "FLQuants")) lfd_lbspr <- FLQuants(lfd_lbspr)
-```
-
-```{r lbspr-stk}
 stk_lbspr <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
 ```
 
