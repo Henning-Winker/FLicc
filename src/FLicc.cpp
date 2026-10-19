@@ -28,13 +28,12 @@ vector<Type> calc_sel(const vector<Type>& L,
     Type rsd  = exp(pars(2)) * Linf;
     Type two  = Type(2);
 
+    // AD-safe branch: the mode is estimated, so a plain if() would be frozen
+    // at the side of the mode each bin had when the tape was recorded.
     for(int i = 0; i < n; i++) {
       Type d = L(i) - mode;
-      if(L(i) < mode) {
-        sel(i) = exp(-(d * d) / (two * lsd * lsd));
-      } else {
-        sel(i) = exp(-(d * d) / (two * rsd * rsd));
-      }
+      Type sd_i = CppAD::CondExpLt(L(i), mode, lsd, rsd);
+      sel(i) = exp(-(d * d) / (two * sd_i * sd_i));
     }
 
   } else if(sel_type == 3) {
@@ -208,6 +207,39 @@ vector<Type> pop_len_gtg(const vector<Type>& LLB,
 }
 
 // ---------------------------------------------------------
+// GTG survivorship at the lower bound of each length class, i.e. at the
+// length label, as LBB without the pile-up correction (Pile = 0): sum over
+// groups of the numbers reaching LBins(l). Same recursion as pop_len_gtg().
+// ---------------------------------------------------------
+template<class Type>
+vector<Type> pop_bound_gtg(const vector<Type>& LLB,
+                           const vector<Type>& gtgLinfs,
+                           const matrix<Type>& ZKLMat,
+                           const vector<Type>& recP)
+{
+  int nlen = LLB.size();
+  int ngtg = gtgLinfs.size();
+  vector<Type> LBins(nlen + 1);
+  for(int l = 0; l < nlen; l++) LBins(l) = LLB(l);
+  LBins(nlen) = (nlen > 1) ? Type(LLB(nlen - 1) + (LLB(nlen - 1) - LLB(nlen - 2))) : Type(LLB(0) + Type(1.0));
+  vector<Type> Nb(nlen);
+  Nb.setZero();
+  for(int g = 0; g < ngtg; g++) {
+    Type surv = recP(g);
+    Nb(0) += surv;
+    for(int l = 1; l < nlen; l++) {
+      Type num = gtgLinfs(g) - LBins(l);
+      Type den = gtgLinfs(g) - LBins(l - 1);
+      num = CppAD::CondExpLe(num, Type(1e-12), Type(1e-12), num);
+      den = CppAD::CondExpLe(den, Type(1e-12), Type(1e-12), den);
+      surv = surv * pow(num / den, ZKLMat(l - 1, g));
+      Nb(l) += surv;
+    }
+  }
+  return Nb;
+}
+
+// ---------------------------------------------------------
 // Objective (MULTI-YEAR VERSION)
 // ---------------------------------------------------------
 template<class Type>
@@ -257,6 +289,7 @@ Type objective_function<Type>::operator() ()
   // Upper-tail robustness for the composition likelihood
   DATA_SCALAR(rob_eps);      // 0 = off
   DATA_INTEGER(plus_bin);    // 0-based first pooled bin; -1 = off
+  DATA_INTEGER(cut_bin);     // 0-based first excluded (tail-cut) bin; -1 = off
   // Per-recruit reference points at the estimates (evaluated only in double
   // mode, i.e. obj$report(), and only when requested; never during fitting)
   DATA_VECTOR(brp_F);        // apical F (or F/M if brp_FMscale) values
@@ -266,6 +299,12 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_FMscale); // 1: brp_F are F/M multipliers of M-at-length
   DATA_SCALAR(brp_spawn);    // spawning time fraction
   DATA_SCALAR(brp_Fmax);     // upper bound for the Fspr search
+  DATA_INTEGER(catch_units); // 1: catch_by_gear in weight (default), 0: in numbers
+  DATA_INTEGER(dm_type);     // 0: alpha0 = n (fixed), 1: alpha0 = theta n, 2: alpha0 = beta
+  DATA_VECTOR(dm_prior_mu);  // weak prior on log_dm by gear (keeps it finite without overdispersion)
+  DATA_SCALAR(dm_prior_sd);  // <= 0: no prior
+  DATA_SCALAR(pile);         // GTG predicted composition: 1 numbers integrated over the class (default),
+                             // 0 survivorship at the class bound (LBB Pile = 0), in between: LBB's mix
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -275,6 +314,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER_MATRIX(log_Fk);   // nyear x ngear
   PARAMETER_VECTOR(Sm);
   PARAMETER(log_phi);
+  PARAMETER_VECTOR(log_dm);  // DM precision by gear: log theta (linear) or log beta (saturating)
   PARAMETER(log_sigmaF); // random walk F
 
   Type nll = 0.0;
@@ -348,12 +388,19 @@ Type objective_function<Type>::operator() ()
   array<Type> plen(nlen, nyear, ngear);
   matrix<Type> Fk(nyear, ngear);
   vector<Type> spr_y(nyear);
+  vector<Type> epr_y(nyear);  // exploitable potential ratio: vulnerable biomass per recruit, fished / unfished
   matrix<Type> N_y(nlen, nyear);
   matrix<Type> plen_all_y(nlen, nyear);
+  matrix<Type> catch_share(nyear, ngear);   // predicted catch shares (units of catch_units)
+  matrix<Type> catch_share_n(nyear, ngear); // predicted catch shares in numbers
+  matrix<Type> dm_alpha0(nyear, ngear);     // Dirichlet precision used
+  matrix<Type> dm_neff(nyear, ngear);       // effective sample size n (1 + a0) / (n + a0)
+  dm_alpha0.setZero(); dm_neff.setZero();
   matrix<Type> sel_joint(nlen, nyear);
   matrix<Type> Fk_l(nlen, nyear);
 
   sel_joint.setZero();
+  epr_y.setZero();
   Fk_l.setZero();
   plen.setZero();
   Fk.setZero();
@@ -375,7 +422,7 @@ Type objective_function<Type>::operator() ()
   }
   for(int y = y_first; y < nyear; y++) {
 
-    vector<Type> Z(nlen), N(nlen);
+    vector<Type> Z(nlen), N(nlen), Nobs(nlen);
     matrix<Type> F_len(nlen, ngear), Cpred(nlen, ngear), mu(nlen, ngear);
 
     vector<Type> obs_gear(ngear);
@@ -404,6 +451,7 @@ Type objective_function<Type>::operator() ()
 
     if(pop_model == 1) {
       N = pop_len_glq(node, quad_wt, LLB, Z, Galpha, Gbeta);
+      Nobs = N;
 
     } else if(pop_model == 2) {
       matrix<Type> ZKL(nlen + 1, ngtg);
@@ -417,6 +465,12 @@ Type objective_function<Type>::operator() ()
       }
 
       N = pop_len_gtg(LLB, gtgLinfs, ZKL, recP);
+      if (pile < Type(1)) {
+        vector<Type> Nb = pop_bound_gtg(LLB, gtgLinfs, ZKL, recP);
+        for(int l = 0; l < nlen; l++) Nobs(l) = Nb(l) + pile * (N(l) - Nb(l));
+      } else {
+        Nobs = N;
+      }
 
     } else {
       error("Unknown pop_model");
@@ -443,29 +497,41 @@ Type objective_function<Type>::operator() ()
 
     for(int g = 0; g < ngear; g++) {
       for(int l = 0; l < nlen; l++) {
-        Cpred(l,g) = N(l) * F_len(l,g);
+        Cpred(l,g) = Nobs(l) * F_len(l,g);
         pred_gear(g) += Cpred(l,g);
         obs_gear(g)  += obs(l,y,g);
       }
     }
 
-    // predicted gear shares
+    // predicted gear shares of the catch, compared with catch_by_gear:
+    // in weight (catch_units = 1, default; e.g. landings in tonnes) or in
+    // numbers (catch_units = 0, as in fishblicc)
+    vector<Type> pred_share(ngear);
+    for(int g = 0; g < ngear; g++) {
+      pred_share(g) = Type(0);
+      for(int l = 0; l < nlen; l++)
+        pred_share(g) += (catch_units == 1) ? Type(Cpred(l,g) * wt(l,y)) : Type(Cpred(l,g));
+    }
     vector<Type> pred_pgear(ngear);
     Type pred_total = Type(0);
 
     pred_pgear.setZero();
 
     for(int g = 0; g < ngear; g++) {
-      pred_total += pred_gear(g);
+      pred_total += pred_share(g);
     }
 
     for(int g = 0; g < ngear; g++) {
       if(pred_total > Type(0)) {
-        pred_pgear(g) = pred_gear(g) / pred_total;
+        pred_pgear(g) = pred_share(g) / pred_total;
       } else {
         pred_pgear(g) = Type(0);
       }
     }
+    for(int g = 0; g < ngear; g++) catch_share(y, g) = pred_pgear(g);
+    Type pred_total_n = pred_gear.sum();
+    for(int g = 0; g < ngear; g++)
+      catch_share_n(y, g) = (pred_total_n > Type(0)) ? Type(pred_gear(g) / pred_total_n) : Type(0);
 
 
     Type fmax = Type(0);
@@ -481,23 +547,18 @@ Type objective_function<Type>::operator() ()
 
       Fk_l(l,y) = fsum;
 
-      if(fsum > fmax) {
-        fmax = fsum;
-        M_at_fmax = M(l);
-      }
+      // AD-safe running maximum (which bin is apical depends on parameters)
+      M_at_fmax = CppAD::CondExpGt(fsum, fmax, M(l), M_at_fmax);
+      fmax      = CppAD::CondExpGt(fsum, fmax, fsum, fmax);
     }
 
     if (FMpen_sd > Type(0)) {
 
       Type FM_y = fmax / (M_at_fmax + Type(1e-12)) + Type(1e-12);
 
-      if (FM_y < FM_min) {
-        nll += Type(1e6) * pow(log(FM_y) - log(FM_min), 2);
-      }
-
-      if (FM_y > FM_max) {
-        nll += Type(1e6) * pow(log(FM_y) - log(FM_max), 2);
-      }
+      // AD-safe one-sided penalties (zero inside [FM_min, FM_max])
+      nll += CppAD::CondExpLt(FM_y, FM_min, Type(1e6) * pow(log(FM_y) - log(FM_min), 2), Type(0));
+      nll += CppAD::CondExpGt(FM_y, FM_max, Type(1e6) * pow(log(FM_y) - log(FM_max), 2), Type(0));
     }
 
 
@@ -509,17 +570,33 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    // combined expected length composition across gears
+    // Exploitable potential ratio (EPR): biomass vulnerable to the fishery
+    // (weighted by the combined selectivity of all gears) per recruit at the
+    // year's F relative to the unfished state; equivalent to LBB's B/B0
+    // (Froese et al. 2018) for one gear.
+    {
+      Type epr0 = Type(0);
+      Type eprf = Type(0);
+      for(int l = 0; l < nlen; l++) {
+        epr0 += N0(l) * wt(l,y) * sel_joint(l,y);
+        eprf += N(l)  * wt(l,y) * sel_joint(l,y);
+      }
+      epr_y(y) = CppAD::CondExpGt(epr0, Type(0), eprf / (epr0 + Type(1e-30)), Type(0));
+    }
+
+    // combined expected length composition of the whole catch (numbers):
+    // the gears' catch-at-length summed, i.e. each gear's composition weighted
+    // by its predicted catch in numbers
     Type ctot = Type(0);
     for(int g = 0; g < ngear; g++) {
-      ctot += catch_wt(y,g) * pred_gear(g);
+      ctot += pred_gear(g);
     }
 
     for(int l = 0; l < nlen; l++) {
       Type ctot_l = Type(0);
 
       for(int g = 0; g < ngear; g++) {
-        ctot_l += catch_wt(y,g) * Cpred(l,g);
+        ctot_l += Cpred(l,g);
       }
 
       if(ctot > Type(0)) {
@@ -561,21 +638,32 @@ Type objective_function<Type>::operator() ()
     }
 
     // Observation likelihood
-    // Optional robustness for the upper tail (both off by default):
+    // Optional treatment of the upper tail (all off by default):
+    //  - cut_bin >= 0 excludes bins l >= cut_bin from the likelihood
+    //    (tail cut); observed and predicted compositions are both
+    //    truncated and the predicted proportions renormalised over the
+    //    retained bins, so the fit conditions on fish below the cut;
     //  - plus_bin >= 0 pools observed and predicted counts in bins
-    //    l >= plus_bin into bin plus_bin (tail compression);
+    //    l >= plus_bin into bin plus_bin (tail compression), within the
+    //    retained bins;
     //  - rob_eps > 0 mixes predicted proportions with a uniform:
     //    p = (1 - rob_eps) * p + rob_eps / nb.
-    int nb = (plus_bin >= 0 && plus_bin < nlen) ? (plus_bin + 1) : nlen;
+    int nkeep = (cut_bin > 0 && cut_bin < nlen) ? cut_bin : nlen;
+    int nb = (plus_bin >= 0 && plus_bin < nkeep) ? (plus_bin + 1) : nkeep;
 
     for(int g = 0; g < ngear; g++) {
       vector<Type> o(nb), p(nb);
       o.setZero(); p.setZero();
-      for(int l = 0; l < nlen; l++) {
+      for(int l = 0; l < nkeep; l++) {
         int k = (l < nb) ? l : (nb - 1);
         o(k) += obs(l,y,g);
         if(pred_gear(g) > Type(0)) p(k) += Cpred(l,g) / pred_gear(g);
       }
+      // renormalise over retained bins (no-op without a tail cut)
+      Type psum = p.sum();
+      if(psum > Type(0)) p = p / psum;
+      // observed total over retained bins (= obs_gear(g) without a cut)
+      Type o_tot = o.sum();
       if(rob_eps > Type(0)) {
         for(int k = 0; k < nb; k++) {
           p(k) = (Type(1) - rob_eps) * p(k) + rob_eps / Type(nb);
@@ -585,7 +673,7 @@ Type objective_function<Type>::operator() ()
       if(obs_model == 1) {
         // Negative binomial on ESS-scaled counts
         for(int k = 0; k < nb; k++) {
-          Type muk = obs_gear(g) * p(k) + Type(1e-12);
+          Type muk = o_tot * p(k) + Type(1e-12);
           if(k < nlen) mu(k,g) = muk;
           nll -= dnbinom_phi(o(k), muk, phi, 1);
         }
@@ -593,24 +681,30 @@ Type objective_function<Type>::operator() ()
       } else if(obs_model == 2) {
         // Multinomial on within-gear compositions
         // obs is already ESS-scaled by lfdess()
-        if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
+        if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
           for(int k = 0; k < nb; k++) {
-            Type p_pred = p(k);
-            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
+            // AD-safe floor (a plain if() would be frozen at tape time)
+            Type p_pred = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
             nll -= o(k) * log(p_pred);
           }
         }
 
       } else if(obs_model == 3) {
-        // Dirichlet-multinomial on within-gear compositions
-        // Here obs_gear(g) acts as fixed ESS / precision
-        if(obs_gear(g) > Type(0) && pred_gear(g) > Type(0)) {
-          Type alpha0 = obs_gear(g);
+        // Dirichlet-multinomial on within-gear compositions. Precision:
+        //  dm_type 0: alpha0 = n (n = observed total over retained bins)
+        //  dm_type 1: alpha0 = theta n (linear, Thorson et al. 2017)
+        //  dm_type 2: alpha0 = beta (saturating: n_eff -> beta + 1 as n grows)
+        if(o_tot > Type(0) && pred_gear(g) > Type(0)) {
+          Type alpha0 = o_tot;
+          if(dm_type == 1) alpha0 = exp(log_dm(g)) * o_tot;
+          if(dm_type == 2) alpha0 = exp(log_dm(g));
+          dm_alpha0(y, g) = alpha0;
+          dm_neff(y, g) = o_tot * (Type(1) + alpha0) / (o_tot + alpha0);
           nll -= lgamma(alpha0);
-          nll += lgamma(obs_gear(g) + alpha0);
+          nll += lgamma(o_tot + alpha0);
           for(int k = 0; k < nb; k++) {
-            Type p_pred = p(k);
-            if(p_pred < Type(1e-12)) p_pred = Type(1e-12);
+            // AD-safe floor (a plain if() would be frozen at tape time)
+            Type p_pred = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
             Type a = alpha0 * p_pred;
             nll -= lgamma(o(k) + a);
             nll += lgamma(a);
@@ -762,7 +856,8 @@ Type objective_function<Type>::operator() ()
     REPORT(MA);
   }
 
-  // Penalty on random walk F
+  // Random walk on log F by gear: a penalty when log_Fk are fixed effects,
+  // the random-effect density when settings$F_re = TRUE (Laplace)
   if(prior_sigmaF_use == 1 && nyear > 1) {
     for(int g = 0; g < ngear; g++) {
       for(int y = 1; y < nyear; y++) {
@@ -770,7 +865,14 @@ Type objective_function<Type>::operator() ()
       }
     }
 
-    nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
+    // optional prior on sigmaF (prior_sigmaF_sd <= 0: none, e.g. when F is a
+    // random effect and sigmaF is estimated from the marginal likelihood)
+    if(obs_model == 3 && dm_type > 0 && dm_prior_sd > Type(0)) {
+      for(int g = 0; g < ngear; g++) nll -= dnorm(log_dm(g), dm_prior_mu(g), dm_prior_sd, true);
+    }
+    if(prior_sigmaF_sd > Type(0)) {
+      nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
+    }
   }
 
   // --- NORMAL PRIOR PENALTIES ---
@@ -800,10 +902,16 @@ Type objective_function<Type>::operator() ()
   }
 
   vector<Type> log_spr_y = log(spr_y);
+  vector<Type> log_epr_y = log(epr_y + Type(1e-30));
 
   REPORT(Sel);        // nlen x ngear
   REPORT(plen);       // nlen x nyear x ngear
+  REPORT(epr_y);
   REPORT(spr_y);      // nyear x 1
+  REPORT(catch_share); // nyear x ngear, predicted catch shares in weight
+  REPORT(catch_share_n); // nyear x ngear, predicted catch shares in numbers
+  REPORT(dm_alpha0);
+  REPORT(dm_neff);
   REPORT(Fk);         // nyear x ngear on natural scale
   REPORT(sigmaF);
   REPORT(N_y);
@@ -827,6 +935,7 @@ Type objective_function<Type>::operator() ()
   ADREPORT(log_Mk);
   ADREPORT(log_sigmaF);
   ADREPORT(log_spr_y);
+  ADREPORT(log_epr_y);
 
   return nll;
 }

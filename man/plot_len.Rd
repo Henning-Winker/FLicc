@@ -27,7 +27,7 @@ of year values matching the year dimnames, or numeric indices.}
 of gear names, or numeric indices.}
 
 \item{by_gear}{Logical. If \code{TRUE}, panels are shown by year and gear. If
-\code{FALSE}, selected gears are combined using \code{fit$tmb_data$catch_wt}.}
+\code{FALSE}, selected gears are combined, weighted by their predicted catch in numbers (\code{fit$report$catch_share_n}).}
 
 \item{title}{Optional plot title.}
 
@@ -53,11 +53,11 @@ taken from \code{fit$report$obslen} and predicted length compositions from
 \details{
 The function can subset by year and gear, and can either display separate
 year-by-gear panels or aggregate across selected gears using the gear
-weights in \code{fit$tmb_data$catch_wt}.
+weights equal to each gear's predicted catch in numbers by year (\code{fit$report$catch_share_n}).
 
 Observed length frequencies are standardized within each year and gear to
 proportions before plotting. When \code{by_gear = FALSE}, the selected gears are
-combined using the relative gear weights stored in \code{fit$tmb_data$catch_wt}.
+combined with weights equal to each gear's predicted share of the catch in numbers in that year, so the result is the composition of the total catch.
 
 The function expects the fitted object to contain:
 \describe{

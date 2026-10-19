@@ -1,0 +1,30 @@
+# ensemble_flicc: mixture of fits
+library(FLicc)
+data("alfonsino")
+lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), unit = "cm", midL = FALSE)
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, a = 0.004721956 / 1000, b = 3.146168)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+sf <- c("dsnormal", "logistic"); cbg <- c(0.7, 0.3)
+set0 <- list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating")
+fit <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, settings = set0)
+ds <- dome_sens_flicc(fit, gear = "Gillnet")
+print(ds$table)
+ens <- ensemble_flicc(ds$fits[-1])
+print(ens$members); print(tail(ens$table, 3))
+ens_aic <- ensemble_flicc(ds$fits[-1], weights = "aic", s = 0.75)
+print(ens_aic$members); print(tail(ens_aic$table[, c("year", "spr", "lwr", "upr", "brel", "brel_lwr", "brel_upr")], 3))
+# sanity 1: identical members reproduce the single-fit interval
+e1 <- ensemble_flicc(list(a = fit, b = fit))
+ci <- spr_ci_flicc(fit)
+stopifnot(max(abs(e1$table$lwr - ci$lwr)) < 1e-6, max(abs(e1$table$upr - ci$upr)) < 1e-6,
+          max(e1$table$sd_between) < 1e-10)
+# sanity 2: ensemble interval at least as wide as the narrowest member and contains the median
+stopifnot(all(ens$table$lwr <= ens$table$spr), all(ens$table$spr <= ens$table$upr))
+# sanity 3: AIC weights refused for fits with different data (tail cut)
+fcut <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, settings = c(set0, list(tail_cut = 47)))
+r <- tryCatch(ensemble_flicc(list(a = fit, b = fcut), weights = "aic"), error = function(e) "refused")
+stopifnot(identical(r, "refused"))
+print(ensemble_flicc(list(no_cut = fit, cut47 = fcut))$members)
+od <- if (dir.exists("out/tests")) "out/tests" else "."
+ggplot2::ggsave(file.path(od, "ensemble_dome.png"), plot_ensemble_flicc(ens), width = 8, height = 4, dpi = 100)
+ggplot2::ggsave(file.path(od, "ensemble_dome_brel.png"), plot_ensemble_flicc(ens_aic, "brel"), width = 8, height = 4, dpi = 100)

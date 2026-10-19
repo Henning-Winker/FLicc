@@ -21,7 +21,9 @@ fiticc_core(
   n_restart = 3,
   grad_tol = 0.001,
   control = list(),
-  FLRreport = FALSE
+  FLRreport = FALSE,
+  se = TRUE,
+  newton = 3
 )
 }
 \arguments{
@@ -35,7 +37,7 @@ containing stock and life-history information.}
 gear. Supported options include \code{"logistic"}, \code{"normal"}, and
 \code{"dsnormal"}.}
 
-\item{catch_by_gear}{Relative catch by gear. Can be supplied as a numeric
+\item{catch_by_gear}{Relative catch by gear, in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 vector or as an \code{FLQuants} object.}
 
 \item{settings}{A named list of model settings. Recognized elements are
@@ -63,6 +65,10 @@ free parameter vector after applying any TMB parameter mapping.}
 
 \item{FLRreport}{Logical; if \code{TRUE}, convert reported outputs using
 \code{as_FLQuants()}.}
+
+\item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped.}
+
+\item{newton}{Maximum number of Newton polishing steps (0 = none).}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} with optimizer results, sdreport

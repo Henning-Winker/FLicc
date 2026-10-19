@@ -10,7 +10,7 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "mn", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
+    "dm", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
     NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
@@ -25,7 +25,10 @@ fiticc(
   refit_GL = 100,
   n_restart = 3,
   grad_tol = 0.001,
-  control = list()
+  control = list(),
+  se = TRUE,
+  newton = 3,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -39,7 +42,8 @@ parameters (e.g. Linf, k, M) and matching dimensions to \code{lfd}.}
 Supported options include \code{"logistic"}, \code{"normal"},
 and \code{"dsnormal"}.}
 
-\item{catch_by_gear}{Numeric vector of relative catch proportions by gear.
+\item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
+in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
 Must sum to 1.}
 
 \item{settings}{Named list of model settings. Key options include:
@@ -50,8 +54,10 @@ by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
 growth formulation.}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
-  \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
-  and \code{"dm"} (Dirichlet-multinomial).\}
+  \code{"dm"} (default, Dirichlet-multinomial with the precision estimated
+  by default, see \code{dm_theta}; give raw counts or an effective sample size
+  of at least 500), \code{"mn"} (multinomial, as LBSPR) and \code{"nb"}
+  (negative binomial, as fishblicc).\}
 
 \\item\{\code{CVL}\}\{Coefficient of variation in length-at-age.\}
 
@@ -59,6 +65,14 @@ growth formulation.}
   when \code{pop_model = "gamma"}).\}
 
 \\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
+
+\\item\{\code{catch_units}\}\{Units of \code{catch_by_gear}: \code{"weight"} (default; predicted catch-at-length times weight at length is compared with the input shares, e.g. landings in tonnes) or \code{"numbers"} (predicted catch in numbers, as in fishblicc).\}
+
+\\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"saturating"} (default; alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"fixed"} (alpha0 = n, effective sample size about n/2). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
+
+\\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
+
+\\item\{\code{dm_prior_sd}\}\{SD of a weak normal prior on the log precision (default 1; 0 = none), centred on beta = 10 max(n) (saturating) or theta = 10 (linear), i.e. close to a multinomial. It only matters when the data show no overdispersion, where it keeps the precision finite.\}
 
 \\item\{\code{ngtg}\}\{Number of growth-type groups for
   \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
@@ -77,8 +91,24 @@ growth formulation.}
 \\item\{\code{Mpow}\}\{Optional length-dependent mortality scaling
   exponent (GTG only). Default is 0.\}
 
-\\item\{\code{prior_sigmaF}\}\{Prior for annual fishing mortality variation
-  (mean, sd, use flag).\}
+\\item\{\code{prior_sigmaF}\}\{Random walk on log F by gear and its
+  standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
+  log(sigmaF) with \code{use = 1} switching the random walk on. With
+  \code{sd = NA} there is no prior on sigmaF.\}
+
+\\item\{\code{F_re}\}\{Logical. If \code{TRUE}, log F by year and gear are
+  random effects (state-space random walk) integrated out by the Laplace
+  approximation, so sigmaF is estimated from the marginal likelihood and
+  standard errors include the F process. If \code{FALSE} (default), log F
+  are fixed effects with a random-walk penalty, where sigmaF is mainly
+  set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
+  supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.\}
+
+\\item\{\code{sigmaF}\}\{Optional fixed value of sigmaF (random-walk SD of
+  log F). Fits are then as fast as the penalised default. A practical
+  use is to estimate sigmaF once with \code{F_re = TRUE} on the full
+  data, then fix it for repeated fits (e.g. in an MSE); the yearly
+  estimates closely match the full random-effects fit.\}
 
 \\item\{\code{rob_eps}\}\{Robustness of the composition likelihood to
   sparse or outlying bins. Predicted proportions become
@@ -128,6 +158,21 @@ automatic restarts and by the optional safe-fit check. Default is
 
 \item{control}{Optional list of control arguments passed to \code{nlminb()}.
 Values supplied here override the FLicc defaults.}
+
+\item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
+standard errors, but faster (useful in an MSE). The Hessian is still
+checked by the Newton polishing. Default \code{TRUE}.}
+
+\item{newton}{Integer. Maximum number of Newton steps after \code{nlminb()}
+(default 3; 0 = none). Each step uses the Hessian of the objective and is
+kept only if it lowers the objective. This drives the gradient of a
+well-defined optimum to near zero, checks that the Hessian is positive
+definite and gives the Newton decrement (see \code{\link{flicc_convergence}}).}
+
+\item{verbose}{Logical. If \code{TRUE} (default), print a message when the
+convergence check gives a warning or failure, or when an estimated
+Dirichlet-multinomial precision is at its upper bound. The same
+information is always stored in \code{fit$diagnostics}.}
 }
 \value{
 An object of class \code{"flicc_tmb_fit"} containing:
@@ -166,14 +211,19 @@ Effective sample size is taken directly from the observed LFD
 (sum of counts), consistent with LBSPR and fishblicc.
 \item \code{"nb"}: negative binomial likelihood for counts with
 overdispersion.
-\item \code{"dm"}: Dirichlet-multinomial likelihood for
-overdispersed compositions.
+\item \code{"dm"} (default): Dirichlet-multinomial likelihood for
+overdispersed compositions, with the precision estimated
+(\code{dm_theta = "saturating"}); use raw counts or an effective sample size
+of at least 500.
 }
 }
 
-The default model (\code{pop_model = "gtg"}, \code{obs_model = "mn"})
-provides a fast and stable formulation closely aligned with LBSPR-style
-length-based assessment models.
+The default model (\code{pop_model = "gtg"}, \code{obs_model = "dm"} with
+estimated precision, all years jointly with a random walk on F) is FLicc's
+recommended configuration. LBSPR corresponds to \code{obs_model = "mn"} with
+Linf, M/k and CVL fixed and each year fitted separately (\code{by_year = TRUE});
+LBB to \code{lbb_flicc()}; fishblicc to \code{pop_model = "gamma"},
+\code{obs_model = "nb"}.
 }
 \examples{
 \dontrun{

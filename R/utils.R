@@ -140,6 +140,18 @@ as_FLQuants <- function(fit,stklen) {
   }))
   names(out$catch_by_gear) <-  gears
 
+  # predicted catch shares by gear and year, in weight (matched to
+  # catch_by_gear) and in numbers (used to combine gear compositions)
+  share_flq <- function(m) {
+    q <- FLCore::FLQuants(lapply(seq_along(gears), function(x)
+      FLCore::FLQuant(m[, x], dimnames = list(len = "all", year = yrs, unit = "unique",
+                                              season = "all", area = "unique", iter = "1"))))
+    names(q) <- gears
+    q
+  }
+  if (!is.null(report$catch_share))   out$catch_share   <- share_flq(report$catch_share)
+  if (!is.null(report$catch_share_n)) out$catch_share_n <- share_flq(report$catch_share_n)
+
 
   # FLQuants
   out$predlen_gear <- FLCore::FLQuants(lapply(1:length(gears),function(x){
@@ -310,6 +322,13 @@ as_FLQuants <- function(fit,stklen) {
   out$pop_model <- pop_model
   out$obs_model <- obs_model
 
+  # exploitable potential ratio (vulnerable biomass per recruit, fished/unfished)
+  if (!is.null(report$epr_y)) {
+    out$epr <- FLCore::FLQuant(matrix(report$epr_y, nrow = 1),
+      dimnames = list(quant = "all", year = yrs, unit = "unique", season = "all",
+                      area = "unique", iter = "1"))
+    units(out$epr) <- "epr"
+  }
   out$FLReport <- TRUE
   return(out)
 
@@ -837,14 +856,15 @@ lfd_long_to_wide <- function(df) {
 #' such as multinomial or Dirichlet-multinomial, where raw sample sizes are not
 #' intended to determine the weight of the fit.
 #'
-#' @param lfd An \code{FLQuant} of length frequencies with at least dimensions
-#'   \code{len}, \code{year}, \code{unit}, and \code{iter}.
-#' @param ess.g Numeric scalar or vector of effective sample sizes by gear. If a
-#'   scalar is supplied, it is recycled across gears. If a vector is supplied,
-#'   its length must match the number of gears in the \code{unit} dimension.
+#' @param lfd An \code{FLQuants} of length frequencies, one element per gear
+#'   (len x year x ... x iter).
+#' @param ess.g Numeric scalar or vector of effective sample sizes by gear. A
+#'   scalar is used for every gear; a vector is matched to the gears by name
+#'   if named, otherwise by position, and must have one value per gear.
 #'
-#' @return An \code{FLQuant} with the same dimensions as \code{lfd}, but scaled
-#'   so that totals over \code{len} equal the requested ESS for each gear.
+#' @return An \code{FLQuants} with the same structure as \code{lfd}, scaled
+#'   so that each year/iteration total over \code{len} equals the gear's ESS.
+#'   Gear-years with no observations stay zero (instead of 0/0 = NaN).
 #'
 #' @examples
 #' \dontrun{
@@ -854,31 +874,28 @@ lfd_long_to_wide <- function(df) {
 #' @export
 lfdess <- function(lfd, ess.g=100) {
   if (!inherits(lfd, "FLQuants")) {
-    stop("lfd must be an FLQuant")
+    stop("lfd must be an FLQuants (one element per gear)")
   }
 
-  dn <- dimnames(lfd[[1]])
-  gears <- dn$unit
-  years <- dn$year
-  seasons <- dn$season
-  areas <- dn$area
-  iters <- dn$iter
+  gears <- names(lfd)
+  ng <- length(lfd)
 
-  ng <- length(gears)
-
-  if (length(ess.g) == 1 && length(lfd)>1) {
+  if (length(ess.g) == 1) {
     ess.g <- rep(as.numeric(ess.g), ng)
-    names(ess.g) <- gears
-  } else {
+  } else if (!is.null(names(ess.g)) && !is.null(gears) && all(gears %in% names(ess.g))) {
+    ess.g <- as.numeric(ess.g[gears])
+  } else if (length(ess.g) == ng) {
     ess.g <- as.numeric(ess.g)
-
+  } else {
+    stop("ess.g must be a scalar or have one value per gear (", ng, ").")
   }
 
-  out <- FLQuants(Map(function(x,y){
-    res <- x%/%apply(x,2:6,sum,na.rm=T)
-    res*y
-  },x=lfd,y=ess.g))
-
+  out <- FLQuants(Map(function(x, y) {
+    res <- x %/% apply(x, 2:6, sum, na.rm = TRUE)
+    res[!is.finite(res)] <- 0        # empty gear-years: 0/0 -> 0
+    res * y
+  }, x = lfd, y = ess.g))
+  names(out) <- gears
 
   out
 }

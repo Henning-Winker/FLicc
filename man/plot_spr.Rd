@@ -16,7 +16,10 @@ plot_spr(
   reflines = TRUE,
   ref_levels = c(0.4, 0.2, 0.1),
   ref_colours = c("darkgreen", "orange", "red"),
-  ref_linetype = 2
+  ref_linetype = 2,
+  ci = FALSE,
+  ci_level = 0.95,
+  ci_type = c("bars", "ribbon")
 )
 }
 \arguments{
@@ -42,6 +45,17 @@ maximum of the data, the reference levels, and \code{0.6}.}
 \item{ref_colours}{Character vector of colours for the SPR reference lines.}
 
 \item{ref_linetype}{Line type for the SPR reference lines.}
+
+\item{ci}{Logical. If \code{TRUE}, add confidence intervals for SPR from the
+standard errors of log SPR (\code{TMB::sdreport()}), back-transformed:
+\code{exp(log(SPR) +/- z * SE)}. Needs fitted objects with standard errors
+(not \code{se = FALSE}); ignored with a warning otherwise. With
+\code{settings$F_re = TRUE} the intervals include the uncertainty of the
+random walk on F.}
+
+\item{ci_level}{Confidence level of the intervals. Default 0.95.}
+
+\item{ci_type}{\code{"bars"} (error bars, default) or \code{"ribbon"} (shaded band).}
 }
 \value{
 A \code{ggplot} object.

@@ -19,6 +19,14 @@
 #' @param ref_levels Numeric vector of SPR reference levels.
 #' @param ref_colours Character vector of colours for the SPR reference lines.
 #' @param ref_linetype Line type for the SPR reference lines.
+#' @param ci Logical. If `TRUE`, add confidence intervals for SPR from the
+#'   standard errors of log SPR (`TMB::sdreport()`), back-transformed:
+#'   `exp(log(SPR) +/- z * SE)`. Needs fitted objects with standard errors
+#'   (not `se = FALSE`); ignored with a warning otherwise. With
+#'   `settings$F_re = TRUE` the intervals include the uncertainty of the
+#'   random walk on F.
+#' @param ci_level Confidence level of the intervals. Default 0.95.
+#' @param ci_type `"bars"` (error bars, default) or `"ribbon"` (shaded band).
 #'
 #' @details
 #' Reference lines can be toggled on or off using `reflines`. Their levels and
@@ -38,6 +46,8 @@
 #'
 #' fit <- fiticc(lfd_alfonsino,stklen_alfonsino,sel_fun=c("dsnormal","logistic"),catch_by_gear = c(0.7,0.3))
 #' plot_spr(fit)
+#' plot_spr(fit, ci = TRUE)                       # 95% error bars
+#' plot_spr(list(a = fit, b = fit2), ci = TRUE, ci_type = "ribbon")
 #' plot_spr(fit, reflines = FALSE)
 #' plot_spr(fit, ref_levels = c(0.7, 0.4, 0.2))
 #' }
@@ -54,9 +64,99 @@ plot_spr <- function(fit,
                      reflines = TRUE,
                      ref_levels = c(0.4, 0.2, 0.1),
                      ref_colours = c("darkgreen", "orange", "red"),
-                     ref_linetype = 2) {
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
+  plot_ratio_flicc(fit, what = "spr", title = title, by_year = by_year, line_colour = line_colour,
+                   point_colour = point_colour, linewidth = linewidth, point_size = point_size,
+                   ymax = ymax, reflines = reflines, ref_levels = ref_levels, ref_colours = ref_colours,
+                   ref_linetype = ref_linetype, ci = ci, ci_level = ci_level, ci_type = ci_type)
+}
 
+#' Plot the exploitable potential ratio (EPR)
+#'
+#' EPR is the biomass vulnerable to the fishery (length weights times the
+#' combined selectivity of all gears, i.e. F at length relative to apical F)
+#' per recruit at the year's F, relative to the unfished state. For one gear it
+#' is the quantity LBB reports as B/B0 (Froese et al. 2018). Same features as
+#' [plot_spr()]: one fit or a named list of fits, confidence intervals from the
+#' standard errors of log EPR (`TMB::sdreport()`), reference lines.
+#'
+#' @inheritParams plot_spr
+#' @param ref_levels EPR reference levels (default 0.4 and 0.2). For LBB's
+#'   reference use `attr(lbb$table, "BFM1B0")` (B/B0 at F = M and Lc = Lc_opt,
+#'   a proxy for Bmsy/B0) and half of it.
+#' @return A `ggplot` object.
+#' @seealso [plot_spr()], [epr_ci_flicc()], [lbb_flicc()]
+#' @examples
+#' \dontrun{
+#' plot_epr(fit, ci = TRUE)
+#' plot_epr(list(base = fit, cut = fit_cut), ci = TRUE, ci_type = "ribbon")
+#' }
+#' @export
+plot_epr <- function(fit,
+                     title = NULL,
+                     by_year = 2,
+                     line_colour = "black",
+                     point_colour = "black",
+                     linewidth = 0.6,
+                     point_size = 2,
+                     ymax = NULL,
+                     reflines = TRUE,
+                     ref_levels = c(0.4, 0.2),
+                     ref_colours = c("darkgreen", "red"),
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
+  plot_ratio_flicc(fit, what = "epr", title = title, by_year = by_year, line_colour = line_colour,
+                   point_colour = point_colour, linewidth = linewidth, point_size = point_size,
+                   ymax = ymax, reflines = reflines, ref_levels = ref_levels, ref_colours = ref_colours,
+                   ref_linetype = ref_linetype, ci = ci, ci_level = ci_level, ci_type = ci_type)
+}
 
+#' Plot SPR or EPR (internal engine of plot_spr and plot_epr)
+#' @noRd
+plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
+                     title = NULL,
+                     by_year = 2,
+                     line_colour = "black",
+                     point_colour = "black",
+                     linewidth = 0.6,
+                     point_size = 2,
+                     ymax = NULL,
+                     reflines = TRUE,
+                     ref_levels = c(0.4, 0.2, 0.1),
+                     ref_colours = c("darkgreen", "orange", "red"),
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
+
+  ci_type <- match.arg(ci_type)
+  what <- match.arg(what)
+
+  # confidence intervals from the SEs of log SPR (fits only)
+  ci_df <- NULL
+  if (isTRUE(ci)) {
+    fits <- if (inherits(fit, "flicc_tmb_fit")) list(fit) else
+      if (is.list(fit) && length(fit) && all(vapply(fit, inherits, logical(1), "flicc_tmb_fit"))) fit else NULL
+    if (is.null(fits)) {
+      warning("ci = TRUE needs fitted objects; intervals are not drawn.", call. = FALSE)
+    } else {
+      nms <- if (!is.null(names(fits))) names(fits) else paste0("run", seq_along(fits))
+      ci_df <- do.call(rbind, lapply(seq_along(fits), function(i) {
+        x <- ratio_ci_flicc(fits[[i]], what = what, level = ci_level)
+        if (is.null(x)) return(NULL)
+        x$qname <- nms[i]
+        x
+      }))
+      if (is.null(ci_df))
+        warning("No standard errors in the fit(s) (fitted with se = FALSE?); ",
+                "intervals are not drawn.", call. = FALSE)
+    }
+  }
 
   if (inherits(fit, "FLQuants")){
     if(is.null(names(fit))) names <- paste0("run",1:length(fit))
@@ -68,13 +168,15 @@ plot_spr <- function(fit,
   if (inherits(fit, "list")&&inherits(fit[[1]], "flicc_tmb_fit") ){
     if(is.null(names(fit))) names <- paste0("run",1:length(fit))
     res <- FLQuants(lapply(fit,function(x){
-      x <- x$report$spr
+      x <- x$report[[what]]
+      if (is.null(x)) stop("Fit without report$", what, " (refit with the current FLicc version).")
       FLQuant(x,quant="all")
     }))
   }
 
   if (inherits(fit, "flicc_tmb_fit")){
-      res <- fit$report$spr
+      res <- fit$report[[what]]
+      if (is.null(res)) stop("Fit without report$", what, " (refit with the current FLicc version).")
     }
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -94,14 +196,32 @@ plot_spr <- function(fit,
   df$year_num <- as.numeric(as.character(df$year))
 
   if (is.null(ymax)) {
-    ymax <- max(df$data, ref_levels, 0.6, na.rm = TRUE)
+    ymax <- max(df$data, ref_levels, 0.6, if (!is.null(ci_df)) ci_df$upr, na.rm = TRUE)
   }
+  multi <- !inherits(res, "FLQuant")
+  pd <- ggplot2::position_dodge(width = if (multi && !is.null(ci_df) && ci_type == "bars") 0.35 else 0)
 
   if (is.null(title)) {
-    title <- "Spawning potential ratio"
+    title <- if (what == "spr") "Spawning potential ratio" else "Exploitable potential ratio"
   }
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = year_num, y = data))
+  if (!is.null(ci_df)) {
+    ci_df$year_num <- as.numeric(ci_df$year)
+    if (ci_type == "ribbon") {
+      p <- p + if (multi)
+        ggplot2::geom_ribbon(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr, fill = qname),
+                             inherit.aes = FALSE, alpha = 0.2, show.legend = FALSE) else
+        ggplot2::geom_ribbon(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr),
+                             inherit.aes = FALSE, alpha = 0.2, fill = line_colour)
+    } else {
+      p <- p + if (multi)
+        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr, colour = qname),
+                               inherit.aes = FALSE, width = 0.25, position = pd, show.legend = FALSE) else
+        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr),
+                               inherit.aes = FALSE, width = 0.25, colour = line_colour)
+    }
+  }
   if(inherits(res, "FLQuant")){
    p <- p+ ggplot2::geom_line(
       colour = line_colour,
@@ -114,18 +234,18 @@ plot_spr <- function(fit,
   } else {
     p <- p+ ggplot2::geom_line(
       aes(colour = qname),
-      linewidth = linewidth
+      linewidth = linewidth, position = pd
     ) +
       ggplot2::geom_point(
         aes(colour = qname),
-        size = point_size
+        size = point_size, position = pd
       )
    }
   p <- p+ ggplot2::scale_x_continuous(breaks = yr_breaks) +
     ggplot2::coord_cartesian(ylim = c(0, ymax)) +
     ggplot2::labs(
       x = "Year",
-      y = "SPR",
+      y = toupper(what),
       title = title
     ) +
     ggplot2::theme_bw() +
@@ -157,8 +277,8 @@ plot_spr <- function(fit,
 #' `fit$report$predlen_gear`.
 #'
 #' The function can subset by year and gear, and can either display separate
-#' year-by-gear panels or aggregate across selected gears using the gear
-#' weights in `fit$tmb_data$catch_wt`.
+#' year-by-gear panels or aggregate across selected gears, weighted by each
+#' gear's predicted catch in numbers by year (`fit$report$catch_share_n`).
 #'
 #' @param fit A fitted `flicc_tmb_fit` object.
 #' @param year Optional year selection. Can be `NULL` for all years, a vector
@@ -166,7 +286,8 @@ plot_spr <- function(fit,
 #' @param gear Optional gear selection. Can be `NULL` for all gears, a vector
 #'   of gear names, or numeric indices.
 #' @param by_gear Logical. If `TRUE`, panels are shown by year and gear. If
-#'   `FALSE`, selected gears are combined using `fit$tmb_data$catch_wt`.
+#'   `FALSE`, selected gears are combined, weighted by their predicted catch
+#'   in numbers (`fit$report$catch_share_n`).
 #' @param title Optional plot title.
 #' @param observed_fill Fill colour for observed length composition bars.
 #' @param observed_colour Border colour for observed length composition bars.
@@ -177,7 +298,8 @@ plot_spr <- function(fit,
 #' @details
 #' Observed length frequencies are standardized within each year and gear to
 #' proportions before plotting. When `by_gear = FALSE`, the selected gears are
-#' combined using the relative gear weights stored in `fit$tmb_data$catch_wt`.
+#' combined with weights equal to each gear's predicted share of the catch in
+#' numbers in that year, so the result is the composition of the total catch.
 #'
 #' The function expects the fitted object to contain:
 #' \describe{
@@ -332,13 +454,17 @@ plot_len <- function(fit,
   # optional aggregate over gears
   #-----------------------------
   if (!by_gear) {
-    gear_wt_all <- fit$tmb_data$catch_wt
-    names(gear_wt_all) <- fit$tmb_data$gear_names
+    # combine the gears' compositions (numbers at length) weighted by each
+    # gear's predicted catch in numbers by year; equal weights if unavailable
+    csn <- fit$report$catch_share_n
+    w_tab <- do.call(rbind, lapply(gear_sel, function(g) {
+      yrs_g <- dimnames(fit$report$N)$year
+      w <- if (!is.null(csn)) as.numeric(csn[[g]]) else rep(1, length(yrs_g))
+      data.frame(year = yrs_g, gear = g, w = w)
+    }))
+    w_tab$w <- w_tab$w / stats::ave(w_tab$w, w_tab$year, FUN = sum)
 
-    gear_wt <- gear_wt_all[gear_sel]
-    gear_wt <- gear_wt / sum(gear_wt)
-
-    df$w <- gear_wt[as.character(df$gear)]
+    df$w <- w_tab$w[match(paste(df$year, df$gear), paste(w_tab$year, w_tab$gear))]
     df$observed <- df$observed * df$w
     df$fitted   <- df$fitted * df$w
 
@@ -2142,5 +2268,89 @@ plot_LBIp <- function(fit,
       panel.grid.minor = ggplot2::element_blank()
     )
 
+  p
+}
+
+#' Confidence intervals for SPR from an FLicc fit
+#'
+#' Intervals for SPR by year from the standard errors of log SPR reported by
+#' `TMB::sdreport()`: `exp(log(SPR) +/- z * SE)`.
+#'
+#' @param fit A fitted `flicc_tmb_fit` object (fitted with `se = TRUE`).
+#' @param level Confidence level. Default 0.95.
+#' @return A data frame with `year`, `spr`, `se_log`, `lwr`, `upr`, or `NULL`
+#'   if the fit has no standard errors.
+#' @export
+spr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "spr", level)
+
+#' Confidence intervals of the exploitable potential ratio
+#'
+#' As [spr_ci_flicc()] for EPR: intervals from the standard errors of log EPR
+#' (`TMB::sdreport()`), back-transformed.
+#' @param fit A fitted FLicc object (with standard errors).
+#' @param level Confidence level.
+#' @return A `data.frame` with year, epr, se_log, lwr, upr, or `NULL` without
+#'   standard errors.
+#' @export
+epr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "epr", level)
+
+#' @noRd
+ratio_ci_flicc <- function(fit, what = c("spr", "epr"), level = 0.95) {
+  what <- match.arg(what)
+  if (is.null(fit$rep)) return(NULL)
+  s <- summary(fit$rep, "report")
+  s <- s[rownames(s) == paste0("log_", what, "_y"), , drop = FALSE]
+  if (!nrow(s)) return(NULL)
+  z <- stats::qnorm(1 - (1 - level) / 2)
+  yrs <- if (!is.null(fit$tmb_data$year_names)) fit$tmb_data$year_names else
+    dimnames(fit$report[[what]])$year
+  out <- data.frame(year = as.character(yrs), est = exp(s[, 1]), se_log = s[, 2],
+                    lwr = exp(s[, 1] - z * s[, 2]), upr = exp(s[, 1] + z * s[, 2]),
+                    row.names = NULL)
+  names(out)[2] <- what
+  out
+}
+
+#' Sample size of length-frequency data by year and gear
+#'
+#' Diagnostic of the information in the length compositions: the number of
+#' fish measured per year and gear (stacked, so the bar height is the
+#' combined sample size), optionally next to the effective sample sizes after
+#' [lfdess()] rescaling. Gear-years without samples show as gaps; the labels
+#' give the number of non-empty length bins, a rough indicator of how well a
+#' composition is resolved.
+#'
+#' @param lfd `FLQuants` of length frequencies by gear (raw counts).
+#' @param ess Optional `FLQuants` after [lfdess()], or a scalar / named vector
+#'   of effective sample sizes per gear (passed to [lfdess()]).
+#' @param bins Logical; label bars with the number of non-empty bins.
+#' @return A `ggplot` object.
+#' @examples
+#' \dontrun{
+#' plot_lfdn(lfd)
+#' plot_lfdn(lfd, ess = c(Trawl = 200, Gillnet = 150))
+#' }
+#' @export
+plot_lfdn <- function(lfd, ess = NULL, bins = TRUE) {
+  if (!inherits(lfd, "FLQuants")) stop("lfd must be FLQuants (one element per gear)")
+  tab <- function(x, what) do.call(rbind, lapply(names(x), function(g) {
+    q <- x[[g]]
+    n <- apply(q@.Data, 2, sum, na.rm = TRUE)
+    nb <- apply(q@.Data, 2, function(v) sum(v > 0, na.rm = TRUE))
+    data.frame(year = as.numeric(dimnames(q)$year), gear = g, n = n, bins = nb, what = what)
+  }))
+  d <- tab(lfd, "raw counts")
+  if (!is.null(ess)) {
+    if (!inherits(ess, "FLQuants")) ess <- lfdess(lfd, ess.g = ess)
+    d <- rbind(d, tab(ess, "effective sample size"))
+    d$what <- factor(d$what, levels = c("raw counts", "effective sample size"))
+  }
+  p <- ggplot2::ggplot(d, ggplot2::aes(year, n, fill = gear)) +
+    ggplot2::geom_col(position = "stack", width = 0.8, colour = "white", linewidth = 0.2) +
+    ggplot2::labs(x = "Year", y = "Sample size (fish)", fill = "Gear") +
+    ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+  if (bins) p <- p + ggplot2::geom_text(ggplot2::aes(label = ifelse(n > 0, bins, "")),
+                                        position = ggplot2::position_stack(vjust = 0.5), size = 2.6, colour = "white")
+  if (!is.null(ess)) p <- p + ggplot2::facet_wrap(~what, scales = "free_y", ncol = 1)
   p
 }

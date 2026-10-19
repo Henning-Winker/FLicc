@@ -3,7 +3,7 @@
 #' @param lfd named list of FLQuant objects, one per gear
 #' @param stklen FLStockLen-like object with matching years
 #' @param sel_fun selectivity function per gear
-#' @param catch_by_gear numeric vector of relative catch by gear
+#' @param catch_by_gear numeric vector of relative catch by gear (in weight unless settings$catch_units = "numbers")
 #' @param settings list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd
 #' @param years optional vector of years to include
 #'
@@ -95,11 +95,14 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
 
   # catch weights by gear
-  catch_wt <- do.call(
+  catch_all <- do.call(
     cbind,
-    lapply(catch_by_gear, function(x) as.data.frame(x)$data)
+    lapply(catch_by_gear, function(x) as.numeric(x))
   )
-  rownames(catch_wt) <- dimnames(catch_by_gear[[1]])$year
+  rownames(catch_all) <- dimnames(catch_by_gear[[1]])$year
+  # catch may cover more years than the fitted ones (e.g. fiticc(years = ))
+  catch_wt <- if (all(as.character(years) %in% rownames(catch_all)) && nrow(catch_all) != nyear)
+    catch_all[as.character(years), , drop = FALSE] else catch_all
 
   catch_wt <- catch_wt / rowSums(catch_wt)
 
@@ -114,7 +117,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   catch_sd <- if (!is.null(settings$catch.sd)) as.numeric(settings$catch.sd) else 0.05
 
   # observation model
-  obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "nb"
+  obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "dm"
 
   obs_model_code <- switch(obs_model,
                            nb = 1L,
@@ -122,6 +125,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                            dm = 3L,
                            stop("Supported obs_model options are 'nb', 'mn', 'dm'")
   )
+
+  catch_units <- if (!is.null(settings$catch_units)) settings$catch_units else "weight"
+  if (!catch_units %in% c("weight", "numbers"))
+    stop("settings$catch_units must be \"weight\" or \"numbers\".")
+  dm_theta <- if (!is.null(settings$dm_theta)) settings$dm_theta else "saturating"
+  dm_type <- switch(dm_theta, fixed = 0L, linear = 1L, saturating = 2L,
+                    stop("settings$dm_theta must be \"fixed\", \"linear\" or \"saturating\"."))
 
   pop_model <- if (!is.null(settings$pop_model)) settings$pop_model else "gamma"
 
@@ -154,7 +164,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # GTG distribution over Linf on a standardised grid. The Linf groups are
   # built inside the TMB template as Linf * (1 + CVL * gtg_z), so they follow
   # the estimated Linf and CVL. recP depends only on the grid.
-  gtg_z <- seq(-maxsd, maxsd, length.out = ngtg)
+  # one growth type (e.g. LBB): the single group sits at the mean Linf
+  gtg_z <- if (ngtg == 1L) 0 else seq(-maxsd, maxsd, length.out = ngtg)
   recP  <- dnorm(gtg_z)
   recP  <- recP / sum(recP)
 
@@ -187,12 +198,37 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     }
   }
 
+  # Tail cut: exclude length bins with lower bound >= tail_cut (an absolute
+  # length, as Lplus, so the same bins are used whatever Linf is assumed) from
+  # the composition likelihood. Observed and predicted compositions are
+  # truncated and the predicted proportions renormalised over the retained bins.
+  cut_bin <- -1L
+  if (!is.null(settings$tail_cut)) {
+    Lcut <- tail_cut_length_flicc(settings$tail_cut, Linf_init)
+    idx  <- which(LLB >= Lcut)
+    if (length(idx) == 0) {
+      warning("settings$tail_cut = ", round(Lcut, 2),
+              " is above the largest length bin; no bins cut.")
+    } else {
+      cut_bin <- as.integer(min(idx) - 1L)    # 0-based first excluded bin
+      if (cut_bin < 2L) {
+        stop("settings$tail_cut = ", round(Lcut, 2), " would leave fewer than two ",
+             "length bins in the likelihood.")
+      }
+      if (plus_bin >= cut_bin) {
+        warning("settings$Lplus lies at or above the tail cut; plus group ignored.")
+        plus_bin <- -1L
+      }
+    }
+  }
+
   # Warn when observations fall in bins the GTG model cannot reach
   # (lower bound at or beyond the largest GTG Linf at the input values).
   if (pop_model == "gtg" && isTRUE(settings$tail_warning)) {
-    maxLinf <- Linf_init * (1 + maxsd * CVL_init)
+    maxLinf <- Linf_init * (1 + max(gtg_z) * CVL_init)
     beyond  <- LLB >= maxLinf
     if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
+    if (cut_bin >= 0) beyond <- beyond & seq_along(LLB) <= cut_bin
     n_beyond <- sum(obs[beyond, , , drop = FALSE], na.rm = TRUE)
     if (n_beyond > 0) {
       warning(sprintf(paste0(
@@ -242,6 +278,12 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     catch_sd   = catch_sd,
     pop_model  = as.integer(pop_model_code),
     obs_model  = as.integer(obs_model_code),
+    catch_units = as.integer(catch_units == "weight"),
+    dm_type    = as.integer(dm_type),
+    dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
+                  else rep(log(10), ngear),
+    dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 1,
+    pile = if (!is.null(settings$pile)) as.numeric(settings$pile) else 1,
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -249,6 +291,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     Mpow       = as.numeric(Mpow),
     rob_eps    = as.numeric(rob_eps),
     plus_bin   = as.integer(plus_bin),
+    cut_bin    = as.integer(cut_bin),
     # per-recruit block, off during fitting (see brp_tmb_flicc())
     brp_F       = numeric(0),
     brp_spr     = as.numeric(spr_ref) / 100,   # Fspr reported by the fit
@@ -273,6 +316,29 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     gear_names  = gear_names,
     year_names  = years
   )
+}
+
+#' Tail cut as a length (internal)
+#'
+#' `tail_cut` is an absolute length (same units as the length bins, as
+#' `Lplus`). For backward compatibility a value <= 1.5 is read as a fraction of
+#' Linf (the earlier definition), with a warning.
+#' @param tail_cut single positive number
+#' @param linf input Linf
+#' @return the cut length
+#' @noRd
+tail_cut_length_flicc <- function(tail_cut, linf) {
+  tc <- as.numeric(tail_cut)
+  if (length(tc) != 1 || !is.finite(tc) || tc <= 0) {
+    stop("tail_cut must be a single positive length (e.g. 50), as Lplus.")
+  }
+  if (tc <= 1.5) {
+    warning(sprintf(paste0("tail_cut = %g is read as a fraction of Linf (%.1f); tail_cut is now an ",
+                           "absolute length, as Lplus: use tail_cut = %.1f."), tc, linf, tc * linf),
+            call. = FALSE)
+    tc <- tc * linf
+  }
+  tc
 }
 
 #' Generate initial parameter values for FLicc TMB fits
@@ -362,7 +428,7 @@ init_tmb_flicc <- function(tmb_data) {
     }
   }
 
-  gear_wt <- as.numeric(tmb_data$catch_wt)
+  gear_wt <- colMeans(as.matrix(tmb_data$catch_wt))
 
   if (length(gear_wt) != ngear ||
       any(!is.finite(gear_wt)) ||
@@ -388,6 +454,7 @@ init_tmb_flicc <- function(tmb_data) {
     log_Fk     = log_Fk,
     Sm         = Sm,
     log_phi    = log(10),
+    log_dm     = if (!is.null(tmb_data$dm_prior_mu)) as.numeric(tmb_data$dm_prior_mu) else rep(0, length(tmb_data$gear_names)),
     log_sigmaF = tmb_data$prior_sigmaF_mean
   )
 }
@@ -404,7 +471,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param sel_fun Character vector giving the selectivity function for each
 #'   gear. Supported options include \code{"logistic"}, \code{"normal"}, and
 #'   \code{"dsnormal"}.
-#' @param catch_by_gear Relative catch by gear. Can be supplied as a numeric
+#' @param catch_by_gear Relative catch by gear, in weight (e.g. landings in
+#'   tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 #'   vector or as an \code{FLQuants} object.
 #' @param settings A named list of model settings. Recognized elements are
 #'   \code{CVL}, \code{GL}, \code{catch.sd}, and \code{prior_sigmaF}. Missing
@@ -423,6 +491,7 @@ init_tmb_flicc <- function(tmb_data) {
 #'   free parameter vector after applying any TMB parameter mapping.
 #' @param FLRreport Logical; if \code{TRUE}, convert reported outputs using
 #'   \code{as_FLQuants()}.
+#' @param newton Maximum number of Newton polishing steps (0 = none).
 #'
 #' @details
 #' \code{fiticc_core()} prepares the TMB data using \code{data_tmb_flicc()},
@@ -457,8 +526,7 @@ fiticc_core <- function(lfd, stklen,
                      settings = list(
                        CVL = 0.1,
                        GL = 50,
-                       catch.sd = 0.05,
-                       prior_sigmaF = c(log(0.5), 0.3, 1)
+                       catch.sd = 0.05
                      ),
                      years = NULL,
                      iter = 1,
@@ -470,7 +538,9 @@ fiticc_core <- function(lfd, stklen,
                      n_restart = 3,
                      grad_tol = 1e-3,
                      control = list(),
-                     FLRreport=FALSE ) {
+                     FLRreport=FALSE,
+                     se = TRUE,
+                     newton = 3) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -482,7 +552,12 @@ fiticc_core <- function(lfd, stklen,
     GL = 50,
     catch.sd = 0.05,
     pop_model = "gtg",
-    obs_model = "mn",
+    obs_model = "dm",
+    dm_theta = "saturating",
+    dm_shared = FALSE,
+    catch_units = "weight",
+    dm_prior_sd = 1,
+    pile = 1,
     ngtg = 13,
     maxsd = 2,
     Mpow = 0,
@@ -492,6 +567,9 @@ fiticc_core <- function(lfd, stklen,
     CVL.sd = NULL,
     rob_eps = 0,
     Lplus = NULL,
+    F_re = FALSE,
+    sigmaF = NULL,
+    tail_cut = NULL,
     spr_ref = 40,
     tail_warning = FALSE,
     FM_min = 0.05,
@@ -501,7 +579,21 @@ fiticc_core <- function(lfd, stklen,
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
 
-  if(any(settings$prior_sigmaF == FALSE)) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
+  if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
+
+  # Default (FLicc >= 1.0.10): random walk on log F with sigmaF fixed at 0.3
+  # (fast, no collapse of sigmaF). sigmaF is estimated only if a prior_sigmaF
+  # is given (penalised) or with F_re = TRUE (random effects).
+  if (is.null(settings$sigmaF) && is.null(settings$prior_sigmaF) && !isTRUE(settings$F_re)) {
+    settings$sigmaF <- 0.3
+  }
+
+  # F as random effects: weak default prior on sigmaF (median 0.3, sd 0.5 on
+  # the log scale), so sigmaF cannot collapse to 0 when the length data carry
+  # little year-to-year information. A user-supplied prior_sigmaF is kept.
+  if (isTRUE(settings$F_re) && is.null(settings$prior_sigmaF)) {
+    settings$prior_sigmaF <- c(log(0.3), 0.5, 1)
+  }
 
   # fill missing elements
   for (nm in names(default_settings)) {
@@ -516,6 +608,18 @@ fiticc_core <- function(lfd, stklen,
 
   if (!settings$obs_model %in% c("nb", "mn", "dm")) {
     stop("settings$obs_model must be 'nb', 'mn', or 'dm'")
+  }
+
+  if (!is.null(settings$sigmaF) &&
+      (length(settings$sigmaF) != 1 || !is.finite(as.numeric(settings$sigmaF)) || settings$sigmaF <= 0)) {
+    stop("settings$sigmaF must be a single positive value (the fixed random-walk SD of log F). ",
+         "To switch the random walk off use prior_sigmaF = FALSE.")
+  }
+  if (isTRUE(settings$prior_sigmaF[3] == 1) && is.null(settings$sigmaF) && !isTRUE(settings$F_re) &&
+      !(is.finite(settings$prior_sigmaF[2]) && settings$prior_sigmaF[2] > 0)) {
+    warning("Random walk on log F with sigmaF estimated without a prior: sigmaF tends to collapse to 0 ",
+            "(flat F). Fix it (sigmaF = 0.3), use F_re = TRUE, or switch the walk off ",
+            "(prior_sigmaF = FALSE).", call. = FALSE)
   }
 
   unknown <- setdiff(names(settings), names(default_settings))
@@ -555,6 +659,13 @@ fiticc_core <- function(lfd, stklen,
   tmb_data$prior_sigmaF_mean <- as.numeric(settings$prior_sigmaF[1])
   tmb_data$prior_sigmaF_sd   <- as.numeric(settings$prior_sigmaF[2])
   tmb_data$prior_sigmaF_use  <- as.integer(settings$prior_sigmaF[3])
+  # no prior on sigmaF when its sd is NA / Inf / <= 0 (useful with F_re = TRUE)
+  if (!is.finite(tmb_data$prior_sigmaF_sd) || tmb_data$prior_sigmaF_sd <= 0) {
+    tmb_data$prior_sigmaF_sd <- 0
+  }
+  if (!is.finite(tmb_data$prior_sigmaF_mean)) {
+    tmb_data$prior_sigmaF_mean <- log(0.5)       # start value only
+  }
 
   # Soft penalty FM
   tmb_data$FM_min    <- as.numeric(settings$FM_min)
@@ -585,9 +696,37 @@ fiticc_core <- function(lfd, stklen,
   if (settings$obs_model != "nb") {
     map$log_phi <- factor(NA)
   }
+  # Dirichlet-multinomial precision: estimated by gear (or shared) only for
+  # obs_model = "dm" with dm_theta "linear" or "saturating"
+  ng <- length(tmb_data$gear_names)
+  if (settings$obs_model != "dm" || isTRUE(tmb_data$dm_type == 0L)) {
+    map$log_dm <- factor(rep(NA, ng))
+  } else if (isTRUE(settings$dm_shared)) {
+    map$log_dm <- factor(rep(1, ng))
+  }
 
-  if (length(unique(years)) <= 1) {
+  rw_on <- length(unique(years)) > 1 && isTRUE(tmb_data$prior_sigmaF_use == 1L)
+  if (!rw_on) {
     map$log_sigmaF <- factor(NA)
+  }
+
+  # F as a state-space random walk: log_Fk integrated out by the Laplace
+  # approximation, so sigmaF is estimated from the marginal likelihood
+  # sigmaF fixed at a given value (e.g. estimated once with F_re = TRUE)
+  if (!is.null(settings$sigmaF) && rw_on) {
+    parameters$log_sigmaF <- log(as.numeric(settings$sigmaF))
+    map$log_sigmaF <- factor(NA)
+    tmb_data$prior_sigmaF_sd <- 0
+  }
+
+  random <- NULL
+  if (isTRUE(settings$F_re)) {
+    if (rw_on) {
+      random <- "log_Fk"
+    } else {
+      warning("settings$F_re = TRUE ignored: needs more than one year and ",
+              "prior_sigmaF[3] = 1 (random walk on).", call. = FALSE)
+    }
   }
 
   # CVL (log_Galpha) is fixed unless CVL.sd is given, for both pop models.
@@ -610,6 +749,7 @@ fiticc_core <- function(lfd, stklen,
                               "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
     parameters = parameters,
     map = map,
+    random = random,
     DLL = dll,
     silent = silent
   )
@@ -651,6 +791,41 @@ fiticc_core <- function(lfd, stklen,
     control = ctrl
   )
 
+  # Newton polishing: a few Newton steps from the nlminb solution using the
+  # Hessian of the objective (AD for fixed-effects models, finite differences
+  # of the gradient with random effects). Steps that do not lower the
+  # objective are rejected. Also gives the Hessian check and the Newton
+  # decrement 0.5 g'H^-1 g (expected remaining improvement in log-likelihood).
+  hess_fun <- function(p) {
+    H <- if (is.null(random)) tryCatch(obj$he(p), error = function(e) NULL) else NULL
+    if (is.null(H)) H <- tryCatch(stats::optimHess(p, obj$fn, obj$gr), error = function(e) NULL)
+    if (is.null(H) || any(!is.finite(H))) return(NULL)
+    (H + t(H)) / 2
+  }
+  newton_state <- function(p) {
+    g <- as.numeric(obj$gr(p))
+    H <- hess_fun(p)
+    R <- if (is.null(H)) NULL else tryCatch(chol(H), error = function(e) NULL)
+    if (is.null(R)) return(list(pd = if (is.null(H)) NA else FALSE, dec = NA_real_, step = NULL,
+                                max_grad = max(abs(g), na.rm = TRUE)))
+    step <- as.numeric(backsolve(R, forwardsolve(t(R), g)))
+    list(pd = TRUE, dec = 0.5 * sum(g * step), step = step, max_grad = max(abs(g), na.rm = TRUE))
+  }
+  polish <- function(opt, nsteps) {
+    st <- newton_state(opt$par); k <- 0L
+    while (k < nsteps && isTRUE(st$pd) && is.finite(st$dec) && st$dec > 1e-12) {
+      p_new <- opt$par - st$step
+      f_new <- tryCatch(obj$fn(p_new), error = function(e) NA_real_)
+      if (!is.finite(f_new) || f_new > opt$objective + 1e-10) break
+      opt$par[] <- p_new; opt$objective <- f_new; k <- k + 1L
+      st <- newton_state(opt$par)
+    }
+    opt$newton <- list(steps = k, hess_pd = st$pd, decrement = st$dec, max_gradient = st$max_grad)
+    opt
+  }
+  newton <- as.integer(newton)
+  if (newton > 0L) opt <- polish(opt, newton)
+
   restart_log <- data.frame(
     restart = 0L,
     objective = opt$objective,
@@ -691,21 +866,37 @@ fiticc_core <- function(lfd, stklen,
     )
 
     if (accept) {
+      opt_new$newton <- opt$newton
       opt <- opt_new
+      n_restart_used <- n_restart_used + 1L
     } else {
       break
     }
   }
 
+  if (newton > 0L && n_restart_used > 0L) opt <- polish(opt, newton)
   opt$max_gradient <- max(abs(obj$gr(opt$par)), na.rm = TRUE)
   opt$n_restarts <- n_restart_used
   opt$restart_log <- restart_log
 
-  obj$env$last.par.best <- opt$par
+  if (is.null(random)) {
+    obj$env$last.par.best <- opt$par
+  } else {
+    # evaluate at the optimum so the random effects sit at their mode;
+    # last.par.best then holds fixed and random parameters
+    invisible(obj$fn(opt$par))
+    obj$env$last.par.best <- obj$env$last.par
+  }
 
-  rep <- TMB::sdreport(obj)
-  adrep <- summary(rep, "fixed")
-  report <- obj$report()
+  if (isTRUE(se)) {
+    rep <- TMB::sdreport(obj)
+    adrep <- summary(rep, "fixed")
+  } else {
+    # no standard errors requested (e.g. inside an MSE): skip sdreport
+    rep <- NULL
+    adrep <- cbind(Estimate = opt$par, `Std. Error` = NA_real_)
+  }
+  report <- obj$report(obj$env$last.par.best)
   par_tab <- data.frame(
     par = rownames(adrep),
     mpd = adrep[, 1],
@@ -730,6 +921,7 @@ fiticc_core <- function(lfd, stklen,
 
   fit$settings <- settings
   fit$pop_model <- settings$pop_model
+  fit$F_re <- !is.null(random)
   fit$obs_model <- settings$obs_model
   fit$start_used <- !is.null(start)
   fit$max_gradient <- opt$max_gradient
@@ -737,6 +929,13 @@ fiticc_core <- function(lfd, stklen,
   fit$restart_log <- opt$restart_log
 
   fit$logLik <- LLflicc(fit)
+  fit$diagnostics <- diagnostics_flicc(fit)
+  # a polished fit with a positive definite Hessian and a negligible Newton
+  # decrement is converged, whatever nlminb's stopping code
+  if (identical(fit$diagnostics$conv_tier, "ok") && !identical(as.integer(fit$opt$convergence), 0L)) {
+    fit$opt$convergence_nlminb <- fit$opt$convergence
+    fit$opt$convergence <- 0L
+  }
 
 
   if(FLRreport){fit$report <- as_FLQuants(fit,stklen)} else {fit$report$FLReport=FALSE}
@@ -761,7 +960,8 @@ fiticc_core <- function(lfd, stklen,
 #'   Supported options include \code{"logistic"}, \code{"normal"},
 #'   and \code{"dsnormal"}.
 #'
-#' @param catch_by_gear Numeric vector of relative catch proportions by gear.
+#' @param catch_by_gear Numeric vector of relative catch proportions by gear,
+#'   in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
 #'   Must sum to 1.
 #'
 #' @param settings Named list of model settings. Key options include:
@@ -772,8 +972,10 @@ fiticc_core <- function(lfd, stklen,
 #'       growth formulation.}
 #'
 #'     \item{\code{obs_model}}{Observation likelihood. Options are:
-#'       \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
-#'       and \code{"dm"} (Dirichlet-multinomial).}
+#'       \code{"dm"} (default, Dirichlet-multinomial, with the precision
+#'       estimated by default, see \code{dm_theta}; give raw counts or an
+#'       effective sample size of at least 500), \code{"mn"} (multinomial, as
+#'       LBSPR) and \code{"nb"} (negative binomial, as fishblicc).}
 #'
 #'     \item{\code{CVL}}{Coefficient of variation in length-at-age.}
 #'
@@ -781,6 +983,35 @@ fiticc_core <- function(lfd, stklen,
 #'       when \code{pop_model = "gamma"}).}
 #'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
+#'
+#'     \item{\code{catch_units}}{Units of \code{catch_by_gear}: \code{"weight"}
+#'       (default; predicted catch-at-length times weight at length is compared
+#'       with the input shares, e.g. landings in tonnes) or \code{"numbers"}
+#'       (predicted catch in numbers, as in fishblicc).}
+#'
+#'     \item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
+#'       (\code{obs_model = "dm"}): \code{"saturating"} (default;
+#'       \eqn{\alpha_0 = \beta} estimated; the effective
+#'       sample size \eqn{n(1+\beta)/(n+\beta)} levels off at \eqn{\beta + 1}, so
+#'       the fit becomes insensitive to the input sample size),
+#'       \code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
+#'       \code{"fixed"} (\eqn{\alpha_0 = n}, effective sample size about
+#'       \eqn{n/2}). Thorson et al. (2017, Fisheries Research 192: 84-93).}
+#'
+#'     \item{\code{dm_shared}}{Logical; one precision parameter for all gears
+#'       instead of one per gear (default \code{FALSE}).}
+#'
+#'     \item{\code{dm_prior_sd}}{SD of a weak normal prior on the log precision
+#'       (default 1; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
+#'       or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
+#'       matters when the data show no overdispersion (input sample size below
+#'       what the data support), where it keeps the precision finite.}
+#'
+#'     \item{\code{pile}}{GTG only: predicted length composition from numbers
+#'       integrated over each length class (\code{1}, default) or from the
+#'       survivorship at the class bound (\code{0}, LBB without the pile-up
+#'       correction, Pile = 0); values in between mix the two as LBB.
+#'       Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
@@ -799,8 +1030,30 @@ fiticc_core <- function(lfd, stklen,
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
 #'
-#'     \item{\code{prior_sigmaF}}{Prior for annual fishing mortality variation
-#'       (mean, sd, use flag).}
+#'     \item{\code{sigmaF}, default}{By default log F follows a random walk by gear
+#'       with sigmaF fixed at 0.3 (fast and stable). sigmaF is estimated only
+#'       when \code{prior_sigmaF} is given (penalised fixed effect with that
+#'       prior) or with \code{F_re = TRUE} (random effects). The random walk is
+#'       switched off with \code{prior_sigmaF = FALSE}.}
+#'
+#'     \item{\code{prior_sigmaF}}{Random walk on log F by gear and its
+#'       standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
+#'       log(sigmaF) with \code{use = 1} switching the random walk on. With
+#'       \code{sd = NA} there is no prior on sigmaF.}
+#'
+#'     \item{\code{F_re}}{Logical. If \code{TRUE}, log F by year and gear are
+#'       random effects (state-space random walk) integrated out by the Laplace
+#'       approximation, so sigmaF is estimated from the marginal likelihood and
+#'       standard errors include the F process. If \code{FALSE} (default), log F
+#'       are fixed effects with a random-walk penalty, where sigmaF is mainly
+#'       set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
+#'       supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.}
+#'
+#'     \item{\code{sigmaF}}{Optional fixed value of sigmaF (random-walk SD of
+#'       log F). Fits are then as fast as the penalised default. A practical
+#'       use is to estimate sigmaF once with \code{F_re = TRUE} on the full
+#'       data, then fix it for repeated fits (e.g. in an MSE); the yearly
+#'       estimates closely match the full random-effects fit.}
 #'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become
@@ -812,6 +1065,20 @@ fiticc_core <- function(lfd, stklen,
 #'       bin before the likelihood (tail compression). Reduces the influence
 #'       of the binning and sampling of the largest fish. Default \code{NULL}
 #'       (off). Predicted compositions in the report stay unpooled.}
+#'
+#'     \item{\code{tail_cut}}{Optional tail cut, an absolute length in the
+#'       units of the length bins (as \code{Lplus}), e.g. \code{50}. Length
+#'       bins with lower bound \code{>= tail_cut} are excluded from the
+#'       composition likelihood: observed and predicted compositions are
+#'       truncated and the predicted proportions renormalised over the retained
+#'       bins, so the fit conditions on fish below the cut. Reduces the
+#'       influence of the largest fish, which are most sensitive to
+#'       \eqn{L_\infty}, growth variability (CVL), dome-shaped selectivity and
+#'       the memory of past F. As a fixed length, the same bins are used
+#'       whatever \eqn{L_\infty} is assumed (sensitivity runs, MSE
+#'       iterations). \code{LBIspr()} and \code{LBImean()} apply the same cut by
+#'       default. Values <= 1.5 are read as a fraction of \eqn{L_\infty} (earlier
+#'       definition) with a warning. Default \code{NULL} (off).}
 #'
 #'     \item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
 #'       The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
@@ -839,6 +1106,19 @@ fiticc_core <- function(lfd, stklen,
 #'   \code{1e-3}.
 #' @param control Optional list of control arguments passed to \code{nlminb()}.
 #'   Values supplied here override the FLicc defaults.
+#' @param se Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
+#'   standard errors, but faster (useful in an MSE). The Hessian is still
+#'   checked by the Newton polishing.
+#'   Default \code{TRUE}.
+#' @param newton Integer. Maximum number of Newton steps after \code{nlminb()}
+#'   (default 3; 0 = none). Each step uses the Hessian of the objective and is
+#'   kept only if it lowers the objective. This drives the gradient of a
+#'   well-defined optimum to near zero, checks that the Hessian is positive
+#'   definite and gives the Newton decrement (see \code{\link{flicc_convergence}}).
+#' @param verbose Logical. If \code{TRUE} (default), print a message when the
+#'   convergence check gives a warning or failure, or when an estimated
+#'   Dirichlet-multinomial precision is at its upper bound. The same
+#'   information is always stored in \code{fit$diagnostics}.
 #' @param by_year Logical. If \code{TRUE}, the model is fitted independently
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
@@ -864,14 +1144,19 @@ fiticc_core <- function(lfd, stklen,
 #'         (sum of counts), consistent with LBSPR and fishblicc.
 #'       \item \code{"nb"}: negative binomial likelihood for counts with
 #'         overdispersion.
-#'       \item \code{"dm"}: Dirichlet-multinomial likelihood for
-#'         overdispersed compositions.
+#'       \item \code{"dm"} (default): Dirichlet-multinomial likelihood for
+#'         overdispersed compositions, with the precision estimated
+#'         (\code{dm_theta = "saturating"}) so that the data set their own
+#'         weight; use raw counts or an effective sample size of at least 500.
 #'     }
 #' }
 #'
-#' The default model (\code{pop_model = "gtg"}, \code{obs_model = "mn"})
-#' provides a fast and stable formulation closely aligned with LBSPR-style
-#' length-based assessment models.
+#' The default model (\code{pop_model = "gtg"}, \code{obs_model = "dm"} with
+#' estimated precision, all years jointly with a random walk on F) is FLicc's
+#' recommended configuration. LBSPR corresponds to \code{obs_model = "mn"} with
+#' Linf, M/k and CVL fixed and each year fitted separately
+#' (\code{by_year = TRUE}); LBB to \code{lbb_flicc()}; fishblicc to
+#' \code{pop_model = "gamma"}, \code{obs_model = "nb"}.
 #'
 #' @return An object of class \code{"flicc_tmb_fit"} containing:
 #' \describe{
@@ -902,11 +1187,10 @@ fiticc <- function(lfd, stklen,
                      GL = 30,
                      catch.sd = 0.05,
                      pop_model = "gtg",
-                     obs_model = "mn",
+                     obs_model = "dm",
                      ngtg = 13,
                      maxsd = 2,
                      Mpow = 0,
-                     prior_sigmaF = c(log(0.5), 0.3, 1),
                      linf.sd = NULL,
                      Mk.sd = NULL,
                      CVL.sd = NULL
@@ -924,7 +1208,10 @@ fiticc <- function(lfd, stklen,
                    refit_GL = 100,
                    n_restart = 3,
                    grad_tol = 1e-3,
-                   control = list()) {
+                   control = list(),
+                   se = TRUE,
+                   newton = 3,
+                   verbose = TRUE) {
 
 
      if(by_year){
@@ -959,9 +1246,11 @@ fiticc <- function(lfd, stklen,
          dll = dll,
          sel_fixed = sel_fixed,
          n_restart = n_restart,
+         se = se,
          grad_tol = grad_tol,
          control = control,
-         FLRreport = TRUE
+         FLRreport = TRUE,
+         newton = newton
          )}
       )
       repy <-  fity[[1]]$report
@@ -983,6 +1272,11 @@ fiticc <- function(lfd, stklen,
       fit_final <- fity[[nyrs]]
       fit_final$stklen <- stklen
       fit_final$report[qs] <- repy[qs]
+      if (!is.null(fity[[1]]$report$epr)) {
+        ep <- fity[[1]]$report$epr
+        for (y in 2:nyrs) ep <- append(ep, fity[[y]]$report$epr)
+        fit_final$report$epr <- ep
+      }
   }
 
 
@@ -1001,9 +1295,11 @@ fiticc <- function(lfd, stklen,
     sel_fixed = sel_fixed,
     start = start,
     n_restart = n_restart,
+    se = se,
     grad_tol = grad_tol,
     control = control,
-    FLRreport = FLRreport
+    FLRreport = FLRreport,
+    newton = newton
   )
 
   if(pop_model_flicc(fit1)%in%"gtg")  safe_fit = FALSE
@@ -1031,9 +1327,11 @@ fiticc <- function(lfd, stklen,
         sel_fixed = sel_fixed,
         start = fit1$opt$par,
         n_restart = n_restart,
+        se = se,
         grad_tol = grad_tol,
         control = control,
-        FLRreport = FLRreport
+        FLRreport = FLRreport,
+        newton = newton
       ),
       error = function(e) NULL
     )
@@ -1053,6 +1351,7 @@ fiticc <- function(lfd, stklen,
   )
   }
 
+  if (isTRUE(verbose)) messages_flicc(fit_final)
   fit_final
 }
 
@@ -1107,6 +1406,10 @@ need_refit_flicc <- function(fit, grad_tol = 0.02) {
     return(TRUE)
 
   if (!is.null(fit$rep$pdHess) && !isTRUE(fit$rep$pdHess))
+    return(TRUE)
+
+  # Hessian check from the Newton polishing (available without sdreport)
+  if (!is.null(fit$diagnostics$hess_pd) && isFALSE(fit$diagnostics$hess_pd))
     return(TRUE)
 
 
@@ -1316,6 +1619,9 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
     }
   }
 
+  # drop the levels of fixed entries: TMB sizes the parameter vector by the
+  # number of levels, so unused levels would add phantom NA parameters
+  Sm_map <- factor(as.character(Sm_map), levels = unique(as.character(Sm_map[!is.na(Sm_map)])))
   list(parameters = parameters, map_Sm = Sm_map)
 }
 
@@ -1354,6 +1660,15 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
 #' The Hessian positive-definiteness check first looks for `fit$rep$pdHess`,
 #' then for `fit$sdrep$pdHess`. The eigenvalue check recomputes a numerical
 #' Hessian using `stats::optimHess()`.
+#'
+#' The Newton decrement \eqn{\frac12 g'H^{-1}g} (from the Newton polishing in
+#' [fiticc()]) is the expected further improvement in log-likelihood and does
+#' not depend on the scale of the objective or of the parameters, unlike the
+#' gradient. With a positive definite Hessian and a decrement available, the
+#' overall tier is "ok" when the decrement is below 0.001 and "warning" when it
+#' is up to 0.1, whatever the gradient; without a decrement (`newton = 0`) the
+#' gradient is compared with `grad_tol` instead. The tier is "fail" when the
+#' Hessian is not positive definite or the decrement is above 0.1.
 #'
 #' @examples
 #' \dontrun{
@@ -1404,34 +1719,48 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
 
   min_eig <- if (!inherits(eig, "try-error")) min(eig, na.rm = TRUE) else NA_real_
 
+  dg <- fit$diagnostics
+  dec <- if (!is.null(dg$decrement)) dg$decrement else NA_real_
+  tier <- conv_tier_flicc(fit$opt$objective,
+                          if (is.na(pdHess)) (if (is.finite(min_eig)) min_eig > eig_tol else NA) else isTRUE(pdHess),
+                          dec, max_grad, grad_tol = grad_tol)
+
   out <- data.frame(
     check = c(
       "Optimizer finished normally",
       "Gradient is acceptable",
       "Hessian is positive definite",
       "Standard errors available",
-      "Hessian eigenvalues are positive"
+      "Hessian eigenvalues are positive",
+      "Newton decrement is negligible",
+      "Overall"
     ),
     value = c(
       paste0(opt_code, " - ", opt_msg),
       signif(max_grad, 4),
       as.character(pdHess),
       paste0(n_par - n_nan_se, " / ", n_par, " parameters"),
-      signif(min_eig, 4)
+      signif(min_eig, 4),
+      signif(dec, 3),
+      tier
     ),
     passed = c(
       identical(opt_code, 0L),
       isTRUE(max_grad < grad_tol),
       isTRUE(pdHess),
       isTRUE(n_nan_se == 0),
-      isTRUE(min_eig > eig_tol)
+      isTRUE(min_eig > eig_tol),
+      if (is.na(dec)) NA else dec <= 1e-3,
+      tier != "fail"
     ),
     interpretation = c(
       "The optimizer found a numerical optimum.",
       "The fit is close to a stationary point.",
       "The model curvature is well behaved.",
       "Uncertainty could be estimated for all parameters.",
-      "No flat or negative curvature directions were detected."
+      "No flat or negative curvature directions were detected.",
+      "Expected further gain in log-likelihood (0.5 g'H^-1 g) is below 0.001; NA without Newton polishing.",
+      "ok: converged; warning: usable, but check the gradient or decrement; fail: do not use."
     ),
     stringsAsFactors = FALSE
   )
@@ -1440,3 +1769,31 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
   out
 }
 
+#' Random-walk standard deviation of log F from an FLicc fit
+#'
+#' Returns sigmaF, the standard deviation of the random walk on log F, as
+#' estimated (or fixed) in a fit. Typical use: estimate it once with
+#' \code{settings$F_re = TRUE}, then fix it in repeated fits (e.g. in an MSE)
+#' with \code{settings$sigmaF = sigmaF_flicc(fit)}.
+#'
+#' @param fit A fitted \code{"flicc_tmb_fit"} object.
+#' @return Numeric scalar sigmaF, or \code{NA} if the fit has no random walk on F.
+#' @examples
+#' \dontrun{
+#' fit_re <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+#'                  settings = list(F_re = TRUE))
+#' sig <- sigmaF_flicc(fit_re)
+#' fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+#'               settings = list(sigmaF = sig))
+#' }
+#' @export
+sigmaF_flicc <- function(fit) {
+  if (!is.null(fit$par) && "log_sigmaF" %in% fit$par$par) {
+    return(exp(fit$par$mpd[fit$par$par == "log_sigmaF"][1]))
+  }
+  if (!is.null(fit$settings$sigmaF)) return(as.numeric(fit$settings$sigmaF))
+  pl <- tryCatch(fit$obj$env$parList(par = fit$obj$env$last.par.best), error = function(e) NULL)
+  if (!is.null(pl) && isTRUE(fit$tmb_data$prior_sigmaF_use == 1L) &&
+      length(unique(fit$tmb_data$year_names)) > 1) return(exp(pl$log_sigmaF))
+  NA_real_
+}

@@ -342,6 +342,7 @@ nf_from_flicc <- function(fit,
   } else if (pop_model == "gtg") {
 
     td <- fit$tmb_data
+    if (is.null(td$cut_bin)) td$cut_bin <- -1L                    # fits before tail_cut
     gtg <- gtg_inputs_flicc(fit)
 
     nlen <- length(ref$Len)
@@ -592,6 +593,7 @@ flicc_refpars <- function(fit, nyears = 1, scale_sel = TRUE) {
 brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
                           FM = FALSE, spawn_time = 0, Fmax = 5) {
   td <- fit$tmb_data
+  if (!is.null(td) && is.null(td$cut_bin)) td$cut_bin <- -1L   # fits before tail_cut
   if (is.null(fit$obj) || is.null(fit$opt$par) || is.null(td$gtg_z)) return(NULL)
   k <- as.numeric(fit$stklen@lhpar["k"])
   td$brp_F       <- as.numeric(Fseq)
@@ -602,9 +604,22 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_spawn   <- as.numeric(spawn_time)
   td$brp_Fmax    <- as.numeric(Fmax)
   td$brp_only    <- 1L
+  if (is.null(td$dm_type)) td$dm_type <- 0L        # fits made before dm_theta
+  if (is.null(td$catch_units)) td$catch_units <- 0L # fits made before catch_units (numbers)
+  if (is.null(td$pile)) td$pile <- 1                # fits made before the pile option
+  if (is.null(td$dm_prior_mu)) td$dm_prior_mu <- rep(0, length(fit$tmb_data$gear_names))
+  if (is.null(td$dm_prior_sd)) td$dm_prior_sd <- 0
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
-  pl <- fit$obj$env$parList(fit$opt$par)
+  # full parameter set at the optimum, including random effects (F_re = TRUE)
+  rnd <- fit$obj$env$random
+  full <- fit$obj$env$last.par.best
+  pl <- if (length(rnd) && length(full) > length(fit$opt$par)) {
+    fit$obj$env$parList(full[-rnd], full)
+  } else {
+    fit$obj$env$parList(fit$opt$par)
+  }
+  if (is.null(pl$log_dm)) pl$log_dm <- rep(0, length(fit$tmb_data$gear_names))
   # parameters fixed at the estimates (log_phi left free because TMB needs
   # at least one), so almost nothing is recorded on the AD tape and report()
   # runs one double evaluation including the brp block
