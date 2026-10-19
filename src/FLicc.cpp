@@ -353,6 +353,7 @@ Type objective_function<Type>::operator() ()
   array<Type> plen(nlen, nyear, ngear);
   matrix<Type> Fk(nyear, ngear);
   vector<Type> spr_y(nyear);
+  vector<Type> epr_y(nyear);  // exploitable potential ratio: vulnerable biomass per recruit, fished / unfished
   matrix<Type> N_y(nlen, nyear);
   matrix<Type> plen_all_y(nlen, nyear);
   matrix<Type> catch_share(nyear, ngear);   // predicted catch shares (units of catch_units)
@@ -364,6 +365,7 @@ Type objective_function<Type>::operator() ()
   matrix<Type> Fk_l(nlen, nyear);
 
   sel_joint.setZero();
+  epr_y.setZero();
   Fk_l.setZero();
   plen.setZero();
   Fk.setZero();
@@ -524,6 +526,20 @@ Type objective_function<Type>::operator() ()
       } else {
         sel_joint(l,y) = Type(0);
       }
+    }
+
+    // Exploitable potential ratio (EPR): biomass vulnerable to the fishery
+    // (weighted by the combined selectivity of all gears) per recruit at the
+    // year's F relative to the unfished state; equivalent to LBB's B/B0
+    // (Froese et al. 2018) for one gear.
+    {
+      Type epr0 = Type(0);
+      Type eprf = Type(0);
+      for(int l = 0; l < nlen; l++) {
+        epr0 += N0(l) * wt(l,y) * sel_joint(l,y);
+        eprf += N(l)  * wt(l,y) * sel_joint(l,y);
+      }
+      epr_y(y) = CppAD::CondExpGt(epr0, Type(0), eprf / (epr0 + Type(1e-30)), Type(0));
     }
 
     // combined expected length composition of the whole catch (numbers):
@@ -844,9 +860,11 @@ Type objective_function<Type>::operator() ()
   }
 
   vector<Type> log_spr_y = log(spr_y);
+  vector<Type> log_epr_y = log(epr_y + Type(1e-30));
 
   REPORT(Sel);        // nlen x ngear
   REPORT(plen);       // nlen x nyear x ngear
+  REPORT(epr_y);
   REPORT(spr_y);      // nyear x 1
   REPORT(catch_share); // nyear x ngear, predicted catch shares in weight
   REPORT(catch_share_n); // nyear x ngear, predicted catch shares in numbers
@@ -875,6 +893,7 @@ Type objective_function<Type>::operator() ()
   ADREPORT(log_Mk);
   ADREPORT(log_sigmaF);
   ADREPORT(log_spr_y);
+  ADREPORT(log_epr_y);
 
   return nll;
 }

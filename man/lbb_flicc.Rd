@@ -5,7 +5,7 @@
 \usage{
 lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
   Lm50 = NULL, a = 0.01, b = 3, k = 1, sel_fun = c("logistic", "normal"),
-  years = NULL, by_year = TRUE, settings = list(), ...)
+  years = NULL, ess = NULL, by_year = TRUE, settings = list(), ...)
 }
 \arguments{
 \item{lfd}{\code{FLQuants} (or \code{FLQuant}) of length frequencies; gears are pooled.}
@@ -25,6 +25,8 @@ lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
 \item{sel_fun}{\code{"logistic"} (trawl-like, LBB default) or \code{"normal"} (LBB \code{GausSel}).}
 
 \item{years}{Optional years to use.}
+
+\item{ess}{Optional ESS per year: \code{NULL} (default) raw counts with estimated Dirichlet-multinomial precision; a number rescales the counts (\code{lfdess()}) and fixes the DM precision, for comparison with LBB (LBB's Dirichlet concentration of 10^4 corresponds to about \code{ess = 20000} with the fixed DM).}
 
 \item{by_year}{\code{TRUE} (default, as LBB): years fitted separately; \code{FALSE}: joint fit with a random walk on F.}
 

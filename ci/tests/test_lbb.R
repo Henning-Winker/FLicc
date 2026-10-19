@@ -40,3 +40,20 @@ if (!is.null(dat)) {
   print(li0)
   ggplot2::ggsave(file.path(od, "lbb_illex.png"), plot_lbb(li), width = 10, height = 7, dpi = 100)
 } else cat("LBB example data not reachable; skipped.\n")
+
+# 4. EPR from the FLicc engine vs LBB's B/B0 (closed form), and plot_epr
+print(lb$table[, c("year", "BB0", "EPR", "SPR")])
+stopifnot(all(is.finite(lb$table$EPR)), cor(lb$table$BB0, lb$table$EPR) > 0.9)
+data("alfonsino")
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, a = 0.004721956 / 1000, b = 3.146168)
+stk <- stocklen(lfd, lhpar, m_model = "constant")
+fit2 <- fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = c(0.7, 0.3),
+               settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+print(epr_ci_flicc(fit2)); print(spr_ci_flicc(fit2)[1:3, ])
+ggplot2::ggsave(file.path(od, "epr_alfonsino.png"), plot_epr(fit2, ci = TRUE), width = 7, height = 4, dpi = 100)
+ggplot2::ggsave(file.path(od, "epr_lbb.png"),
+                plot_epr(lb$fits[["2024"]], ref_levels = attr(lb$table, "BFM1B0") * c(1, 0.5)), width = 7, height = 4, dpi = 100)
+
+# 5. LBB-like weighting: ESS 20000 with fixed DM (LBB Dirichlet concentration 10^4)
+lbe <- lbb_flicc(gn, Lm50 = 31.2, ess = 20000)
+print(lbe)

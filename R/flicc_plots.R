@@ -68,8 +68,74 @@ plot_spr <- function(fit,
                      ci = FALSE,
                      ci_level = 0.95,
                      ci_type = c("bars", "ribbon")) {
+  plot_ratio_flicc(fit, what = "spr", title = title, by_year = by_year, line_colour = line_colour,
+                   point_colour = point_colour, linewidth = linewidth, point_size = point_size,
+                   ymax = ymax, reflines = reflines, ref_levels = ref_levels, ref_colours = ref_colours,
+                   ref_linetype = ref_linetype, ci = ci, ci_level = ci_level, ci_type = ci_type)
+}
+
+#' Plot the exploitable potential ratio (EPR)
+#'
+#' EPR is the biomass vulnerable to the fishery (length weights times the
+#' combined selectivity of all gears, i.e. F at length relative to apical F)
+#' per recruit at the year's F, relative to the unfished state. For one gear it
+#' is the quantity LBB reports as B/B0 (Froese et al. 2018). Same features as
+#' [plot_spr()]: one fit or a named list of fits, confidence intervals from the
+#' standard errors of log EPR (`TMB::sdreport()`), reference lines.
+#'
+#' @inheritParams plot_spr
+#' @param ref_levels EPR reference levels (default 0.4 and 0.2). For LBB's
+#'   reference use `attr(lbb$table, "BFM1B0")` (B/B0 at F = M and Lc = Lc_opt,
+#'   a proxy for Bmsy/B0) and half of it.
+#' @return A `ggplot` object.
+#' @seealso [plot_spr()], [epr_ci_flicc()], [lbb_flicc()]
+#' @examples
+#' \dontrun{
+#' plot_epr(fit, ci = TRUE)
+#' plot_epr(list(base = fit, cut = fit_cut), ci = TRUE, ci_type = "ribbon")
+#' }
+#' @export
+plot_epr <- function(fit,
+                     title = NULL,
+                     by_year = 2,
+                     line_colour = "black",
+                     point_colour = "black",
+                     linewidth = 0.6,
+                     point_size = 2,
+                     ymax = NULL,
+                     reflines = TRUE,
+                     ref_levels = c(0.4, 0.2),
+                     ref_colours = c("darkgreen", "red"),
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
+  plot_ratio_flicc(fit, what = "epr", title = title, by_year = by_year, line_colour = line_colour,
+                   point_colour = point_colour, linewidth = linewidth, point_size = point_size,
+                   ymax = ymax, reflines = reflines, ref_levels = ref_levels, ref_colours = ref_colours,
+                   ref_linetype = ref_linetype, ci = ci, ci_level = ci_level, ci_type = ci_type)
+}
+
+#' Plot SPR or EPR (internal engine of plot_spr and plot_epr)
+#' @noRd
+plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
+                     title = NULL,
+                     by_year = 2,
+                     line_colour = "black",
+                     point_colour = "black",
+                     linewidth = 0.6,
+                     point_size = 2,
+                     ymax = NULL,
+                     reflines = TRUE,
+                     ref_levels = c(0.4, 0.2, 0.1),
+                     ref_colours = c("darkgreen", "orange", "red"),
+                     ref_linetype = 2,
+                     ci = FALSE,
+                     ci_level = 0.95,
+                     ci_type = c("bars", "ribbon")) {
 
   ci_type <- match.arg(ci_type)
+  what <- match.arg(what)
 
   # confidence intervals from the SEs of log SPR (fits only)
   ci_df <- NULL
@@ -81,7 +147,7 @@ plot_spr <- function(fit,
     } else {
       nms <- if (!is.null(names(fits))) names(fits) else paste0("run", seq_along(fits))
       ci_df <- do.call(rbind, lapply(seq_along(fits), function(i) {
-        x <- spr_ci_flicc(fits[[i]], level = ci_level)
+        x <- ratio_ci_flicc(fits[[i]], what = what, level = ci_level)
         if (is.null(x)) return(NULL)
         x$qname <- nms[i]
         x
@@ -102,13 +168,15 @@ plot_spr <- function(fit,
   if (inherits(fit, "list")&&inherits(fit[[1]], "flicc_tmb_fit") ){
     if(is.null(names(fit))) names <- paste0("run",1:length(fit))
     res <- FLQuants(lapply(fit,function(x){
-      x <- x$report$spr
+      x <- x$report[[what]]
+      if (is.null(x)) stop("Fit without report$", what, " (refit with the current FLicc version).")
       FLQuant(x,quant="all")
     }))
   }
 
   if (inherits(fit, "flicc_tmb_fit")){
-      res <- fit$report$spr
+      res <- fit$report[[what]]
+      if (is.null(res)) stop("Fit without report$", what, " (refit with the current FLicc version).")
     }
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -134,7 +202,7 @@ plot_spr <- function(fit,
   pd <- ggplot2::position_dodge(width = if (multi && !is.null(ci_df) && ci_type == "bars") 0.35 else 0)
 
   if (is.null(title)) {
-    title <- "Spawning potential ratio"
+    title <- if (what == "spr") "Spawning potential ratio" else "Exploitable potential ratio"
   }
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = year_num, y = data))
@@ -177,7 +245,7 @@ plot_spr <- function(fit,
     ggplot2::coord_cartesian(ylim = c(0, ymax)) +
     ggplot2::labs(
       x = "Year",
-      y = "SPR",
+      y = toupper(what),
       title = title
     ) +
     ggplot2::theme_bw() +
@@ -2213,17 +2281,34 @@ plot_LBIp <- function(fit,
 #' @return A data frame with `year`, `spr`, `se_log`, `lwr`, `upr`, or `NULL`
 #'   if the fit has no standard errors.
 #' @export
-spr_ci_flicc <- function(fit, level = 0.95) {
+spr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "spr", level)
+
+#' Confidence intervals of the exploitable potential ratio
+#'
+#' As [spr_ci_flicc()] for EPR: intervals from the standard errors of log EPR
+#' (`TMB::sdreport()`), back-transformed.
+#' @param fit A fitted FLicc object (with standard errors).
+#' @param level Confidence level.
+#' @return A `data.frame` with year, epr, se_log, lwr, upr, or `NULL` without
+#'   standard errors.
+#' @export
+epr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "epr", level)
+
+#' @noRd
+ratio_ci_flicc <- function(fit, what = c("spr", "epr"), level = 0.95) {
+  what <- match.arg(what)
   if (is.null(fit$rep)) return(NULL)
   s <- summary(fit$rep, "report")
-  s <- s[rownames(s) == "log_spr_y", , drop = FALSE]
+  s <- s[rownames(s) == paste0("log_", what, "_y"), , drop = FALSE]
   if (!nrow(s)) return(NULL)
   z <- stats::qnorm(1 - (1 - level) / 2)
   yrs <- if (!is.null(fit$tmb_data$year_names)) fit$tmb_data$year_names else
-    dimnames(fit$report$spr)$year
-  data.frame(year = as.character(yrs), spr = exp(s[, 1]), se_log = s[, 2],
-             lwr = exp(s[, 1] - z * s[, 2]), upr = exp(s[, 1] + z * s[, 2]),
-             row.names = NULL)
+    dimnames(fit$report[[what]])$year
+  out <- data.frame(year = as.character(yrs), est = exp(s[, 1]), se_log = s[, 2],
+                    lwr = exp(s[, 1] - z * s[, 2]), upr = exp(s[, 1] + z * s[, 2]),
+                    row.names = NULL)
+  names(out)[2] <- what
+  out
 }
 
 #' Sample size of length-frequency data by year and gear

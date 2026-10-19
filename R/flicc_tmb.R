@@ -1256,6 +1256,11 @@ fiticc <- function(lfd, stklen,
       fit_final <- fity[[nyrs]]
       fit_final$stklen <- stklen
       fit_final$report[qs] <- repy[qs]
+      if (!is.null(fity[[1]]$report$epr)) {
+        ep <- fity[[1]]$report$epr
+        for (y in 2:nyrs) ep <- append(ep, fity[[y]]$report$epr)
+        fit_final$report$epr <- ep
+      }
   }
 
 

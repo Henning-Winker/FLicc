@@ -322,6 +322,13 @@ as_FLQuants <- function(fit,stklen) {
   out$pop_model <- pop_model
   out$obs_model <- obs_model
 
+  # exploitable potential ratio (vulnerable biomass per recruit, fished/unfished)
+  if (!is.null(report$epr_y)) {
+    out$epr <- FLCore::FLQuant(matrix(report$epr_y, nrow = 1),
+      dimnames = list(quant = "all", year = yrs, unit = "unique", season = "all",
+                      area = "unique", iter = "1"))
+    units(out$epr) <- "epr"
+  }
   out$FLReport <- TRUE
   return(out)
 

@@ -140,6 +140,14 @@ lbb_pool_flicc <- function(lfd) {
 #' @param sel_fun `"logistic"` (LBB default, trawl-like) or `"normal"`
 #'   (LBB `GausSel`).
 #' @param years Optional years to use (LBB `Years.user`).
+#' @param ess Optional effective sample size per year. `NULL` (default): raw
+#'   counts with the Dirichlet-multinomial precision estimated from the data
+#'   (FLicc's recommended likelihood). A number: counts rescaled to this ESS
+#'   with [lfdess()] and the DM precision fixed (`dm_theta = "fixed"`), for
+#'   comparison with LBB. LBB's Dirichlet has a concentration of 10 x 1000 =
+#'   10^4 on the proportions, i.e. a variance close to a multinomial with
+#'   n = 10^4; a fixed DM at ESS n has n_eff about n/2, so `ess = 20000`
+#'   matches LBB's weighting (`ess = 1000` weights the data 20 times less).
 #' @param by_year `TRUE` (default, as LBB): each year fitted separately;
 #'   `FALSE`: all years jointly with a random walk on F.
 #' @param settings Further [fiticc()] settings; they override the LBB defaults
@@ -152,7 +160,7 @@ lbb_pool_flicc <- function(lfd) {
 #' @export
 lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
                       Lm50 = NULL, a = 0.01, b = 3, k = 1,
-                      sel_fun = c("logistic", "normal"), years = NULL,
+                      sel_fun = c("logistic", "normal"), years = NULL, ess = NULL,
                       by_year = TRUE, settings = list(), ...) {
   sel_fun <- match.arg(sel_fun)
   x <- lbb_pool_flicc(lfd)
@@ -167,7 +175,8 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
   lhpar <- FLCore::FLPar(linf = pr$Linf, k = k, M = pr$MK * k, L50 = Lm50, a = a, b = b)
   set0 <- list(pop_model = "gtg", ngtg = 1, CVL = 0.1, maxsd = 0,
                linf.sd = pr$Linf.sd / pr$Linf, Mk.sd = pr$MK.sd / pr$MK,
-               tail_cut = pr$Linf, obs_model = "dm", dm_theta = "saturating")
+               tail_cut = pr$Linf, obs_model = "dm",
+               dm_theta = if (is.null(ess)) "saturating" else "fixed")
   set <- utils::modifyList(set0, settings)
   gname <- if (inherits(lfd, "FLQuants") && length(lfd) == 1) names(lfd) else "pooled"
   yrs <- dimnames(x)$year
@@ -175,6 +184,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
   yrs <- yrs[has]
   fit_one <- function(xx) {
     lq <- FLCore::FLQuants(stats::setNames(list(xx), gname))
+    if (!is.null(ess)) lq <- lfdess(lq, ess.g = ess)
     stk <- stocklen(lq, lhpar, m_model = "constant")
     fiticc(lq, stk, sel_fun = sel_fun, catch_by_gear = 1, settings = set, ...)
   }
@@ -183,7 +193,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
       warning("LBB fit for year ", y, " failed: ", conditionMessage(e), call. = FALSE); NULL })), yrs)
   } else list(joint = fit_one(x[, yrs]))
   out <- structure(list(fits = fits, priors = pr, by_year = isTRUE(by_year), sel_fun = sel_fun,
-                        settings = set, lhpar = lhpar, lfd = x, Lm50 = Lm50),
+                        settings = set, lhpar = lhpar, lfd = x, Lm50 = Lm50, ess = ess),
                    class = "flicc_lbb")
   out$table <- lbbref_flicc(out)
   out
@@ -246,7 +256,8 @@ lbb_bh_flicc <- function(lens, Linf, MK, FK, gaus = FALSE, selpar1, selpar2) {
 #' with 95% intervals (from the fits' standard errors on the log scale), Lopt =
 #' 3/(3 + M/K) Linf, Lc_opt = Linf (2 + 3 F/M) / ((1 + F/M)(3 + M/K)), Lmean
 #' (above Lc), L95, the share of mature fish, B/B0 and Y/R' from
-#' [lbb_bh_flicc()] (intervals by LBB's error propagation), and FLicc's SPR.
+#' [lbb_bh_flicc()] (intervals by LBB's error propagation), FLicc's EPR (the
+#' same quantity from the FLicc engine, see [plot_epr()]) and SPR.
 #' Attributes: `BFM1B0` (B/B0 at F = M with Lc = Lc_opt, LBB's proxy for
 #' Bmsy) and `YRFM1`.
 #' @param x Output of [lbb_flicc()].
@@ -299,6 +310,7 @@ lbbref_flicc <- function(x) {
                perc_mat = sum(obs[L > x$Lm50]) / sum(obs),
                BB0 = bh[["BB0"]], BB0_lcl = bh[["BB0"]] * (1 - rl[["lo"]]), BB0_ucl = bh[["BB0"]] * (1 + rl[["hi"]]),
                YR = bh[["YR"]],
+               EPR = if (!is.null(f$report$epr)) as.numeric(f$report$epr[, yr]) else NA_real_,
                SPR = as.numeric(f$report$spr[, yr]))
   }
   rows <- if (isTRUE(x$by_year)) {
