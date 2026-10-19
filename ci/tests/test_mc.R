@@ -13,7 +13,8 @@ mc <- mc_flicc(fit, nsim = 12, cv = list(linf = 0.1, k = 0.1, M = 0.2, L50 = 0.1
 cat("time:", round(as.numeric(difftime(Sys.time(), t0, units = "secs"))), "s\n")
 print(table(mc$conv)); print(mc$ok)
 # rsd stayed fixed in every successful refit
-rsd <- vapply(which(mc$ok), function(i) as.numeric(iter(mc$selpars[["Gillnet"]], i)["rsd"]), numeric(1))
+print(mc$selpars[["Gillnet"]])
+rsd <- as.numeric(mc$selpars[["Gillnet"]]["rsd", ])[mc$ok]
 print(rsd)
 stopifnot(all(abs(rsd - 30) < 1e-6))
 # failed / non-converged draws carry NA, not copies of the reference fit
