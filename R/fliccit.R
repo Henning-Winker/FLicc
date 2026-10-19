@@ -606,6 +606,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   td$brp_only    <- 1L
   if (is.null(td$dm_type)) td$dm_type <- 0L        # fits made before dm_theta
   if (is.null(td$catch_units)) td$catch_units <- 0L # fits made before catch_units (numbers)
+  if (is.null(td$pile)) td$pile <- 1                # fits made before the pile option
   if (is.null(td$dm_prior_mu)) td$dm_prior_mu <- rep(0, length(fit$tmb_data$gear_names))
   if (is.null(td$dm_prior_sd)) td$dm_prior_sd <- 0
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",

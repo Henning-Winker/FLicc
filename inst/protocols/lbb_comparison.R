@@ -5,7 +5,8 @@
 # Lcut.user, GausSel, Lm50) and two data weightings:
 #   "dm"     : FLicc default, raw data with Dirichlet-multinomial precision estimated
 #   "lbb"    : LBB-like, counts rescaled to ESS 20000 with the DM precision fixed
-#              (n_eff ~ 10^4, as LBB's Dirichlet concentration of 10 x 1000)
+#              (n_eff ~ 10^4, as LBB's Dirichlet concentration of 10 x 1000),
+#              and LBB's Pile setting of the ID file
 # Output: one row per stock, year and weighting, with the LBB quantities
 # (Linf, Lc, alpha, M/K, F/K, F/M, Z/K, Lopt, Lc_opt, Lmean/Lopt, B/B0, Y/R')
 # plus FLicc's EPR and SPR. Merge with LBB's own results by Stock and Year.
@@ -38,6 +39,7 @@ lbb_id_args <- function(lbbx, stock) {
   list(Linf = num(id$Linf.user), MK = num(id$MK.user), Lc = num(id$Lc.user),
        Lstart = num(id$Lstart.user), Lcut = num(id$Lcut.user), Lm50 = num(id$Lm50),
        sel_fun = if (isTRUE(as.logical(id$GausSel))) "normal" else "logistic",
+       pile = if (!is.na(id$Pile) && id$Pile %in% c(0, 1)) as.numeric(id$Pile) else 1,
        years = years)
 }
 
@@ -53,6 +55,7 @@ lbb_example_lfd <- function(lbbx, stock, raised = TRUE) {
 lbb_example_fit <- function(lbbx, stock, weighting = c("dm", "lbb"), ...) {
   weighting <- match.arg(weighting)
   a <- lbb_id_args(lbbx, stock)
+  if (weighting == "dm") a$pile <- 1        # FLicc model; "lbb": LBB's Pile setting of the ID file
   lfd <- lbb_example_lfd(lbbx, stock)
   do.call(lbb_flicc, c(list(lfd = lfd), a,
                        list(ess = if (weighting == "lbb") 20000 else NULL, verbose = FALSE), list(...)))

@@ -283,6 +283,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
                   else rep(log(10), ngear),
     dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 1,
+    pile = if (!is.null(settings$pile)) as.numeric(settings$pile) else 1,
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -556,6 +557,7 @@ fiticc_core <- function(lfd, stklen,
     dm_shared = FALSE,
     catch_units = "weight",
     dm_prior_sd = 1,
+    pile = 1,
     ngtg = 13,
     maxsd = 2,
     Mpow = 0,
@@ -1001,6 +1003,12 @@ fiticc_core <- function(lfd, stklen,
 #'       or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
 #'       matters when the data show no overdispersion (input sample size below
 #'       what the data support), where it keeps the precision finite.}
+#'
+#'     \item{\code{pile}}{GTG only: predicted length composition from numbers
+#'       integrated over each length class (\code{1}, default) or from the
+#'       survivorship at the class bound (\code{0}, LBB without the pile-up
+#'       correction, Pile = 0); values in between mix the two as LBB.
+#'       Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
 #'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
 #'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}

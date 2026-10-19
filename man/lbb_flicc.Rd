@@ -5,7 +5,7 @@
 \usage{
 lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
   Lm50 = NULL, a = 0.01, b = 3, k = 1, sel_fun = c("logistic", "normal"),
-  years = NULL, ess = NULL, by_year = TRUE, settings = list(), ...)
+  years = NULL, ess = NULL, pile = 1, by_year = TRUE, settings = list(), ...)
 }
 \arguments{
 \item{lfd}{\code{FLQuants} (or \code{FLQuant}) of length frequencies; gears are pooled.}
@@ -27,6 +27,8 @@ lbb_flicc(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
 \item{years}{Optional years to use.}
 
 \item{ess}{Optional ESS per year: \code{NULL} (default) raw counts with estimated Dirichlet-multinomial precision; a number rescales the counts (\code{lfdess()}) and fixes the DM precision, for comparison with LBB (LBB's Dirichlet concentration of 10^4 corresponds to about \code{ess = 20000} with the fixed DM).}
+
+\item{pile}{LBB's pile-up setting: 1 (default) numbers integrated over each length class (LBB Pile = 1); 0 survivorship at the class bound (LBB Pile = 0); values in between mix the two. Only the predicted compositions change.}
 
 \item{by_year}{\code{TRUE} (default, as LBB): years fitted separately; \code{FALSE}: joint fit with a random walk on F.}
 

@@ -207,6 +207,39 @@ vector<Type> pop_len_gtg(const vector<Type>& LLB,
 }
 
 // ---------------------------------------------------------
+// GTG survivorship at the lower bound of each length class, i.e. at the
+// length label, as LBB without the pile-up correction (Pile = 0): sum over
+// groups of the numbers reaching LBins(l). Same recursion as pop_len_gtg().
+// ---------------------------------------------------------
+template<class Type>
+vector<Type> pop_bound_gtg(const vector<Type>& LLB,
+                           const vector<Type>& gtgLinfs,
+                           const matrix<Type>& ZKLMat,
+                           const vector<Type>& recP)
+{
+  int nlen = LLB.size();
+  int ngtg = gtgLinfs.size();
+  vector<Type> LBins(nlen + 1);
+  for(int l = 0; l < nlen; l++) LBins(l) = LLB(l);
+  LBins(nlen) = (nlen > 1) ? Type(LLB(nlen - 1) + (LLB(nlen - 1) - LLB(nlen - 2))) : Type(LLB(0) + Type(1.0));
+  vector<Type> Nb(nlen);
+  Nb.setZero();
+  for(int g = 0; g < ngtg; g++) {
+    Type surv = recP(g);
+    Nb(0) += surv;
+    for(int l = 1; l < nlen; l++) {
+      Type num = gtgLinfs(g) - LBins(l);
+      Type den = gtgLinfs(g) - LBins(l - 1);
+      num = CppAD::CondExpLe(num, Type(1e-12), Type(1e-12), num);
+      den = CppAD::CondExpLe(den, Type(1e-12), Type(1e-12), den);
+      surv = surv * pow(num / den, ZKLMat(l - 1, g));
+      Nb(l) += surv;
+    }
+  }
+  return Nb;
+}
+
+// ---------------------------------------------------------
 // Objective (MULTI-YEAR VERSION)
 // ---------------------------------------------------------
 template<class Type>
@@ -270,6 +303,8 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(dm_type);     // 0: alpha0 = n (fixed), 1: alpha0 = theta n, 2: alpha0 = beta
   DATA_VECTOR(dm_prior_mu);  // weak prior on log_dm by gear (keeps it finite without overdispersion)
   DATA_SCALAR(dm_prior_sd);  // <= 0: no prior
+  DATA_SCALAR(pile);         // GTG predicted composition: 1 numbers integrated over the class (default),
+                             // 0 survivorship at the class bound (LBB Pile = 0), in between: LBB's mix
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
@@ -387,7 +422,7 @@ Type objective_function<Type>::operator() ()
   }
   for(int y = y_first; y < nyear; y++) {
 
-    vector<Type> Z(nlen), N(nlen);
+    vector<Type> Z(nlen), N(nlen), Nobs(nlen);
     matrix<Type> F_len(nlen, ngear), Cpred(nlen, ngear), mu(nlen, ngear);
 
     vector<Type> obs_gear(ngear);
@@ -416,6 +451,7 @@ Type objective_function<Type>::operator() ()
 
     if(pop_model == 1) {
       N = pop_len_glq(node, quad_wt, LLB, Z, Galpha, Gbeta);
+      Nobs = N;
 
     } else if(pop_model == 2) {
       matrix<Type> ZKL(nlen + 1, ngtg);
@@ -429,6 +465,12 @@ Type objective_function<Type>::operator() ()
       }
 
       N = pop_len_gtg(LLB, gtgLinfs, ZKL, recP);
+      if (pile < Type(1)) {
+        vector<Type> Nb = pop_bound_gtg(LLB, gtgLinfs, ZKL, recP);
+        for(int l = 0; l < nlen; l++) Nobs(l) = Nb(l) + pile * (N(l) - Nb(l));
+      } else {
+        Nobs = N;
+      }
 
     } else {
       error("Unknown pop_model");
@@ -455,7 +497,7 @@ Type objective_function<Type>::operator() ()
 
     for(int g = 0; g < ngear; g++) {
       for(int l = 0; l < nlen; l++) {
-        Cpred(l,g) = N(l) * F_len(l,g);
+        Cpred(l,g) = Nobs(l) * F_len(l,g);
         pred_gear(g) += Cpred(l,g);
         obs_gear(g)  += obs(l,y,g);
       }

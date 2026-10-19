@@ -21,12 +21,24 @@ if (!file.exists(f)) { cat("no lbb_examples.rds\n") } else {
     data.frame(variant = lab, Year = tb$year, Lc = tb$Lc, MK = tb$MK, ZK = tb$ZK, FM = tb$FM, BB0 = tb$BB0,
                conv = vapply(as.character(tb$year), function(y) r$fits[[y]]$diagnostics$conv_tier, ""))
   }
+  # slope fixed at LBB's estimated alpha per year: dSL = SL95 - SL50 = log(19) Linf / alpha
+  lbb_alpha <- c(20.4, 36.7, 35.8, 42.7, 25.7, 32.4, 41.8)
+  runa <- function(lab, ...) do.call(rbind, lapply(seq_along(yrs), function(i) {
+    r <- suppressMessages(lbb_flicc(mk(0), Linf = 23, Lm50 = 16, years = yrs[i], ess = 20000, verbose = FALSE,
+                                    sel_fixed = list(Illex = list(dSL = log(19) * 23 / lbb_alpha[i])), ...))
+    tb <- r$table
+    data.frame(variant = lab, Year = tb$year, Lc = tb$Lc, MK = tb$MK, ZK = tb$ZK, FM = tb$FM, BB0 = tb$BB0,
+               conv = r$fits[[1]]$diagnostics$conv_tier)
+  }))
   res <- rbind(
     run("A lbb weighting, no F/M cap"),
     run("B + lengths shifted -0.25 (half bin)", shift = -0.25),
     run("C + lengths shifted -0.5 (one bin)", shift = -0.5),
     run("D default weighting (estimated DM)", ess = NULL),
-    run("E lbb weighting, M/K free (Mk.sd 0.5)", settings = list(Mk.sd = 0.5)))
+    run("E lbb weighting, M/K free (Mk.sd 0.5)", settings = list(Mk.sd = 0.5)),
+    run("F lbb weighting, Pile = 0", pile = 0),
+    runa("G lbb weighting, slope fixed at LBB alpha"),
+    runa("H lbb weighting, Pile = 0, slope fixed at LBB alpha", pile = 0))
   cmp <- merge(res, lbb, by = "Year", suffixes = c("", "_LBB"))
   cmp <- cmp[order(cmp$variant, cmp$Year), ]
   print(format(cmp[, c("variant", "Year", "conv", "Lc", "Lc_LBB", "MK", "MK_LBB", "ZK", "ZK_LBB", "FM", "FM_LBB", "BB0", "BB0_LBB")], digits = 3), row.names = FALSE)

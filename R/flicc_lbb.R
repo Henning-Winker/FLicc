@@ -148,6 +148,10 @@ lbb_pool_flicc <- function(lfd) {
 #'   10^4 on the proportions, i.e. a variance close to a multinomial with
 #'   n = 10^4; a fixed DM at ESS n has n_eff about n/2, so `ess = 20000`
 #'   matches LBB's weighting (`ess = 1000` weights the data 20 times less).
+#' @param pile LBB's pile-up setting: `1` (default) numbers integrated over
+#'   each length class (LBB `Pile = 1`, FLicc's model); `0` survivorship at the
+#'   class bound (LBB `Pile = 0`); values in between mix the two. Only the
+#'   predicted compositions change; SPR and EPR use integrated numbers.
 #' @param by_year `TRUE` (default, as LBB): each year fitted separately;
 #'   `FALSE`: all years jointly with a random walk on F.
 #' @param settings Further [fiticc()] settings; they override the LBB defaults
@@ -160,7 +164,7 @@ lbb_pool_flicc <- function(lfd) {
 #' @export
 lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcut = NULL,
                       Lm50 = NULL, a = 0.01, b = 3, k = 1,
-                      sel_fun = c("logistic", "normal"), years = NULL, ess = NULL,
+                      sel_fun = c("logistic", "normal"), years = NULL, ess = NULL, pile = 1,
                       by_year = TRUE, settings = list(), ...) {
   sel_fun <- match.arg(sel_fun)
   x <- lbb_pool_flicc(lfd)
@@ -176,6 +180,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
   set0 <- list(pop_model = "gtg", ngtg = 1, CVL = 0.1, maxsd = 0,
                linf.sd = pr$Linf.sd / pr$Linf, Mk.sd = pr$MK.sd / pr$MK,
                tail_cut = pr$Linf, obs_model = "dm", FMpen_sd = 0,   # no F/M bounds (LBB has none)
+               pile = pile,
                dm_theta = if (is.null(ess)) "saturating" else "fixed")
   set <- utils::modifyList(set0, settings)
   gname <- if (inherits(lfd, "FLQuants") && length(lfd) == 1) names(lfd) else "pooled"
