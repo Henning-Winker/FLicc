@@ -46,6 +46,15 @@ al. 2016):
   unfished) is available for any FLicc fit as the exploitable potential ratio
   (EPR; section *Reproducing LBB*).
 
+Each of these tools is a configuration of FLicc:
+
+| Tool | FLicc configuration |
+|---|---|
+| LBSPR | `pop_model = "gtg"` (13 groups, CVL 0.1), `obs_model = "mn"`, Linf, M/k and CVL fixed, `by_year = TRUE` |
+| LBB | `lbb_flicc()`: `pop_model = "gtg"` with `ngtg = 1`, `obs_model = "dm"` (fixed precision; `ess = 20000` matches LBB's Dirichlet), priors on Linf and M/k, `by_year = TRUE`, `pile = 0` or `1` |
+| fishblicc | `pop_model = "gamma"`, `obs_model = "nb"`, several gears, catch shares in numbers |
+| FLicc default | `pop_model = "gtg"`, `obs_model = "dm"` with the precision estimated (`dm_theta = "saturating"`), all years jointly with a random walk on F |
+
 On this common basis FLicc adds what a routine assessment and management
 procedure needs: several years fitted jointly with shared selectivity and a
 random walk on F, alternative observation models (multinomial,
@@ -213,8 +222,9 @@ fit1 <- fiticc(lfd, stklen,
 ```
 
 All other settings are at their defaults: growth and M fixed at the input
-values, a multinomial likelihood on the counts as they are, and a random walk on
-F over the years.
+values, a Dirichlet-multinomial likelihood on the counts as they are, with its
+precision estimated from the data (so the counts need no rescaling), and a
+random walk on F over the years.
 
 ## Step 7: check and plot the results
 
@@ -246,12 +256,11 @@ sprcur_flicc(fit1)
 ```
 
 That is a first assessment. Before using it, work through the checks of the
-following sections, in particular the effective sample size (section *Effective
-sample size and observation models*): the raw counts used here usually overstate the information in
-the data, which makes the intervals too narrow. The reference fit used in the
-rest of this guide (next section) differs from `fit1` only in that respect: it
-uses the Dirichlet-multinomial likelihood with an estimated precision, which
-lets the data set their own weight.
+following sections. The default likelihood estimates how much weight the length
+data can carry (section *Effective sample size and observation models*); it
+works best with the raw counts, as here, or an effective sample size of at
+least 500 per gear and year. The reference fit used in the rest of this guide
+(next section) is this default configuration.
 
 # Workflow and defaults
 
@@ -263,19 +272,20 @@ lets the data set their own weight.
 6. **Uncertainty**: sensitivity runs (selectivity dome, CVL, Linf, tail cut).
 7. **Management**: `flicc.sa()` and harvest control rules in an MSE.
 
-A plain `fiticc()` call uses the GTG population model, a multinomial likelihood,
-fixed growth (Linf, CVL) and natural mortality, and a random walk on log F with
-its standard deviation fixed at `sigmaF = 0.3`. These defaults are fast and
-stable; every other option is a deliberate change.
+A plain `fiticc()` call uses the GTG population model, a Dirichlet-multinomial
+likelihood with the precision estimated from the data, fixed growth (Linf, CVL)
+and natural mortality, and a random walk on log F with its standard deviation
+fixed at `sigmaF = 0.3`. Give it the raw counts or an effective sample size of at
+least 500 per gear and year. Every other option is a deliberate change.
 
 ## The reference fit
 
 The rest of the guide uses one reference fit of the alfonsino data: the raw
 counts, a double-sided normal (dome) selectivity for the trawl and a logistic
 one for the gillnet, catch shares of 70% and 30% by weight, CVL = 0.1, and the
-Dirichlet-multinomial likelihood with the precision estimated from the data
-(`dm_theta = "saturating"`, section *Effective sample size and observation
-models*).
+default Dirichlet-multinomial likelihood with the precision estimated from the
+data (`dm_theta = "saturating"`, section *Effective sample size and observation
+models*; given explicitly below for clarity).
 
 ```{r reference-fit}
 sel_fun <- c("dsnormal", "logistic")
@@ -700,7 +710,8 @@ neff_flicc(fit)[1:4, ]
 | Setting | Default | Role |
 |---|---|---|
 | `pop_model` | `"gtg"` | `"gtg"`, `"gamma"` (`"gtg.dyn"`: development) |
-| `obs_model` | `"mn"` | `"mn"`, `"nb"`, `"dm"` |
+| `obs_model` | `"dm"` | `"dm"`, `"mn"`, `"nb"` |
+| `dm_theta` | `"saturating"` | DM precision: estimated (`"saturating"`, `"linear"`) or `"fixed"` |
 | `CVL` | 0.1 | CV of Linf among growth groups (fixed unless `CVL.sd`) |
 | `ngtg`, `maxsd` | 13, 2 | GTG grid (as LBSPR) |
 | `Mpow` | 0 | M/k at length $\propto (L_\infty/L)^{Mpow}$ |
@@ -1188,25 +1199,29 @@ an order of magnitude. With an overstated sample size:
 
 ## Choosing the effective sample size
 
-Empirically, ESS of about 150-200 per gear-year has given the most stable
-assessments and ensemble profiles, and 1000 or more behaved poorly in
-Monte-Carlo profiling. Practical rules:
+With the default likelihood (Dirichlet-multinomial with estimated precision,
+next section) the data choose their own weight: give it the **raw counts or an
+ESS of at least 500** per gear-year, not a reduced ESS. FLicc prints a message
+when the median sample size is below 500.
+
+The choice of ESS matters for the likelihoods with a weight set by the input,
+the multinomial (as LBSPR) and the Dirichlet-multinomial with fixed precision
+(`dm_theta = "fixed"`, as LBB). For these, ESS of about 150-200 per gear-year
+has given the most stable assessments and ensemble profiles, and 1000 or more
+behaved poorly in Monte-Carlo profiling:
 
 - Base ESS on the number of independent sampling units (trips, hauls, vessels)
-  where known, e.g. a few fish-equivalents per unit; otherwise start at 150-200 per
-  gear-year and test 100 and 300.
+  where known, e.g. a few fish-equivalents per unit; otherwise start at 150-200
+  per gear-year and test 100 and 300.
 - Use the same ESS for gears of similar sampling quality; reduce it for gears
   with few trips.
-- Prefer `obs_model = "dm"` with real data. With the default fixed precision it
-  halves the nominal ESS; with an estimated precision
-  (`dm_theta = "saturating"`, next section) the data choose their own weight:
-  then give it the **raw counts or an ESS of at least 500**, not a reduced ESS.
-- With the multinomial or the fixed Dirichlet-multinomial, never fit raw counts
-  of several thousand fish per year without rescaling.
+- The fixed Dirichlet-multinomial halves the nominal ESS.
+- Never fit raw counts of several thousand fish per year without rescaling.
 
-The demonstration below fits the alfonsino data at five effective sample sizes
-(`ess_values`), once with the multinomial and once with the Dirichlet-multinomial,
-and once more with the raw counts. `lfdess()` rescales the compositions to the
+The demonstration below shows why the input matters for these likelihoods: it
+fits the alfonsino data at five effective sample sizes (`ess_values`), once with
+the multinomial and once with the fixed Dirichlet-multinomial, and once more with
+the raw counts. `lfdess()` rescales the compositions to the
 given ESS; `Map()` runs one fit per value. For each fit the table shows the
 last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
 `spr_ci_flicc()`) and the largest absolute gradient at the optimum.
@@ -1225,10 +1240,10 @@ fits_mn <- Map(function(ess) {
 }, ess_values)
 names(fits_mn) <- paste0("mn_", ess_values)
 
-# Dirichlet-multinomial: one fit per ESS
+# Dirichlet-multinomial with fixed precision: one fit per ESS
 fits_dm <- Map(function(ess) {
   fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-         settings = list(CVL = 0.1, obs_model = "dm"))
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "fixed"))
 }, ess_values)
 names(fits_dm) <- paste0("dm_", ess_values)
 
@@ -1236,7 +1251,7 @@ names(fits_dm) <- paste0("dm_", ess_values)
 fit_raw_mn <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                      settings = list(CVL = 0.1, obs_model = "mn"))
 fit_raw_dm <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
-                     settings = list(CVL = 0.1, obs_model = "dm"))
+                     settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "fixed"))
 raw_n <- round(mean(quantSums(lfd[["Trawl"]])))   # fish per year, trawl
 
 fits_mn <- c(fits_mn, raw = list(fit_raw_mn))
@@ -1284,7 +1299,7 @@ plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
 
 ## Letting the data choose their weight: estimated Dirichlet-multinomial precision
 
-With the default `dm_theta = "fixed"` the Dirichlet precision is
+With `dm_theta = "fixed"` the Dirichlet precision is
 $\alpha_0 = n$, so the effective sample size the likelihood uses is
 $$
 n_{eff} = \frac{n\,(1 + \alpha_0)}{n + \alpha_0} = \frac{1 + n}{2} \approx \frac{n}{2},
@@ -1294,16 +1309,17 @@ precision by gear (Thorson et al. 2017):
 
 | `dm_theta` | $\alpha_0$ | $n_{eff}$ | as the input ESS grows |
 |---|---|---|---|
-| `"fixed"` (default) | $n$ | $\approx n/2$ | grows without limit |
+| `"fixed"` | $n$ | $\approx n/2$ | grows without limit |
 | `"linear"` | $\theta n$, $\theta$ estimated | $(1 + \theta n)/(1 + \theta)$ | grows, at a rate set by $\theta$ |
-| `"saturating"` | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
+| `"saturating"` (default) | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
 
 With `"saturating"`, once the input sample size is well above $\beta$ the
 effective sample size no longer depends on it: the data estimate how much each
 composition can count. The input matters only if it is *below* what the data
 support. Then there is no overdispersion to estimate, $\beta$ runs towards
 infinity, and the model becomes a multinomial at the input sample size; a weak
-prior (`dm_prior_sd = 2`, centred close to a multinomial) keeps it finite. For
+prior (`dm_prior_sd = 1`, centred close to a multinomial) keeps it finite, and
+FLicc reports the precision as being at its bound. For
 this reason, **with an estimated precision use the raw counts or an ESS of at
 least 500**, so that the data, not the input, set the weight.
 
@@ -1840,7 +1856,8 @@ the sensitivity to the approximation of growth variability, differences between
 | Purpose | `pop_model` | `obs_model` | Comment |
 |---|---|---|---|
 | Routine assessment, MSE | `"gtg"` | `"dm"` | fast; robust with real data |
-| LBSPR-style | `"gtg"` | `"mn"` | fastest; sensitive to the ESS |
+| LBSPR-style | `"gtg"` | `"mn"` | fastest; sensitive to the ESS; LBSPR fits each year separately (`by_year = TRUE`) with Linf, M/k and CVL fixed |
+| LBB | `"gtg"`, `ngtg = 1` | `"dm"`, fixed precision | `lbb_flicc()`; section *Reproducing LBB* |
 | fishblicc replication | `"gamma"` | `"nb"` | slower; closest to fishblicc |
 
 # Reproducing fishblicc: the Bombay duck example

@@ -34,6 +34,8 @@ cat("saturating ESS 200: OSA mean", round(mean(r$resid, na.rm = TRUE), 2), "sd",
 print(lmean_resid_flicc(fsat)$runs)
 print(ppc_flicc(fsat, nsim = 300)$coverage)
 # fixed default unchanged
-f0 <- fiticc(lfdess(lfd, ess.g = 200), stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm"))
-f1 <- fiticc(lfdess(lfd, ess.g = 200), stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "fixed"))
+# default (no obs_model given) = Dirichlet-multinomial with estimated (saturating) precision
+f0 <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1))
+f1 <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+stopifnot(identical(f0$obs_model, "dm"), f0$tmb_data$dm_type == 2L)
 stopifnot(isTRUE(all.equal(f0$opt$objective, f1$opt$objective)))

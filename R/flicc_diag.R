@@ -47,10 +47,14 @@ dm_status_flicc <- function(fit) {
   est <- as.numeric(pl$log_dm)
   mu <- as.numeric(td$dm_prior_mu)
   if (length(mu) != length(est)) mu <- rep(mu[1], length(est))
+  # median sample size of the non-empty compositions of each gear
+  nmed <- vapply(seq_along(td$gear_names), function(g) {
+    n <- colSums(matrix(td$obs[, , g], nrow = dim(td$obs)[1])); n <- n[n > 0]
+    if (length(n)) stats::median(n) else NA_real_ }, numeric(1))
   data.frame(gear = td$gear_names,
              type = c("fixed", "linear", "saturating")[td$dm_type + 1L],
              estimate = exp(est), prior_centre = exp(mu),
-             at_bound = est >= mu - 1e-6, row.names = NULL)
+             at_bound = est >= mu - 1e-6, n_median = nmed, row.names = NULL)
 }
 
 #' Print fit messages (internal; switched off with verbose = FALSE)
@@ -64,6 +68,10 @@ messages_flicc <- function(fit) {
   else if (identical(d$conv_tier, "warning"))
     message("FLicc: convergence warning (max gradient ", signif(d$max_gradient, 2),
             ", Newton decrement ", signif(d$decrement, 2), "). See flicc_convergence(fit).")
+  if (!is.null(d$dm) && any(d$dm$type != "fixed") && any(d$dm$n_median < 500, na.rm = TRUE))
+    message("FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an ",
+            "effective sample size of at least 500 per gear and year (median here: ",
+            paste(paste0(d$dm$gear, " ", round(d$dm$n_median)), collapse = ", "), ").")
   if (!is.null(d$dm) && any(d$dm$at_bound))
     message("FLicc: Dirichlet-multinomial precision at its upper bound for ",
             paste(d$dm$gear[d$dm$at_bound], collapse = ", "),

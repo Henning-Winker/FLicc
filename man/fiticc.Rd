@@ -10,7 +10,7 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "mn", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
+    "dm", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
     NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
@@ -54,8 +54,10 @@ by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
 growth formulation.}
 
 \if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
-  \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
-  and \code{"dm"} (Dirichlet-multinomial).\}
+  \code{"dm"} (default, Dirichlet-multinomial with the precision estimated
+  by default, see \code{dm_theta}; give raw counts or an effective sample size
+  of at least 500), \code{"mn"} (multinomial, as LBSPR) and \code{"nb"}
+  (negative binomial, as fishblicc).\}
 
 \\item\{\code{CVL}\}\{Coefficient of variation in length-at-age.\}
 
@@ -66,7 +68,7 @@ growth formulation.}
 
 \\item\{\code{catch_units}\}\{Units of \code{catch_by_gear}: \code{"weight"} (default; predicted catch-at-length times weight at length is compared with the input shares, e.g. landings in tonnes) or \code{"numbers"} (predicted catch in numbers, as in fishblicc).\}
 
-\\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"fixed"} (default, alpha0 = n), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"saturating"} (alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
+\\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"saturating"} (default; alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"fixed"} (alpha0 = n, effective sample size about n/2). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
 
 \\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
 
@@ -209,14 +211,19 @@ Effective sample size is taken directly from the observed LFD
 (sum of counts), consistent with LBSPR and fishblicc.
 \item \code{"nb"}: negative binomial likelihood for counts with
 overdispersion.
-\item \code{"dm"}: Dirichlet-multinomial likelihood for
-overdispersed compositions.
+\item \code{"dm"} (default): Dirichlet-multinomial likelihood for
+overdispersed compositions, with the precision estimated
+(\code{dm_theta = "saturating"}); use raw counts or an effective sample size
+of at least 500.
 }
 }
 
-The default model (\code{pop_model = "gtg"}, \code{obs_model = "mn"})
-provides a fast and stable formulation closely aligned with LBSPR-style
-length-based assessment models.
+The default model (\code{pop_model = "gtg"}, \code{obs_model = "dm"} with
+estimated precision, all years jointly with a random walk on F) is FLicc's
+recommended configuration. LBSPR corresponds to \code{obs_model = "mn"} with
+Linf, M/k and CVL fixed and each year fitted separately (\code{by_year = TRUE});
+LBB to \code{lbb_flicc()}; fishblicc to \code{pop_model = "gamma"},
+\code{obs_model = "nb"}.
 }
 \examples{
 \dontrun{

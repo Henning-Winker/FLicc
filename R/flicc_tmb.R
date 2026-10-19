@@ -117,7 +117,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   catch_sd <- if (!is.null(settings$catch.sd)) as.numeric(settings$catch.sd) else 0.05
 
   # observation model
-  obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "nb"
+  obs_model <- if (!is.null(settings$obs_model)) settings$obs_model else "dm"
 
   obs_model_code <- switch(obs_model,
                            nb = 1L,
@@ -129,7 +129,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   catch_units <- if (!is.null(settings$catch_units)) settings$catch_units else "weight"
   if (!catch_units %in% c("weight", "numbers"))
     stop("settings$catch_units must be \"weight\" or \"numbers\".")
-  dm_theta <- if (!is.null(settings$dm_theta)) settings$dm_theta else "fixed"
+  dm_theta <- if (!is.null(settings$dm_theta)) settings$dm_theta else "saturating"
   dm_type <- switch(dm_theta, fixed = 0L, linear = 1L, saturating = 2L,
                     stop("settings$dm_theta must be \"fixed\", \"linear\" or \"saturating\"."))
 
@@ -552,8 +552,8 @@ fiticc_core <- function(lfd, stklen,
     GL = 50,
     catch.sd = 0.05,
     pop_model = "gtg",
-    obs_model = "mn",
-    dm_theta = "fixed",
+    obs_model = "dm",
+    dm_theta = "saturating",
     dm_shared = FALSE,
     catch_units = "weight",
     dm_prior_sd = 1,
@@ -972,8 +972,10 @@ fiticc_core <- function(lfd, stklen,
 #'       growth formulation.}
 #'
 #'     \item{\code{obs_model}}{Observation likelihood. Options are:
-#'       \code{"mn"} (default, multinomial), \code{"nb"} (negative binomial),
-#'       and \code{"dm"} (Dirichlet-multinomial).}
+#'       \code{"dm"} (default, Dirichlet-multinomial, with the precision
+#'       estimated by default, see \code{dm_theta}; give raw counts or an
+#'       effective sample size of at least 500), \code{"mn"} (multinomial, as
+#'       LBSPR) and \code{"nb"} (negative binomial, as fishblicc).}
 #'
 #'     \item{\code{CVL}}{Coefficient of variation in length-at-age.}
 #'
@@ -988,12 +990,13 @@ fiticc_core <- function(lfd, stklen,
 #'       (predicted catch in numbers, as in fishblicc).}
 #'
 #'     \item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
-#'       (\code{obs_model = "dm"}): \code{"fixed"} (default, \eqn{\alpha_0 = n}),
-#'       \code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
-#'       \code{"saturating"} (\eqn{\alpha_0 = \beta} estimated; the effective
+#'       (\code{obs_model = "dm"}): \code{"saturating"} (default;
+#'       \eqn{\alpha_0 = \beta} estimated; the effective
 #'       sample size \eqn{n(1+\beta)/(n+\beta)} levels off at \eqn{\beta + 1}, so
-#'       the fit becomes insensitive to the input sample size). Thorson et al.
-#'       (2017, Fisheries Research 192: 84-93).}
+#'       the fit becomes insensitive to the input sample size),
+#'       \code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
+#'       \code{"fixed"} (\eqn{\alpha_0 = n}, effective sample size about
+#'       \eqn{n/2}). Thorson et al. (2017, Fisheries Research 192: 84-93).}
 #'
 #'     \item{\code{dm_shared}}{Logical; one precision parameter for all gears
 #'       instead of one per gear (default \code{FALSE}).}
@@ -1141,14 +1144,19 @@ fiticc_core <- function(lfd, stklen,
 #'         (sum of counts), consistent with LBSPR and fishblicc.
 #'       \item \code{"nb"}: negative binomial likelihood for counts with
 #'         overdispersion.
-#'       \item \code{"dm"}: Dirichlet-multinomial likelihood for
-#'         overdispersed compositions.
+#'       \item \code{"dm"} (default): Dirichlet-multinomial likelihood for
+#'         overdispersed compositions, with the precision estimated
+#'         (\code{dm_theta = "saturating"}) so that the data set their own
+#'         weight; use raw counts or an effective sample size of at least 500.
 #'     }
 #' }
 #'
-#' The default model (\code{pop_model = "gtg"}, \code{obs_model = "mn"})
-#' provides a fast and stable formulation closely aligned with LBSPR-style
-#' length-based assessment models.
+#' The default model (\code{pop_model = "gtg"}, \code{obs_model = "dm"} with
+#' estimated precision, all years jointly with a random walk on F) is FLicc's
+#' recommended configuration. LBSPR corresponds to \code{obs_model = "mn"} with
+#' Linf, M/k and CVL fixed and each year fitted separately
+#' (\code{by_year = TRUE}); LBB to \code{lbb_flicc()}; fishblicc to
+#' \code{pop_model = "gamma"}, \code{obs_model = "nb"}.
 #'
 #' @return An object of class \code{"flicc_tmb_fit"} containing:
 #' \describe{
@@ -1179,7 +1187,7 @@ fiticc <- function(lfd, stklen,
                      GL = 30,
                      catch.sd = 0.05,
                      pop_model = "gtg",
-                     obs_model = "mn",
+                     obs_model = "dm",
                      ngtg = 13,
                      maxsd = 2,
                      Mpow = 0,
