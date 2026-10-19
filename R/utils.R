@@ -900,3 +900,62 @@ lfdess <- function(lfd, ess.g=100) {
   out
 }
 
+
+#' Restrict length-frequency data to a length range
+#'
+#' Removes length classes below `Lmin` and/or at and above `Lmax` from every
+#' gear of an `FLQuants` of length frequencies, so that all gears keep the
+#' same length classes. Use it before [stocklen()] and [fiticc()].
+#'
+#' `Lmin` removes small fish that the equilibrium model should not describe,
+#' e.g. a pulse of recruits or a juvenile mode caught only in some seasons.
+#' The model then starts at `Lmin`: recruitment enters the first remaining
+#' length class, and fishing mortality below `Lmin` is not part of the model,
+#' so SPR and other per-recruit quantities refer to fish from `Lmin` onwards.
+#' `Lmax` removes implausibly large fish (recording errors); to keep large
+#' fish but reduce their influence, use `settings$Lplus` or
+#' `settings$tail_cut` in [fiticc()] instead.
+#'
+#' The same can be done with FLCore's `trim()` on each gear
+#' (`lapply(lfd, trim, len = 12:59)`) when the class labels are known.
+#'
+#' @param lfd An `FLQuants` of length frequencies (one element per gear,
+#'   `len` = lower bounds of the length classes).
+#' @param Lmin Smallest length class kept (lower bound, same units as `len`);
+#'   `NULL` keeps all.
+#' @param Lmax Length classes with lower bound `>= Lmax` are removed; `NULL`
+#'   keeps all.
+#' @param verbose Logical; print the number of fish removed by gear.
+#' @return An `FLQuants` with the retained length classes. The numbers removed
+#'   by gear (below `Lmin`, above `Lmax`) are in attribute `"removed"`.
+#' @examples
+#' \dontrun{
+#' lfd2 <- lfd_trim(lfd, Lmin = 12)             # drop the juvenile mode
+#' lfd2 <- lfd_trim(lfd, Lmin = 12, Lmax = 60)  # and a recording error
+#' attr(lfd2, "removed")
+#' }
+#' @export
+lfd_trim <- function(lfd, Lmin = NULL, Lmax = NULL, verbose = TRUE) {
+  if (!inherits(lfd, "FLQuants")) stop("lfd must be an FLQuants (one element per gear).")
+  lens <- lapply(lfd, function(x) as.numeric(dimnames(x)$len))
+  if (any(vapply(lens, anyNA, logical(1)))) stop("lfd must have numeric 'len' dimnames.")
+  if (!is.null(Lmin) && !is.null(Lmax) && Lmax <= Lmin) stop("Lmax must be larger than Lmin.")
+  removed <- do.call(rbind, lapply(names(lfd), function(g) {
+    L <- lens[[g]]; x <- lfd[[g]]
+    lo <- if (is.null(Lmin)) rep(FALSE, length(L)) else L < Lmin
+    hi <- if (is.null(Lmax)) rep(FALSE, length(L)) else L >= Lmax
+    data.frame(gear = g, total = sum(x, na.rm = TRUE),
+               below_Lmin = sum(x[lo, ], na.rm = TRUE), above_Lmax = sum(x[hi, ], na.rm = TRUE))
+  }))
+  out <- FLQuants(lapply(lfd, function(x) {
+    L <- as.numeric(dimnames(x)$len)
+    keep <- (if (is.null(Lmin)) TRUE else L >= Lmin) & (if (is.null(Lmax)) TRUE else L < Lmax)
+    if (sum(keep) < 2) stop("Fewer than two length classes left between Lmin and Lmax.")
+    x[keep, ]
+  }))
+  names(out) <- names(lfd)
+  removed$share <- round((removed$below_Lmin + removed$above_Lmax) / pmax(removed$total, 1), 3)
+  if (verbose) print(removed, row.names = FALSE)
+  attr(out, "removed") <- removed
+  out
+}

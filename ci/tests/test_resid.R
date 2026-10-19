@@ -58,3 +58,14 @@ p2 <- plot_resid_len(fdm, years = "each", cap = 3)
 ggplot2::ggsave(file.path(od, "resid_len.png"), p1, width = 8, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "resid_len_each.png"), p2, width = 8, height = 4, dpi = 100)
 print(nrow(attr(p2, "capped")))
+
+# lfd_trim: common length range, counts removed, fit runs
+lt <- lfd_trim(lfd, Lmin = 20, Lmax = 60)
+rm_tab <- attr(lt, "removed"); print(rm_tab)
+L1 <- lapply(lt, function(x) as.numeric(dimnames(x)$len))
+stopifnot(all(vapply(L1, function(l) min(l) >= 20 && max(l) < 60, logical(1))),
+          all(abs(vapply(names(lfd), function(g) sum(lfd[[g]]) - sum(lt[[g]]), numeric(1)) -
+                  (rm_tab$below_Lmin + rm_tab$above_Lmax)) < 1e-6))
+ft <- fiticc(lt, stocklen(lt, lhpar, m_model = "constant"), sel_fun = sf, catch_by_gear = cbg,
+             settings = list(CVL = 0.1))
+print(ft$diagnostics)
