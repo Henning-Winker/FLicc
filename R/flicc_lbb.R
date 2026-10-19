@@ -175,7 +175,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
   lhpar <- FLCore::FLPar(linf = pr$Linf, k = k, M = pr$MK * k, L50 = Lm50, a = a, b = b)
   set0 <- list(pop_model = "gtg", ngtg = 1, CVL = 0.1, maxsd = 0,
                linf.sd = pr$Linf.sd / pr$Linf, Mk.sd = pr$MK.sd / pr$MK,
-               tail_cut = pr$Linf, obs_model = "dm",
+               tail_cut = pr$Linf, obs_model = "dm", FMpen_sd = 0,   # no F/M bounds (LBB has none)
                dm_theta = if (is.null(ess)) "saturating" else "fixed")
   set <- utils::modifyList(set0, settings)
   gname <- if (inherits(lfd, "FLQuants") && length(lfd) == 1) names(lfd) else "pooled"
