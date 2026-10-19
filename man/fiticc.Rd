@@ -40,7 +40,12 @@ parameters (e.g. Linf, k, M) and matching dimensions to \code{lfd}.}
 
 \item{sel_fun}{Character vector specifying selectivity function per gear.
 Supported options include \code{"logistic"}, \code{"normal"},
-and \code{"dsnormal"}.}
+\code{"dsnormal"} and \code{"binormal"} (sum of two normal curves,
+scaled to a maximum of 1: parameters \code{mode1}, \code{sd1},
+\code{mode2 > mode1}, \code{sd2} and \code{h}, the height of the second
+curve relative to the first; for gears whose catch has two size modes,
+e.g. a gillnet fleet with two mesh groups). Fixed values for
+\code{sel_fixed} use the same names.}
 
 \item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
 in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.

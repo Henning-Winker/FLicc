@@ -78,16 +78,12 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     stop("length(sel_fun) must equal number of gears")
   }
 
-  sel_type <- ifelse(sel_fun == "logistic", 1L,
-                     ifelse(sel_fun == "dsnormal", 2L,
-                            ifelse(sel_fun == "normal", 3L, NA_integer_)))
+  sel_type <- unname(c(logistic = 1L, dsnormal = 2L, normal = 3L, binormal = 4L)[sel_fun])
   if (any(is.na(sel_type))) {
-    stop("Supported selectivity options are logistic, dsnormal, normal")
+    stop("Supported selectivity options are logistic, dsnormal, normal, binormal")
   }
 
-  sm_n <- ifelse(sel_fun == "logistic", 2L,
-                 ifelse(sel_fun == "dsnormal", 3L,
-                        ifelse(sel_fun == "normal", 2L, NA_integer_)))
+  sm_n <- unname(c(2L, 3L, 2L, 5L)[sel_type])
   sm_start <- cumsum(c(0L, head(sm_n, -1L)))  # 0-based for C++
 
 
@@ -425,6 +421,15 @@ init_tmb_flicc <- function(tmb_data) {
       sd_rel <- 0.10
       Sm[pos:(pos + 1L)] <- c(log(mode_rel), log(sd_rel))
       pos <- pos + 2L
+
+    } else if (sel_type[g] == 4L) {
+      # binormal: modes at the 20% and 80% quantiles of the observed lengths
+      cs <- cumsum(obs_g) / max(sum(obs_g), 1e-12)
+      q1 <- Lmid[which(cs >= 0.2)[1]]; q2 <- Lmid[which(cs >= 0.8)[1]]
+      if (!is.finite(q1) || !is.finite(q2) || q2 <= q1) { q1 <- 0.8 * mode_g; q2 <- 1.2 * mode_g }
+      Sm[pos:(pos + 4L)] <- c(log(max(q1 / Linf, 1e-4)), log(0.05), log(max((q2 - q1) / Linf, 1e-3)),
+                              log(0.05), 0)
+      pos <- pos + 5L
     }
   }
 
@@ -469,8 +474,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param stklen An \code{FLStockLen} object, or compatible FLR object,
 #'   containing stock and life-history information.
 #' @param sel_fun Character vector giving the selectivity function for each
-#'   gear. Supported options include \code{"logistic"}, \code{"normal"}, and
-#'   \code{"dsnormal"}.
+#'   gear. Supported options include \code{"logistic"}, \code{"normal"},
+#'   \code{"dsnormal"} and \code{"binormal"}.
 #' @param catch_by_gear Relative catch by gear, in weight (e.g. landings in
 #'   tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 #'   vector or as an \code{FLQuants} object.
@@ -959,7 +964,12 @@ fiticc_core <- function(lfd, stklen,
 #'
 #' @param sel_fun Character vector specifying selectivity function per gear.
 #'   Supported options include \code{"logistic"}, \code{"normal"},
-#'   and \code{"dsnormal"}.
+#'   \code{"dsnormal"} and \code{"binormal"} (sum of two normal curves,
+#'   scaled to a maximum of 1: parameters \code{mode1}, \code{sd1},
+#'   \code{mode2 > mode1}, \code{sd2} and \code{h}, the height of the second
+#'   curve relative to the first; for gears whose catch has two size modes,
+#'   e.g. a gillnet fleet with two mesh groups). Fixed values for
+#'   \code{sel_fixed} use the same names.
 #'
 #' @param catch_by_gear Numeric vector of relative catch proportions by gear,
 #'   in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
@@ -1609,6 +1619,38 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
         if (sd <= 0) stop("sd must be > 0")
         parameters$Sm[start + 1L] <- log(sd / Linf)
         Sm_map[start + 1L] <- NA
+      }
+
+    } else if (sel_type[g] == 4L) {
+      # binormal: c(log_mode1_rel, log_sd1_rel, log_dmode_rel, log_sd2_rel, log_h)
+      cur_m1 <- exp(parameters$Sm[start]) * Linf
+      cur_m2 <- cur_m1 + exp(parameters$Sm[start + 2L]) * Linf
+      if (!is.null(spec$mode1)) {
+        cur_m1 <- as.numeric(spec$mode1)
+        if (cur_m1 <= 0) stop("mode1 must be > 0")
+        parameters$Sm[start] <- log(cur_m1 / Linf)
+        Sm_map[start] <- NA
+      }
+      if (!is.null(spec$sd1)) {
+        if (spec$sd1 <= 0) stop("sd1 must be > 0")
+        parameters$Sm[start + 1L] <- log(as.numeric(spec$sd1) / Linf)
+        Sm_map[start + 1L] <- NA
+      }
+      if (!is.null(spec$mode2)) {
+        dm <- as.numeric(spec$mode2) - cur_m1
+        if (dm <= 0) stop("For binormal selectivity, mode2 must be > mode1")
+        parameters$Sm[start + 2L] <- log(dm / Linf)
+        Sm_map[start + 2L] <- NA
+      }
+      if (!is.null(spec$sd2)) {
+        if (spec$sd2 <= 0) stop("sd2 must be > 0")
+        parameters$Sm[start + 3L] <- log(as.numeric(spec$sd2) / Linf)
+        Sm_map[start + 3L] <- NA
+      }
+      if (!is.null(spec$h)) {
+        if (spec$h <= 0) stop("h must be > 0")
+        parameters$Sm[start + 4L] <- log(as.numeric(spec$h))
+        Sm_map[start + 4L] <- NA
       }
 
     } else {

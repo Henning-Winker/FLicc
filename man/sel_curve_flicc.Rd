@@ -2,11 +2,11 @@
 \alias{sel_curve_flicc}
 \title{Selectivity at length for given parameters}
 \usage{
-sel_curve_flicc(L, sel_fun = c("logistic", "dsnormal", "normal"), pars)
+sel_curve_flicc(L, sel_fun = c("logistic", "dsnormal", "normal", "binormal"), pars)
 }
 \arguments{
 \item{L}{Lengths (e.g. bin mid-points).}
-\item{sel_fun}{\code{"logistic"} (\code{SL50}, \code{SL95}), \code{"dsnormal"} (\code{mode}, \code{lsd}, \code{rsd}) or \code{"normal"} (\code{mode}, \code{sd}).}
+\item{sel_fun}{\code{"logistic"} (\code{SL50}, \code{SL95}), \code{"dsnormal"} (\code{mode}, \code{lsd}, \code{rsd}), \code{"normal"} (\code{mode}, \code{sd}) or \code{"binormal"} (\code{mode1}, \code{sd1}, \code{mode2}, \code{sd2}, \code{h}; scaled to a maximum of 1 over \code{L}).}
 \item{pars}{Named list or vector of parameters on the length scale (as in \code{sel_fixed}).}
 }
 \value{Numeric vector of selectivity.}

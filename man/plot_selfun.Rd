@@ -2,11 +2,11 @@
 \alias{plot_selfun}
 \title{Explore selectivity curves over a range of parameter values}
 \usage{
-plot_selfun(sel_fun = c("dsnormal", "logistic", "normal"), pars, len = NULL,
+plot_selfun(sel_fun = c("dsnormal", "logistic", "normal", "binormal"), pars, len = NULL,
   lfd = NULL, ref = NULL)
 }
 \arguments{
-\item{sel_fun}{\code{"logistic"}, \code{"dsnormal"} or \code{"normal"}.}
+\item{sel_fun}{\code{"logistic"}, \code{"dsnormal"}, \code{"normal"} or \code{"binormal"}.}
 \item{pars}{Named list of parameters on the length scale; elements with several values are crossed and each combination is drawn.}
 \item{len}{Lengths at which to evaluate; default from \code{lfd} or \code{0:80}.}
 \item{lfd}{Optional \code{FLQuant} (one gear) or \code{FLQuants} (pooled) of length frequencies, drawn as grey bars scaled to a maximum of 1.}

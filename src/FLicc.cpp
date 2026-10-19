@@ -47,6 +47,27 @@ vector<Type> calc_sel(const vector<Type>& L,
       sel(i) = exp(-(d * d) / (two * sd * sd));
     }
 
+  } else if(sel_type == 4) {
+
+    // binormal: sum of two normal curves, scaled to a maximum of 1
+    //   pars: log(mode1/Linf), log(sd1/Linf), log((mode2 - mode1)/Linf),
+    //         log(sd2/Linf), log(h) with h the height of the second curve
+    //         relative to the first before scaling
+    Type m1  = exp(pars(0)) * Linf;
+    Type s1  = exp(pars(1)) * Linf;
+    Type m2  = m1 + exp(pars(2)) * Linf;
+    Type s2  = exp(pars(3)) * Linf;
+    Type h   = exp(pars(4));
+    Type two = Type(2);
+    Type smax = Type(0);
+    for(int i = 0; i < n; i++) {
+      Type d1 = L(i) - m1, d2 = L(i) - m2;
+      sel(i) = exp(-(d1 * d1) / (two * s1 * s1)) + h * exp(-(d2 * d2) / (two * s2 * s2));
+      // AD-safe running maximum
+      smax = CppAD::CondExpGt(sel(i), smax, sel(i), smax);
+    }
+    for(int i = 0; i < n; i++) sel(i) = sel(i) / smax;
+
   } else {
     error("Unknown sel_type");
   }
