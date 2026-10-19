@@ -927,6 +927,7 @@ fiticc_core <- function(lfd, stklen,
   fit$max_gradient <- opt$max_gradient
   fit$n_restarts <- opt$n_restarts
   fit$restart_log <- opt$restart_log
+  fit$sel_fixed <- sel_fixed
 
   fit$logLik <- LLflicc(fit)
   fit$diagnostics <- diagnostics_flicc(fit)

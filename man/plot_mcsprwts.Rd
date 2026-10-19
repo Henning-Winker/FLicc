@@ -11,7 +11,8 @@ plot_mcsprwts(
   n = 300,
   bw = 0.04,
   show_fit = TRUE,
-  ncol = 3
+  ncol = 3,
+  weights = "aic"
 )
 }
 \arguments{
@@ -33,6 +34,9 @@ Default is \code{20}.}
 \code{mc$fit}. Default is \code{TRUE}.}
 
 \item{ncol}{Number of columns in the faceted plot. Default is \code{3}.}
+
+\item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
+  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
 }
 \value{
 A \code{ggplot} object.
