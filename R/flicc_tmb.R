@@ -164,7 +164,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # GTG distribution over Linf on a standardised grid. The Linf groups are
   # built inside the TMB template as Linf * (1 + CVL * gtg_z), so they follow
   # the estimated Linf and CVL. recP depends only on the grid.
-  gtg_z <- seq(-maxsd, maxsd, length.out = ngtg)
+  # one growth type (e.g. LBB): the single group sits at the mean Linf
+  gtg_z <- if (ngtg == 1L) 0 else seq(-maxsd, maxsd, length.out = ngtg)
   recP  <- dnorm(gtg_z)
   recP  <- recP / sum(recP)
 
@@ -224,7 +225,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # Warn when observations fall in bins the GTG model cannot reach
   # (lower bound at or beyond the largest GTG Linf at the input values).
   if (pop_model == "gtg" && isTRUE(settings$tail_warning)) {
-    maxLinf <- Linf_init * (1 + maxsd * CVL_init)
+    maxLinf <- Linf_init * (1 + max(gtg_z) * CVL_init)
     beyond  <- LLB >= maxLinf
     if (plus_bin >= 0 && LLB[plus_bin + 1] < maxLinf) beyond <- beyond & seq_along(LLB) <= plus_bin
     if (cut_bin >= 0) beyond <- beyond & seq_along(LLB) <= cut_bin
