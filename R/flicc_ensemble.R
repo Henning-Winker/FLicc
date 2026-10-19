@@ -28,8 +28,9 @@
 #' reports its weighted mean and the range over the members.
 #'
 #' @param fits A named list of fitted FLicc objects (from [fiticc()]), fitted
-#'   to the same years. Fits without standard errors (`se = FALSE`) enter with
-#'   their point estimate only.
+#'   to the same years. Fits without standard errors (`se = FALSE`, or not
+#'   computable because the Hessian is not positive definite) enter with their
+#'   point estimate only.
 #' @param weights `"equal"`, `"aic"` or a numeric vector, one per fit.
 #' @param level Interval level.
 #' @param s Optional Beverton-Holt steepness for B/Btgt.
@@ -92,8 +93,13 @@ ensemble_flicc <- function(fits, weights = "equal", level = 0.95, s = NULL, spr_
       data.frame(year = yrs, mu = log(as.numeric(f$report$spr)), se = 0)
     } else data.frame(year = ci$year, mu = log(ci$spr), se = ci$se_log)
   })
-  if (any(vapply(est, function(e) all(e$se == 0), logical(1))))
-    warning("Some fits have no standard errors (se = FALSE); they enter with their point estimates only.", call. = FALSE)
+  # standard errors that could not be computed (e.g. Hessian not positive
+  # definite) count as missing: the fit enters with its point estimate
+  nose <- vapply(est, function(e) any(!is.finite(e$se) | e$se == 0), logical(1))
+  est <- lapply(est, function(e) { e$se[!is.finite(e$se)] <- 0; e })
+  if (any(nose))
+    warning("No standard errors for: ", paste(names(fits)[nose], collapse = ", "),
+            "; they enter with their point estimates only.", call. = FALSE)
   MU <- sapply(est, `[[`, "mu"); SE <- sapply(est, `[[`, "se")
   if (!is.matrix(MU)) { MU <- matrix(MU, nrow = 1); SE <- matrix(SE, nrow = 1) }
 
@@ -179,6 +185,7 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
       ci <- tryCatch(spr_ci_flicc(f, level = x$level), error = function(e) NULL)
       v <- as.numeric(f$report$spr)
       lo <- if (is.null(ci)) v else ci$lwr; hi <- if (is.null(ci)) v else ci$upr
+      lo[!is.finite(lo)] <- v[!is.finite(lo)]; hi[!is.finite(hi)] <- v[!is.finite(hi)]
       if (what == "brel") { v <- to_brel(v, f); lo <- to_brel(lo, f); hi <- to_brel(hi, f) }
       data.frame(year = as.numeric(f$tmb_data$year_names), y = v, lo = lo, hi = hi,
                  member = nm, w = x$weights[[nm]], type = "member")
