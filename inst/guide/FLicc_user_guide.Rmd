@@ -1975,6 +1975,20 @@ fit, and has two sources in LBSPR's GTG model (`LBSPRsim_()`):
    midpoints. Fish are therefore fished as if they were one class (here 5 mm)
    smaller, which lowers F at length in the survival and raises SPR. The fit, and
    so SL50 and F/M, is driven by the catch and is not affected.
+
+   > **Note — possible error in LBSPR (`LBSPRsim_.r`, LBSPR 0.1.9):**
+   > line 168 evaluates survival selectivity at `LBins - (SL50 + 0.5*By)`, a full
+   > class below the midpoint; the M/K line next to it (line 171) uses the
+   > midpoint `LBins + 0.5*By`, and the predicted catch (line 218) uses selectivity
+   > at the midpoints `LMids`. The model thus applies two selectivity curves one
+   > class apart, one to the catch and one to the mortality. The intended
+   > expression was probably `(LBins + 0.5*By) - SL50`. As a consequence LBSPR's
+   > SPR is biased upwards by an amount that grows with the class width: for the
+   > 2010 estimates (SL50 = 49.1, SL95 = 62.9, F/M = 0.56) LBSPR's equations give
+   > SPR = 0.406, 0.413, 0.437 and 0.483 for 1, 2, 5 and 10-mm classes, against
+   > 0.399--0.404 with selectivity at the midpoints. SL50, SL95 and F/M are not
+   > affected. LBSPR's pseudo-age model (`Control = list(modtype = "absel")`) uses midpoints
+   > throughout.
 2. **Maturity at the same relative size.** LBSPR scales the maturity ogive with
    each group's Linf ($L_{50,g} = L_{50}\,L_{\infty,g}/L_\infty$), whereas FLicc
    uses one maturity-at-length ogive for all groups. Here this changes SPR by
