@@ -6,7 +6,11 @@
 
 `FLicc` retains the biological core of either of the original length-based equilibrium models, but adds a fast penalized-likelihood workflow in Template Model Builder (TMB), multi-year fitting, FLR integration, and a growing set of equilibrium and indicator tools. The original multi-gear formulation was designed to estimate mortality-at-length, selectivity, spawning potential ratio (SPR), yield-per-recruit from length compositions grouped by gear, and parallel computing utilities. 
 
-An introductory User Guide to Multi-Gear Length-Interval Catch-Curve Analysis in FLR for the `FLicc` package is available [here](https://henning-winker.github.io/FLicc/FLicc_intro_vignette.html). An overview with illustrations of the FLicc utilities is provided in the form of a [presentation](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf). 
+**Documentation**
+
+- [**FLicc User Guide**](https://henning-winker.github.io/FLicc/FLicc_user_guide.html): the complete reference for the current version. It covers the workflow from length data to advice (data preparation, model configuration, fitting, diagnostics, reference points, sensitivity and ensemble analyses), the available likelihoods and selectivity functions, and how LBSPR, LBB and `fishblicc` are reproduced as special cases of FLicc.
+- [Introductory vignette](https://henning-winker.github.io/FLicc/FLicc_intro_vignette.html): a first walk-through of multi-gear length-interval catch-curve analysis in FLR with `FLicc`.
+- [Presentation](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf): an illustrated overview of the FLicc utilities. 
 
 The most recent developments from `FLicc` version 1.0.6 to version 1.0.9 are documented [here](https://henning-winker.github.io/FLicc/FLicc_updates_1.0.9.html), including the latest implementations of robust likelihood options, fast equilibrium reference point estimation in c++ and MSE tools. 
 
