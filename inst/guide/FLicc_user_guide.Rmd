@@ -1883,9 +1883,17 @@ included in FLicc as `data("lbspr_test")`, with LBSPR's estimates for these
 data:
 
 ```{r lbspr-data}
-data("lbspr_test")   # lfd_lbspr, lhpar_lbspr, lbspr_est
+data("lbspr_test", package = "FLicc")   # lfd_lbspr, lhpar_lbspr, lbspr_est
 lfd_lbspr
 lhpar_lbspr          # k only scales F and M; F/M and SPR depend on M/k = 1.5
+```
+
+```{r lbspr-data-check, include = FALSE}
+message("class(lfd_lbspr): ", paste(class(lfd_lbspr), collapse = " "))
+if (!inherits(lfd_lbspr, "FLQuants")) lfd_lbspr <- FLQuants(lfd_lbspr)
+```
+
+```{r lbspr-stk}
 stk_lbspr <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
 ```
 
@@ -1956,30 +1964,48 @@ all years and a random walk on F, so the data of all years inform each year's F
 through the likelihood rather than by smoothing the point estimates
 afterwards; the figure compares it with LBSPR's smoothed series.
 
-At the same F/M, FLicc's SPR is slightly lower than LBSPR's in every year. The
-difference is in the spawning output per recruit, not in the fit: LBSPR's GTG
-model scales the maturity ogive with each group's Linf ("maturity at the same
-relative size", $L_{50,g} = L_{50}\,L_{\infty,g}/L_\infty$), so fast-growing
-groups mature at larger lengths and slow-growing groups at smaller ones, whereas
-FLicc uses one maturity-at-length ogive for all groups. Selectivity, F/M and the
-fit to the compositions are not affected, because maturity does not enter the
-likelihood. `spr_gtg_flicc()` recomputes the SPR of a GTG fit after the fit with
-LBSPR's maturity at relative size. Since maturity is a fixed input, the ratio
-`adj = spr_gtg / spr` is a correction factor: it scales FLicc's SPR and its
-interval and leaves the uncertainty (the SE of log SPR) as it is. With
-`mat = "length"` it returns FLicc's own SPR (`adj = 1`):
+At the same SL50, SL95 and F/M, FLicc's SPR is about 0.03 lower than LBSPR's in
+every year. The difference is in the spawning output per recruit, not in the
+fit, and has two sources in LBSPR's GTG model (`LBSPRsim_()`):
+
+1. **Selectivity in the survival recursion.** LBSPR computes the selectivity that
+   enters survival as `1/(1 + exp(-log(19) * (LBins - (SL50 + By/2)) / (SL95 - SL50)))`
+   at the class lower bounds `LBins` (`By` = class width), i.e. at one class below
+   the class midpoint, while the predicted catch uses selectivity at the
+   midpoints. Fish are therefore fished as if they were one class (here 5 mm)
+   smaller, which lowers F at length in the survival and raises SPR. The fit, and
+   so SL50 and F/M, is driven by the catch and is not affected.
+2. **Maturity at the same relative size.** LBSPR scales the maturity ogive with
+   each group's Linf ($L_{50,g} = L_{50}\,L_{\infty,g}/L_\infty$), whereas FLicc
+   uses one maturity-at-length ogive for all groups. Here this changes SPR by
+   only about 0.005, in the opposite direction.
+
+Neither enters the likelihood, so `spr_gtg_flicc()` can recompute the SPR of a
+GTG fit afterwards: `mat = "relative"` uses LBSPR's maturity at relative size,
+and `sel_lag = 1` applies F at length one class late, as in LBSPR's survival
+recursion. Both inputs are fixed, so the ratio `adj = spr_gtg / spr` is a
+correction factor: it scales FLicc's SPR and its interval and leaves the
+uncertainty (the SE of log SPR) as it is. With `mat = "length"` and
+`sel_lag = 0` it returns FLicc's own SPR (`adj = 1`):
 
 ```{r lbspr-sprgtg}
-spr_gtg <- do.call(rbind, lapply(fits_lbspr_y, spr_gtg_flicc))
-cbind(round(spr_gtg, 3), LBSPR = round(lbspr_out$SPR, 3))
-spr_gtg_flicc(fit_lbspr_d)   # joint default fit, with the adjusted interval
+spr_y <- function(f) {
+  data.frame(year = as.numeric(f$tmb_data$year_names),
+             FLicc = spr_gtg_flicc(f, mat = "length")$spr,
+             mat_rel = spr_gtg_flicc(f)$spr_gtg,
+             mat_rel_lag = spr_gtg_flicc(f, sel_lag = 1)$spr_gtg)
+}
+spr_cmp <- do.call(rbind, lapply(fits_lbspr_y, spr_y))
+cbind(round(spr_cmp, 3), LBSPR = round(lbspr_out$SPR, 3))
+spr_gtg_flicc(fit_lbspr_d, sel_lag = 1)   # joint default fit, LBSPR-type SPR with interval
 ```
 
-With maturity at relative size the yearly FLicc SPR differs from LBSPR's by
-`r round(mean(abs(spr_gtg$spr_gtg - lbspr_out$SPR)), 3)` on average, against
-`r round(mean(abs(spr_gtg$spr - lbspr_out$SPR)), 3)` with FLicc's common ogive.
-The default likelihood estimates how much weight the compositions carry and
-widens the intervals accordingly.
+With both LBSPR conventions the yearly FLicc SPR differs from LBSPR's by
+`r round(mean(abs(spr_cmp$mat_rel_lag - lbspr_out$SPR)), 3)` on average, against
+`r round(mean(abs(spr_cmp$FLicc - lbspr_out$SPR)), 3)` for FLicc's own SPR. FLicc
+keeps its own SPR as the default, because it applies the fitted selectivity
+consistently to the catch and the survival. The default likelihood estimates how
+much weight the compositions carry and widens the intervals accordingly.
 
 ## LBB: the Illex example {#repro-lbb}
 

@@ -4,12 +4,19 @@
 \alias{spr_gtg_flicc}
 \title{SPR with maturity at the same relative size in each growth-type group}
 \usage{
-spr_gtg_flicc(fit, mat = c("relative", "length"), level = 0.95)
+spr_gtg_flicc(fit, mat = c("relative", "length"), sel_lag = 0, level = 0.95)
 }
 \arguments{
 \item{fit}{A fitted FLicc object with \code{pop_model = "gtg"}.}
 
 \item{mat}{\code{"relative"} (default; LBSPR) or \code{"length"} (FLicc's ogive).}
+
+\item{sel_lag}{Integer; number of length classes by which F at length in the
+  survival recursion lags the fitted selectivity. \code{0} (default) is FLicc's
+  model. \code{1} mimics LBSPR, whose GTG model (\code{LBSPRsim_()}) evaluates
+  selectivity in the survival recursion one class below the class midpoint
+  used for the predicted catch; with \code{mat = "relative", sel_lag = 1} the
+  result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.}
 
 \item{level}{Confidence level of the interval.}
 }
@@ -40,6 +47,7 @@ reproduces FLicc's SPR (\code{adj = 1}), which serves as a check.
 \dontrun{
 spr_gtg_flicc(fit)                  # LBSPR's maturity at relative size
 spr_gtg_flicc(fit, mat = "length")  # reproduces fit$report$spr
+spr_gtg_flicc(fit, sel_lag = 1)     # as LBSPR's reported SPR
 }
 }
 \references{

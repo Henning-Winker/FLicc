@@ -19,6 +19,12 @@
 #'
 #' @param fit A fitted FLicc object with `pop_model = "gtg"`.
 #' @param mat `"relative"` (default; LBSPR) or `"length"` (FLicc's ogive).
+#' @param sel_lag Integer; number of length classes by which F at length in the
+#'   survival recursion lags the fitted selectivity. `0` (default) is FLicc's
+#'   model. `1` mimics LBSPR, whose GTG model (`LBSPRsim_()`) evaluates
+#'   selectivity in the survival recursion one class below the class midpoint
+#'   used for the predicted catch; with `mat = "relative", sel_lag = 1` the
+#'   result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.
 #' @param level Confidence level of the interval.
 #' @return A `data.frame` by year with `spr` (FLicc), `spr_gtg` (recomputed
 #'   with `mat`), the factor `adj = spr_gtg / spr`, and `lwr`, `upr`: FLicc's
@@ -32,10 +38,12 @@
 #' \dontrun{
 #' spr_gtg_flicc(fit)                  # LBSPR's maturity at relative size
 #' spr_gtg_flicc(fit, mat = "length")  # reproduces fit$report$spr
+#' spr_gtg_flicc(fit, sel_lag = 1)     # as LBSPR's reported SPR
 #' }
 #' @export
-spr_gtg_flicc <- function(fit, mat = c("relative", "length"), level = 0.95) {
+spr_gtg_flicc <- function(fit, mat = c("relative", "length"), sel_lag = 0, level = 0.95) {
   mat <- match.arg(mat)
+  sel_lag <- as.integer(sel_lag)
   td <- fit$tmb_data
   if (!identical(as.integer(td$pop_model), 2L)) stop("spr_gtg_flicc() needs a fit with pop_model = \"gtg\".")
   rp <- fit$obj$report(fit$obj$env$last.par.best)   # raw template report
@@ -46,6 +54,8 @@ spr_gtg_flicc <- function(fit, mat = c("relative", "length"), level = 0.95) {
   MK <- as.matrix(rp$MKMat); Ms <- as.matrix(td$Mscaler); Fl <- as.matrix(rp$Fk_l)
   wt <- as.matrix(td$wt); matL <- as.matrix(td$mat)
   ny <- ncol(Fl)
+  # LBSPR's survival recursion uses selectivity sel_lag classes below the midpoint
+  if (sel_lag > 0) Fl <- rbind(matrix(0, sel_lag, ny), Fl[seq_len(nl - sel_lag), , drop = FALSE])
   # maturity of each group
   lh <- fit$stklen@lhpar
   pn <- dimnames(lh)$params
