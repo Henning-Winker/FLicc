@@ -1877,44 +1877,15 @@ LBSPR (Hordyk et al. 2015, 2016) fits the GTG model (13 growth-type groups, CV
 of Linf 0.1, groups over $\pm 2$ SD) with a multinomial likelihood to each year
 separately, with Linf, M/k and CVL fixed, and estimates SL50, SL95 and F/M
 (apical F over M) by year. The example is LBSPR's multi-year length-frequency
-file `LFreq_MultiYrHead.csv` (six years, 5-mm classes, mid-points given) with the
-life history of LBSPR's vignette: Linf = 100 mm, M/k = 1.5, L50 = 66 mm,
-L95 = 70 mm. The data are entered directly:
+file `LFreq_MultiYrHead.csv` (six years, 5-mm classes) with the life history of
+LBSPR's vignette: Linf = 100 mm, M/k = 1.5, L50 = 66 mm, L95 = 70 mm. It is
+included in FLicc as `data("lbspr_test")`, with LBSPR's estimates for these
+data:
 
 ```{r lbspr-data}
-lbspr_csv <- "
-Length,2010,2011,2012,2013,2014,2015
-2.5,0,0,0,0,0,0
-7.5,0,0,0,0,0,0
-12.5,0,0,0,0,0,0
-17.5,0,6,0,0,0,0
-22.5,0,0,0,0,0,0
-27.5,6,6,6,0,0,6
-32.5,0,6,6,18,12,18
-37.5,36,42,30,60,30,36
-42.5,78,96,66,42,66,78
-47.5,126,102,126,102,114,150
-52.5,156,174,222,192,174,180
-57.5,252,246,216,228,288,198
-62.5,192,192,144,174,234,168
-67.5,126,162,150,180,156,168
-72.5,180,138,210,114,108,132
-77.5,138,84,114,132,78,90
-82.5,48,72,66,78,108,96
-87.5,36,48,30,48,24,48
-92.5,42,24,24,42,24,36
-97.5,6,24,12,12,0,24
-102.5,12,12,12,12,18,0
-107.5,0,0,0,0,0,6
-112.5,0,0,0,0,0,0
-117.5,0,0,0,0,0,0
-122.5,0,0,0,0,0,0
-127.5,0,0,0,0,0,0"
-lb <- read.csv(text = lbspr_csv, check.names = FALSE)
-lfd_lbspr <- FLQuants(Example = FLQuant(as.matrix(lb[, -1]),
-                      dimnames = list(len = lb$Length - 2.5, year = names(lb)[-1]), units = "mm"))
-# k only scales F and M; F/M and SPR depend on M/k = 1.5 only
-lhpar_lbspr <- FLPar(linf = 100, k = 0.2, M = 0.3, L50 = 66, L95 = 70, a = 1e-5, b = 3)
+data("lbspr_test")   # lfd_lbspr, lhpar_lbspr, lbspr_est
+lfd_lbspr
+lhpar_lbspr          # k only scales F and M; F/M and SPR depend on M/k = 1.5
 stk_lbspr <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
 ```
 
@@ -1937,22 +1908,22 @@ fit_lbspr_d <- fiticc(lfd_lbspr, stk_lbspr, sel_fun = "logistic", catch_by_gear 
                       settings = list(CVL = 0.1))
 ```
 
-LBSPR's results for these data (`LBSPRfit()`, smoothed estimates `@Ests`) are
-entered as a table; the FLicc estimates are taken from the fits (selectivity
+LBSPR's results for these data (`LBSPRfit()`) are in `lbspr_est`: the yearly
+point estimates, and the estimates smoothed over the years with a Kalman filter
+(`@Ests`, LBSPR's default output). The FLicc estimates are taken from the fits (selectivity
 from the parameters, F/M as apical F over M, SPR):
 
 ```{r lbspr-compare}
-lbspr_out <- data.frame(year = 2010:2015,
-                        SL50 = c(48.69, 48.70, 48.69, 48.70, 48.63, 48.42),
-                        SL95 = c(62.82, 62.88, 62.76, 62.78, 62.60, 62.34),
-                        FM   = c(0.55, 0.55, 0.55, 0.55, 0.55, 0.54),
-                        SPR  = c(0.44, 0.44, 0.44, 0.45, 0.45, 0.45))
+lbspr_out <- lbspr_est[, c("year", "SL50", "SL95", "FM", "SPR")]
+lbspr_smooth <- setNames(lbspr_est[, c("year", "SL50_smooth", "SL95_smooth", "FM_smooth", "SPR_smooth")],
+                         c("year", "SL50", "SL95", "FM", "SPR"))
 est_flicc <- function(f) {
   sm <- exp(f$obj$env$parList(par = f$obj$env$last.par.best)$Sm) * 100   # relative to Linf
   data.frame(year = as.numeric(f$tmb_data$year_names), SL50 = sm[1], SL95 = sm[1] + sm[2],
              FM = as.numeric(f$report$Fap) / 0.3, SPR = as.numeric(f$report$spr))
 }
-lbspr_runs <- list("LBSPR" = lbspr_out,
+lbspr_runs <- list("LBSPR, by year" = lbspr_out,
+                   "LBSPR, smoothed" = lbspr_smooth,
                    "FLicc mn, by year" = do.call(rbind, lapply(fits_lbspr_y, est_flicc)),
                    "FLicc mn, joint" = est_flicc(fit_lbspr_j),
                    "FLicc default" = est_flicc(fit_lbspr_d))
@@ -1967,18 +1938,48 @@ lbspr_long <- do.call(rbind, lapply(c("SL50", "FM", "SPR"), function(v)
 lbspr_long$run <- factor(lbspr_long$run, levels = names(lbspr_runs))
 ggplot(lbspr_long, aes(year, value, colour = run)) +
   geom_line() + geom_point() + facet_wrap(~what, scales = "free_y") +
-  scale_colour_manual(values = c("black", "#E69F00", "#0072B2", "#009E73")) +
+  scale_colour_manual(values = c("black", "grey55", "#E69F00", "#0072B2", "#009E73")) +
   labs(x = "Year", y = NULL, colour = NULL) + theme_bw() + theme(legend.position = "bottom")
 plot_spr(fit_lbspr_d, ci = TRUE)
 ```
 
-With LBSPR's configuration (`obs_model = "mn"`, each year separately) FLicc gives
-SL50, F/M and SPR close to LBSPR's: mean SPR
-`r round(mean(lbspr_runs[["FLicc mn, by year"]]$SPR), 3)` against
-`r round(mean(lbspr_out$SPR), 3)`. LBSPR's estimates shown are smoothed over the
-years (Kalman filter), FLicc's separate fits are not. Fitting the years jointly
-gives one selectivity and smoother F; the default likelihood estimates how much
-weight the compositions carry and widens the intervals accordingly.
+With LBSPR's configuration (`obs_model = "mn"`, each year separately) FLicc
+reproduces LBSPR's yearly estimates: SPR differs from LBSPR's by
+`r round(mean(abs(lbspr_runs[["FLicc mn, by year"]]$SPR - lbspr_out$SPR)), 3)` on
+average, F/M by
+`r round(mean(abs(lbspr_runs[["FLicc mn, by year"]]$FM - lbspr_out$FM)), 3)`.
+The yearly estimates vary (here SPR from `r min(lbspr_out$SPR)` to
+`r max(lbspr_out$SPR)` and SL50 from `r min(lbspr_out$SL50)` to
+`r max(lbspr_out$SL50)`), and LBSPR smooths them afterwards with a Kalman filter.
+FLicc's joint fit links the years inside the model instead: one selectivity for
+all years and a random walk on F, so the data of all years inform each year's F
+through the likelihood rather than by smoothing the point estimates
+afterwards; the figure compares it with LBSPR's smoothed series.
+
+At the same F/M, FLicc's SPR is slightly lower than LBSPR's in every year. The
+difference is in the spawning output per recruit, not in the fit: LBSPR's GTG
+model scales the maturity ogive with each group's Linf ("maturity at the same
+relative size", $L_{50,g} = L_{50}\,L_{\infty,g}/L_\infty$), so fast-growing
+groups mature at larger lengths and slow-growing groups at smaller ones, whereas
+FLicc uses one maturity-at-length ogive for all groups. Selectivity, F/M and the
+fit to the compositions are not affected, because maturity does not enter the
+likelihood. `spr_gtg_flicc()` recomputes the SPR of a GTG fit after the fit with
+LBSPR's maturity at relative size. Since maturity is a fixed input, the ratio
+`adj = spr_gtg / spr` is a correction factor: it scales FLicc's SPR and its
+interval and leaves the uncertainty (the SE of log SPR) as it is. With
+`mat = "length"` it returns FLicc's own SPR (`adj = 1`):
+
+```{r lbspr-sprgtg}
+spr_gtg <- do.call(rbind, lapply(fits_lbspr_y, spr_gtg_flicc))
+cbind(round(spr_gtg, 3), LBSPR = round(lbspr_out$SPR, 3))
+spr_gtg_flicc(fit_lbspr_d)   # joint default fit, with the adjusted interval
+```
+
+With maturity at relative size the yearly FLicc SPR differs from LBSPR's by
+`r round(mean(abs(spr_gtg$spr_gtg - lbspr_out$SPR)), 3)` on average, against
+`r round(mean(abs(spr_gtg$spr - lbspr_out$SPR)), 3)` with FLicc's common ogive.
+The default likelihood estimates how much weight the compositions carry and
+widens the intervals accordingly.
 
 ## LBB: the Illex example {#repro-lbb}
 

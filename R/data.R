@@ -149,3 +149,43 @@ NULL
 #' @keywords datasets
 NULL
 
+
+
+#' LBSPR multi-year example data
+#'
+#' The multi-year length-frequency example of the \pkg{LBSPR} package
+#' (\code{LFreq_MultiYrHead.csv}; Hordyk 2017, LBSPR R package) in FLicc format,
+#' with the life history of the LBSPR vignette and LBSPR's estimates for these
+#' data. Used in the user guide to reproduce LBSPR with FLicc
+#' (\code{obs_model = "mn"}, each year fitted separately).
+#'
+#' @name lbspr_test
+#' @docType data
+#' @usage data(lbspr_test)
+#' @format The dataset loads three objects:
+#' \describe{
+#'   \item{\code{lfd_lbspr}}{\code{FLQuants} with one element (\code{LBSPR}):
+#'   counts by 5-mm length class (lower bounds 0-125 mm) and year (2010-2015).}
+#'   \item{\code{lhpar_lbspr}}{\code{FLPar}: Linf = 100 mm, M/k = 1.5
+#'   (k = 0.2, M = 0.3; k only scales F and M), L50 = 66 mm, L95 = 70 mm,
+#'   a = 1e-5, b = 3.}
+#'   \item{\code{lbspr_est}}{\code{data.frame} of LBSPR's estimates by year
+#'   (\code{LBSPRfit()}): the yearly point estimates (\code{SL50}, \code{SL95},
+#'   \code{FM}, \code{SPR}) and LBSPR's Kalman-smoothed estimates
+#'   (\code{@Ests}; columns \code{SL50_smooth}, \code{SL95_smooth},
+#'   \code{FM_smooth}, \code{SPR_smooth}).}
+#' }
+#' @source LBSPR R package, \url{https://github.com/AdrianHordyk/LBSPR}
+#' @references Hordyk, A.R., Ono, K., Prince, J.D. and Walters, C.J. (2016).
+#'   A simple length-structured model based on life history ratios and
+#'   incorporating size-dependent selectivity: application to spawning
+#'   potential ratios for data-poor stocks. Canadian Journal of Fisheries and
+#'   Aquatic Sciences 73(12): 1787-1799.
+#' @examples
+#' data(lbspr_test)
+#' stk <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
+#' \dontrun{
+#' fit <- fiticc(lfd_lbspr, stk, sel_fun = "logistic", catch_by_gear = 1,
+#'               settings = list(CVL = 0.1, obs_model = "mn"))
+#' }
+NULL
