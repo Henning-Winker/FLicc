@@ -44,8 +44,11 @@ Supported options include \code{"logistic"}, \code{"normal"},
 scaled to a maximum of 1: parameters \code{mode1}, \code{sd1},
 \code{mode2 > mode1}, \code{sd2} and \code{h}, the height of the second
 curve relative to the first; for gears whose catch has two size modes,
-e.g. a gillnet fleet with two mesh groups). Fixed values for
-\code{sel_fixed} use the same names.}
+e.g. a gillnet fleet with two mesh groups), and \code{"bidsnormal"}
+(the same with a double-sided second curve: \code{lsd2}, \code{rsd2}
+instead of \code{sd2}; \code{rsd2 = 1000} in \code{sel_fixed} gives an
+asymptotic second mode). Fixed values for \code{sel_fixed} use the same
+names.}
 
 \item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
 in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.

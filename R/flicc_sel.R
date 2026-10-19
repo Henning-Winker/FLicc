@@ -3,21 +3,23 @@
 #' Evaluates the FLicc selectivity functions with parameters on the length
 #' scale (as in `sel_fixed`):
 #' `"logistic"` (`SL50`, `SL95`), `"dsnormal"` (`mode`, `lsd`, `rsd`),
-#' `"normal"` (`mode`, `sd`) and `"binormal"` (`mode1`, `sd1`, `mode2`, `sd2`,
-#' `h`; scaled to a maximum of 1 over `L`).
+#' `"normal"` (`mode`, `sd`), `"binormal"` (`mode1`, `sd1`, `mode2`, `sd2`,
+#' `h`) and `"bidsnormal"` (`mode1`, `sd1`, `mode2`, `lsd2`, `rsd2`, `h`); the
+#' two-mode functions are scaled to a maximum of 1 over `L`.
 #'
 #' @param L Lengths (e.g. bin mid-points).
-#' @param sel_fun `"logistic"`, `"dsnormal"`, `"normal"` or `"binormal"`.
+#' @param sel_fun `"logistic"`, `"dsnormal"`, `"normal"`, `"binormal"` or `"bidsnormal"`.
 #' @param pars Named list or vector of parameters (single values).
 #' @return Numeric vector of selectivity (maximum 1 for domes, asymptote 1 for logistic).
 #' @examples
 #' sel_curve_flicc(seq(10, 60, 5), "dsnormal", list(mode = 30, lsd = 4, rsd = 15))
 #' @export
-sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "binormal"), pars) {
+sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "binormal", "bidsnormal"), pars) {
   sel_fun <- match.arg(sel_fun)
   p <- as.list(pars)
   need <- switch(sel_fun, logistic = c("SL50", "SL95"), dsnormal = c("mode", "lsd", "rsd"),
-                 normal = c("mode", "sd"), binormal = c("mode1", "sd1", "mode2", "sd2", "h"))
+                 normal = c("mode", "sd"), binormal = c("mode1", "sd1", "mode2", "sd2", "h"),
+                 bidsnormal = c("mode1", "sd1", "mode2", "lsd2", "rsd2", "h"))
   miss <- setdiff(need, names(p))
   if (length(miss)) stop("Missing selectivity parameter(s) for ", sel_fun, ": ", paste(miss, collapse = ", "))
   switch(sel_fun,
@@ -25,7 +27,11 @@ sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "bi
     dsnormal = { d <- L - p$mode; exp(-d^2 / (2 * ifelse(L < p$mode, p$lsd, p$rsd)^2)) },
     normal   = exp(-(L - p$mode)^2 / (2 * p$sd^2)),
     binormal = { s <- exp(-(L - p$mode1)^2 / (2 * p$sd1^2)) + p$h * exp(-(L - p$mode2)^2 / (2 * p$sd2^2))
-                 s / max(s) })
+                 s / max(s) },
+    bidsnormal = { d2 <- L - p$mode2
+                   s <- exp(-(L - p$mode1)^2 / (2 * p$sd1^2)) +
+                     p$h * exp(-d2^2 / (2 * ifelse(L < p$mode2, p$lsd2, p$rsd2)^2))
+                   s / max(s) })
 }
 
 #' Explore selectivity curves over a range of parameter values
@@ -54,7 +60,7 @@ sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "bi
 #' plot_selfun("logistic", list(SL50 = c(26, 30, 34), SL95 = 38))
 #' }
 #' @export
-plot_selfun <- function(sel_fun = c("dsnormal", "logistic", "normal", "binormal"), pars, len = NULL,
+plot_selfun <- function(sel_fun = c("dsnormal", "logistic", "normal", "binormal", "bidsnormal"), pars, len = NULL,
                         lfd = NULL, ref = NULL) {
   sel_fun <- match.arg(sel_fun)
   obs <- NULL
@@ -127,7 +133,7 @@ dome_sens_flicc <- function(fit, gear, rsd = NULL, fixed = NULL, se = TRUE, ...)
   if (is.null(fit$report$obslen)) stop("fit needs FLRreport = TRUE (the default of fiticc()).")
   linf <- as.numeric(fit$stklen@lhpar["linf"])
   if (is.null(rsd)) rsd <- c(1000, round(c(0.85, 0.7, 0.55, 0.4) * linf, 1))
-  sel_fun <- c("logistic", "dsnormal", "normal", "binormal")[fit$tmb_data$sel_type]
+  sel_fun <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[fit$tmb_data$sel_type]
   sel_fun[g] <- "dsnormal"
   cbg <- fit$report$catch_by_gear
   fits <- list(base = fit)

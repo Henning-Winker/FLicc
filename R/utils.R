@@ -496,6 +496,14 @@ selpars_flicc <- function(fit) {
         setNames(c(m1, s1, m2, s2, h), c("mode1", "sd1", "mode2", "sd2", "h"))
       )
 
+    } else if (sel_type[g] == 5L) {
+      m1 <- exp(pars[1]) * Linf; s1 <- exp(pars[2]) * Linf
+      m2 <- m1 + exp(pars[3]) * Linf; l2 <- exp(pars[4]) * Linf; r2 <- exp(pars[5]) * Linf
+      h <- exp(pars[6])
+      out[[g]] <- FLCore::FLPar(
+        setNames(c(m1, s1, m2, l2, r2, h), c("mode1", "sd1", "mode2", "lsd2", "rsd2", "h"))
+      )
+
     } else {
       stop("Unknown sel_type for gear ", gear_names[g])
     }

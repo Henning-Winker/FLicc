@@ -406,7 +406,7 @@ mc_flicc <- function(
       list(CVL = draws$CVL[i])
     )
 
-    sel_fun <- c("logistic", "dsnormal", "normal", "binormal")[fit$tmb_data$sel_type]
+    sel_fun <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[fit$tmb_data$sel_type]
 
     args_i <- c(list(
       fit$report$obslen,

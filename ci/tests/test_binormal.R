@@ -34,3 +34,21 @@ ggplot2::ggsave(file.path(od, "binormal_sel.png"),
                 plot_compare_sel(list(dsnormal = f_ds, binormal = f_bn)), width = 6, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "binormal_resid.png"),
                 plot_resid_len(f_ds), width = 6, height = 4, dpi = 100)
+
+# bidsnormal: second mode double-sided; rsd2 = 1000 gives an asymptotic second mode
+f_bd <- fiticc(lfdc, stk, sel_fun = "bidsnormal", catch_by_gear = 1, settings = set,
+               sel_fixed = list(Pooled = list(rsd2 = 1000)))
+print(f_bd$diagnostics)
+spd <- selpars_flicc(f_bd); print(spd)
+pd <- as.list(as.numeric(spd$Pooled)); names(pd) <- dimnames(spd$Pooled)$params
+stopifnot(abs(pd$rsd2 - 1000) < 1e-6, pd$mode2 > pd$mode1)
+s_r <- sel_curve_flicc(L, "bidsnormal", pd)
+s_t <- as.numeric(f_bd$obj$report(f_bd$obj$env$last.par.best)$Sel[, 1])
+cat("bidsnormal max |R - TMB|:", max(abs(s_r - s_t)), "\n")
+stopifnot(max(abs(s_r - s_t)) < 1e-6)
+tab2 <- rbind(tab, data.frame(model = "bidsnormal (rsd2 = 1000)", conv = f_bd$diagnostics$conv_tier,
+                              AIC = AIC(LLflicc(f_bd)), SPR_last = tail(c(f_bd$report$spr), 1)))
+print(tab2)
+ggplot2::ggsave(file.path(od, "binormal_sel.png"),
+                plot_compare_sel(list(dsnormal = f_ds, binormal = f_bn, bidsnormal = f_bd)),
+                width = 6, height = 4, dpi = 100)
