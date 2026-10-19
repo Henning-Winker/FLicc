@@ -260,10 +260,19 @@ lbb_bh_flicc <- function(lens, Linf, MK, FK, gaus = FALSE, selpar1, selpar2) {
 #' same quantity from the FLicc engine, see [plot_epr()]) and SPR.
 #' Attributes: `BFM1B0` (B/B0 at F = M with Lc = Lc_opt, LBB's proxy for
 #' Bmsy) and `YRFM1`.
-#' @param x Output of [lbb_flicc()].
+#' For any fitted FLicc model (several gears, GTG or gamma), the same
+#' quantities are derived from the fit: Linf and M/K (estimated or fixed),
+#' apical F/K over all gears, Lc and alpha from the combined selectivity (the
+#' lengths at 50% and 95% of it), Lmean, L95 and the share mature from the
+#' observed compositions weighted by each gear's predicted catch in numbers,
+#' and B/B0 = the engine's EPR with intervals from its standard errors (equal
+#' to LBB's closed form for one gear). F/M intervals are given for one gear
+#' only (apical F of several gears has no standard error).
+#' @param x Output of [lbb_flicc()], or a fitted FLicc object ([fiticc()]).
 #' @return A `data.frame`.
 #' @export
 lbbref_flicc <- function(x) {
+  if (inherits(x, "flicc_tmb_fit")) return(lbbref_fit_flicc(x))
   gaus <- identical(x$sel_fun, "normal")
   L <- as.numeric(dimnames(x$lfd)$len)
   one <- function(f, yr) {
@@ -334,6 +343,73 @@ lbbref_flicc <- function(x) {
   rows
 }
 
+#' LBB quantities for any FLicc fit (internal)
+#' @noRd
+lbbref_fit_flicc <- function(fit) {
+  rep <- fit$report
+  if (!isTRUE(rep$FLReport)) stop("fit needs FLRreport = TRUE (the default of fiticc()).")
+  td <- fit$tmb_data
+  L <- as.numeric(td$LLB)
+  w <- c(diff(L), utils::tail(diff(L), 1))
+  Lmid <- L + w / 2
+  yrs <- as.character(td$year_names)
+  k <- as.numeric(rep$lhpar["k"])
+  linf <- as.numeric(rep$lhpar["linf"]); mk <- as.numeric(rep$lhpar["Mk"])
+  pci <- function(nm, v) {
+    r <- fit$par[fit$par$par == nm, , drop = FALSE]
+    if (nrow(r) && is.finite(r$se[1])) exp(r$mpd[1] + c(-1.96, 1.96) * r$se[1]) else c(NA, NA)
+  }
+  linf_ci <- pci("log_Linf"); mk_ci <- pci("log_Mk")
+  raw <- fit$obj$report(fit$obj$env$last.par.best)
+  shn <- raw$catch_share_n
+  ec <- tryCatch(epr_ci_flicc(fit), error = function(e) NULL)
+  ng <- length(td$gear_names)
+  rows <- do.call(rbind, lapply(seq_along(yrs), function(j) {
+    yr <- yrs[j]
+    s <- as.numeric(rep$sel[, yr]); s <- s / max(s)
+    cross <- function(p) { i <- which(s >= p)[1]; if (is.na(i)) NA else if (i == 1) Lmid[1] else
+      stats::approx(s[(i - 1):i], Lmid[(i - 1):i], xout = p)$y }
+    L50 <- cross(0.5); L95 <- cross(0.95)
+    alpha <- if (is.finite(L50) && is.finite(L95) && L95 > L50) log(19) * linf / (L95 - L50) else NA
+    fk <- as.numeric(rep$Fap[, yr]) / k
+    fk_ci <- if (ng == 1) {
+      r <- fit$par[fit$par$par == "log_Fk", , drop = FALSE]
+      if (nrow(r) >= j && is.finite(r$se[j])) exp(r$mpd[j] + c(-1.96, 1.96) * r$se[j]) else c(NA, NA)
+    } else c(NA, NA)
+    # observed composition of the whole catch: gears weighted by predicted catch in numbers
+    obs <- matrix(td$obs[, j, ], nrow = length(L))
+    tot <- colSums(obs)
+    wg <- if (!is.null(shn)) as.numeric(shn[j, ]) else rep(1, ng)
+    wg[tot <= 0] <- 0
+    p <- if (sum(wg) > 0) as.numeric(obs %*% (wg / pmax(tot, 1e-12))) / sum(wg) else rep(0, length(L))
+    keepL <- L < linf
+    sel <- L >= L50 & keepL
+    Lmean <- if (is.finite(L50) && sum(p[sel]) > 0) sum(L[sel] * p[sel]) / sum(p[sel]) else NA
+    cs <- cumsum(p[keepL]) / sum(p[keepL])
+    fm <- fk / mk
+    epr <- if (!is.null(rep$epr)) as.numeric(rep$epr[, yr]) else NA
+    data.frame(year = as.numeric(yr), Linf = linf, Linf_lcl = linf_ci[1], Linf_ucl = linf_ci[2],
+               Lc = L50, Lc_lcl = NA, Lc_ucl = NA, alpha = alpha, sel_sd = NA_real_,
+               MK = mk, MK_lcl = mk_ci[1], MK_ucl = mk_ci[2],
+               FK = fk, FK_lcl = fk_ci[1], FK_ucl = fk_ci[2],
+               FM = fm, FM_lcl = fk_ci[1] / mk, FM_ucl = fk_ci[2] / mk,
+               ZK = mk + fk, Lopt = 3 / (3 + mk) * linf,
+               Lc_opt = linf * (2 + 3 * fm) / ((1 + fm) * (3 + mk)),
+               Lmean = Lmean, L95 = L[keepL][which(cs >= 0.95)[1]],
+               perc_mat = sum(p[L > as.numeric(rep$lhpar["L50"])]) / sum(p),
+               BB0 = epr,
+               BB0_lcl = if (!is.null(ec)) ec$lwr[j] else NA, BB0_ucl = if (!is.null(ec)) ec$upr[j] else NA,
+               YR = NA_real_, EPR = epr, SPR = as.numeric(rep$spr[, yr]))
+  }))
+  rows$Lmean_Lopt <- rows$Lmean / rows$Lopt
+  rows$Lc_Lc_opt <- rows$Lc / rows$Lc_opt
+  a <- stats::median(rows$alpha, na.rm = TRUE)
+  bfm <- if (is.finite(a)) lbb_bh_flicc(L, linf, mk, mk, FALSE, 5 / (2 * (3 + mk)), a) else c(BB0 = NA, YR = NA)
+  attr(rows, "BFM1B0") <- bfm[["BB0"]]
+  attr(rows, "YRFM1") <- bfm[["YR"]]
+  rows
+}
+
 #' Plot an LBB analysis
 #'
 #' Four panels in the style of LBB's summary figure: (a) observed and predicted
@@ -343,12 +419,18 @@ lbbref_flicc <- function(x) {
 #' Bmsy, dashed) and half of it (dotted). B/B0 in LBB is the exploited
 #' (vulnerable) biomass relative to the unfished state, not spawning biomass;
 #' FLicc's SPR is in `x$table$SPR`.
-#' @param x Output of [lbb_flicc()].
+#' Works for [lbb_flicc()] results and for any fitted FLicc model (several
+#' gears, GTG or gamma): panel (a) then shows the composition of the whole
+#' catch (gears weighted by their predicted catch in numbers), Lc is the length
+#' at 50% of the combined selectivity and B/B0 is the engine's EPR (see
+#' [lbbref_flicc()]).
+#' @param x Output of [lbb_flicc()], or a fitted FLicc object.
 #' @param year Year for panel (a) (default the last).
 #' @param smooth Apply LBB's 3-year moving average to the time series.
 #' @return A patchwork of ggplots.
 #' @export
 plot_lbb <- function(x, year = NULL, smooth = FALSE) {
+  if (inherits(x, "flicc_tmb_fit")) x <- list(fits = list(joint = x), by_year = FALSE, table = lbbref_fit_flicc(x))
   tab <- x$table
   if (is.null(tab)) stop("No LBB results to plot.")
   ma <- function(v) { out <- v; if (length(v) >= 3) for (i in seq_along(v)) out[i] <- mean(v[max(1, i - 2):i]); out }
@@ -356,10 +438,14 @@ plot_lbb <- function(x, year = NULL, smooth = FALSE) {
     tab[[nm]] <- ma(tab[[nm]])
   yr <- if (is.null(year)) as.character(max(tab$year)) else as.character(year)
   f <- if (isTRUE(x$by_year)) x$fits[[yr]] else x$fits$joint
-  ob <- as.data.frame(f$report$obslen[[1]][, yr])
-  pr <- as.data.frame(f$report$predlen_gear[[1]][, yr])
-  d1 <- data.frame(L = as.numeric(as.character(ob$len)), obs = ob$data / sum(ob$data, na.rm = TRUE),
-                   pred = pr$data[match(ob$len, pr$len)] / sum(pr$data, na.rm = TRUE))
+  # whole-catch composition: gears weighted by predicted catch in numbers
+  td <- f$tmb_data; j <- match(yr, as.character(td$year_names))
+  obs <- matrix(td$obs[, j, ], nrow = length(td$LLB)); tot <- colSums(obs)
+  shn <- f$obj$report(f$obj$env$last.par.best)$catch_share_n
+  wg <- if (!is.null(shn)) as.numeric(shn[j, ]) else rep(1, ncol(obs)); wg[tot <= 0] <- 0
+  po <- as.numeric(obs %*% (wg / pmax(tot, 1e-12))) / max(sum(wg), 1e-12)
+  pp <- as.numeric(f$report$predlen[, yr])
+  d1 <- data.frame(L = as.numeric(td$LLB), obs = po / sum(po), pred = pp / sum(pp))
   tr <- tab[tab$year == as.numeric(yr), ]
   p1 <- ggplot2::ggplot(d1, ggplot2::aes(L)) +
     ggplot2::geom_col(ggplot2::aes(y = obs), fill = "grey75", width = 0.9 * stats::median(diff(d1$L))) +

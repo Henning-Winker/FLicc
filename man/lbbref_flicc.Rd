@@ -6,7 +6,7 @@
 lbbref_flicc(x)
 }
 \arguments{
-\item{x}{Output of \code{lbb_flicc()}.}
+\item{x}{Output of \code{lbb_flicc()}, or any fitted FLicc object (\code{fiticc()}): Lc and alpha from the combined selectivity, Lmean from the catch-weighted observed composition, B/B0 = the engine's EPR with intervals.}
 }
 \value{
 A \code{data.frame} by year with Linf, Lc, alpha, M/K, F/K, F/M, Z/K (with 95\% intervals), Lopt, Lc_opt, Lmean, L95, share mature, B/B0 (with LBB's error propagation), Y/R' and FLicc's SPR; attributes \code{BFM1B0} (B/B0 at F = M, Lc = Lc_opt, LBB's Bmsy proxy) and \code{YRFM1}.

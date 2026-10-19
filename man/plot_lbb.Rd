@@ -9,7 +9,7 @@ plot_lbb(x, year = NULL, smooth = FALSE)
 \method{print}{flicc_lbb}(x, ...)
 }
 \arguments{
-\item{x}{Output of \code{lbb_flicc()}.}
+\item{x}{Output of \code{lbb_flicc()}, or any fitted FLicc object (several gears: whole-catch composition, combined selectivity, B/B0 = EPR).}
 
 \item{year}{Year for the length-frequency panel (default the last).}
 

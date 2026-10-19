@@ -57,3 +57,10 @@ ggplot2::ggsave(file.path(od, "epr_lbb.png"),
 # 5. LBB-like weighting: ESS 20000 with fixed DM (LBB Dirichlet concentration 10^4)
 lbe <- lbb_flicc(gn, Lm50 = 31.2, ess = 20000)
 print(lbe)
+
+# 6. LBB summary for any FLicc fit (two gears, dome trawl)
+tb2 <- lbbref_flicc(fit2)
+print(tb2[, c("year", "Linf", "Lc", "alpha", "MK", "FK", "FM", "Lopt", "Lc_opt", "Lmean", "BB0", "BB0_lcl", "BB0_ucl", "SPR")])
+cat("BFM1B0", attr(tb2, "BFM1B0"), "\n")
+stopifnot(nrow(tb2) == 12, all(is.finite(tb2$BB0)), all(is.finite(tb2$Lc)))
+ggplot2::ggsave(file.path(od, "lbb_anyfit.png"), plot_lbb(fit2), width = 10, height = 7, dpi = 100)
