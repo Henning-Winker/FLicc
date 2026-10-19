@@ -6,7 +6,7 @@ f <- file.path(od, "lbb_examples.rds")
 if (!file.exists(f)) {
   cat("lbb_examples.rds not available; skipped.\n")
 } else {
-  source("inst/protocols/lbb_comparison.R")
+  source(system.file("protocols", "lbb_comparison.R", package = "FLicc"))
   lbbx <- readRDS(f)
   t0 <- system.time(res <- run_lbb_examples(lbbx))
   cat("total seconds", t0[["elapsed"]], "\n")
