@@ -39,6 +39,12 @@ al. 2016):
   formulation is FLicc's default population model (`pop_model = "gtg"`): Linf
   varies between growth-type groups, each with its own survival through the
   length classes, and status is expressed as the spawning potential ratio.
+- **LBB** (Froese et al. 2018), the length-based Bayesian biomass estimator,
+  which is nested in the GTG model: one growth type, one gear, each year
+  fitted separately, with priors on Linf and M/K. `lbb_flicc()` sets FLicc up
+  as LBB, and LBB's status measure B/B0 (exploited biomass relative to
+  unfished) is available for any FLicc fit as the exploitable potential ratio
+  (EPR; section *Reproducing LBB*).
 
 On this common basis FLicc adds what a routine assessment and management
 procedure needs: several years fitted jointly with shared selectivity and a
@@ -51,7 +57,8 @@ FLR.
 The names of the models and options in FLicc credit these sources: fishblicc
 for the length-interval catch-curve formulation, multi-gear selectivity and the
 gamma growth model; LBSPR for the GTG model and the SPR-based use of length
-data in data-limited fisheries.
+data in data-limited fisheries; LBB for the single-growth-type special case,
+its priors and the B/B0 status measure.
 
 ## About this guide
 
@@ -63,7 +70,7 @@ at, what is a red flag, what to do about it). **Part II** documents the
 technical options for users who need them: effective sample size and
 observation models, fishing mortality over time, growth variability and
 life-history priors, the tail of the composition, the model equations and a
-comparison of models, and the reproduction of fishblicc. **Part III** covers
+comparison of models, and the reproduction of fishblicc and LBB. **Part III** covers
 use in management-strategy evaluation and summarises the checks and
 recommendations. The examples use the built-in splendid alfonsino data.
 Recommendations marked *simulation* come from tests with an alfonsino-like
@@ -1876,6 +1883,153 @@ eqstk_fishblicc@refpts
 plot_eqcurves(eqstk_fishblicc)
 ```
 
+# Reproducing LBB: the Illex example
+
+## LBB as a special case of the GTG model
+
+LBB (Froese et al. 2018) describes the numbers surviving to length class $j$
+(lower bound $L_j$) with one growth type,
+$$
+N_j = N_{j-1}\left(\frac{L_\infty - L_j}{L_\infty - L_{j-1}}\right)^{M/K + (F/K)\,S_j},
+$$
+where $S_j$ is a logistic selectivity with length at 50% selection $L_c$ and
+slope $\alpha$ (relative to $L_\infty$). This is FLicc's GTG recursion with a
+single growth-type group (`pop_model = "gtg"`, `ngtg = 1`). Each year is fitted
+separately, with a prior on Linf (CV at most 1%, from an `nls()` fit to the
+aggregated frequencies, or a user value), on M/K (1.5, SD 0.15) and, in LBB,
+also on $L_c$ and $\alpha$; the likelihood is a Dirichlet on the relative
+frequencies with a concentration of $10^4$.
+
+The expected catch in a length class can be computed in two ways:
+
+- **with the pile-up correction** (Hordyk et al. 2019; FLicc's model and LBB
+  with `Pile = 1`): the numbers in the class are the survivors integrated over
+  the time spent in it, $C_j \propto S_j\,(N_j - N_{j+1})/(M/K + (F/K) S_j)$.
+  Fish grow more slowly towards Linf, so they accumulate in the large classes;
+- **without it** (LBB `Pile = 0`, the setting of LBB's example stocks): the
+  catch is proportional to the survivorship at the class bound,
+  $C_j \propto S_j N_j$.
+
+`lbb_flicc()` sets FLicc up as LBB: one growth type, one gear (gears pooled),
+Linf and M/K priors from `lbb_priors_flicc()` (LBB's guess step) or user values,
+lengths at or above the Linf prior excluded, and each year fitted separately
+(`by_year = TRUE`) or jointly with a random walk on F (`by_year = FALSE`). The
+options `pile` (LBB's `Pile`) and `ess` (data weighting; `ess = 20000` with a
+fixed Dirichlet-multinomial precision corresponds to LBB's concentration of
+$10^4$) allow LBB's settings to be matched. Selectivity is estimated without
+priors. `lbbref_flicc()` gives LBB's quantities by year (Linf, Lc, M/K, F/K,
+F/M, Z/K, Lopt, Lc_opt, B/B0 from LBB's Beverton-Holt equations) next to
+FLicc's EPR and SPR, and `plot_lbb()` LBB's summary figure.
+
+## The Illex example
+
+The example uses LBB's own example stock *Illex coindetii* (Adriatic) with the
+settings of LBB's `Example_ID.csv`: the years 1996, 1999, 2001, 2002, 2009,
+2014 and 2016, Linf set to 23 cm, Lm50 16 cm and `Pile = 0`. The data are read
+from the LBB repository (lengths in mm, converted to cm) and raised to 1000 per
+year:
+
+```{r lbb-data}
+url <- "https://raw.githubusercontent.com/SISTA16/LBB/master/Example_Dat.csv"
+lbb_dat <- tryCatch(read.csv(url), error = function(e) NULL)
+have_lbb <- !is.null(lbb_dat)
+if (have_lbb) {
+  d <- subset(lbb_dat, Stock == "Ille_coi_AD" & !is.na(CatchNo))
+  d <- aggregate(CatchNo ~ Year + Length, data = d, FUN = sum)
+  d$data <- d$CatchNo / ave(d$CatchNo, d$Year, FUN = sum) * 1000
+  lfd_illex <- FLQuantLen(lfd_long_to_wide(data.frame(len = d$Length / 10, year = d$Year,
+                                                      data = d$data, qname = "Illex")),
+                          unit = "cm", midL = FALSE)
+}
+yrs_illex <- c(1996, 1999, 2001, 2002, 2009, 2014, 2016)
+```
+
+Three fits: LBB's settings (`pile = 0`, LBB's data weighting), the same with
+the pile-up correction, and FLicc's joint fit of all years with the
+pile-up correction and the estimated Dirichlet-multinomial precision:
+
+```{r lbb-fits, eval = have_lbb}
+fit_lbb0 <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      pile = 0, ess = 20000)
+fit_lbb1 <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      pile = 1, ess = 20000)
+fit_lbbj <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      by_year = FALSE)
+fit_lbb0
+```
+
+LBB's own results for this stock (`LBB_33a.R`, MCMC medians) are entered as a
+table and compared by year:
+
+```{r lbb-compare, eval = have_lbb, fig.height = 4.5}
+lbb_out <- data.frame(year = yrs_illex,
+                      ZK  = c(2.32, 3.12, 2.57, 3.72, 3.15, 5.24, 6.85),
+                      FM  = c(0.265, 0.878, 0.732, 1.467, 0.910, 2.713, 3.570),
+                      BB0 = c(0.699, 0.267, 0.293, 0.138, 0.294, 0.065, 0.044))
+runs <- list("LBB (JAGS)" = lbb_out, "FLicc, Pile = 0" = fit_lbb0$table,
+             "FLicc, Pile = 1" = fit_lbb1$table, "FLicc, Pile = 1, joint" = fit_lbbj$table)
+cmp <- do.call(rbind, Map(function(x, nm) data.frame(run = nm, year = x$year, ZK = x$ZK,
+                                                     FM = x$FM, BB0 = x$BB0), runs, names(runs)))
+cmp$run <- factor(cmp$run, levels = names(runs))
+long <- rbind(data.frame(cmp[, 1:2], what = "Z/K", value = cmp$ZK),
+              data.frame(cmp[, 1:2], what = "F/M", value = cmp$FM),
+              data.frame(cmp[, 1:2], what = "B/B0", value = cmp$BB0))
+ggplot(long, aes(year, value, colour = run)) +
+  geom_line() + geom_point() +
+  facet_wrap(~what, scales = "free_y") +
+  scale_colour_manual(values = c("black", "#E69F00", "#0072B2", "#009E73")) +
+  labs(x = "Year", y = NULL, colour = NULL) +
+  theme_bw() + theme(legend.position = "bottom")
+dif <- function(x) round(mean(x$ZK - lbb_out$ZK), 2)
+```
+
+With LBB's settings (`pile = 0`) FLicc reproduces LBB: Z/K differs from LBB's
+by `r if (have_lbb) dif(fit_lbb0$table) else NA` on average over the years, and
+F/M and B/B0 follow LBB's estimates year by year. The remaining differences are
+small: LBB's priors on $\alpha$ and F/K shape how Z/K is split into M/K and F/K
+(LBB's M/K moves between 1.4 and 1.8 across years, FLicc's stays near the prior
+of 1.5), and MCMC medians differ slightly from maximum likelihood estimates.
+
+With the pile-up correction, Z/K is higher by
+`r if (have_lbb) dif(fit_lbb1$table) else NA` on average, so F/M is higher and
+B/B0 lower. Survivorship declines as about $(L_\infty - L)^{Z/K}$, while the
+numbers in a class decline as about $(L_\infty - L)^{Z/K - 1}$, so the model
+without the correction needs a Z/K about one unit lower to describe the same
+frequencies. The joint fit of all years (`by_year = FALSE`) shares selectivity
+and links F between years, which smooths the year-to-year changes in the
+separate fits.
+
+```{r lbb-plot, eval = have_lbb, fig.height = 7}
+plot_lbb(fit_lbb1)
+```
+
+## Points to consider with LBB
+
+- **Pile-up correction.** Hordyk et al. (2019) pointed out that the numbers in a
+  length class are the survivors integrated over the class, and that without
+  the correction F is underestimated. Froese et al. (2019) argued that the
+  correction matters most for continuous recruitment and sampling, and added it
+  as an option to LBB. In LBB's B/B0, computed from the Beverton-Holt equations,
+  the integration is included; with `Pile = 0` Z/K is therefore estimated with
+  a different model from the one used for B/B0. FLicc uses the integrated
+  numbers for estimation and status (`pile = 1`, default); `pile = 0` is
+  available to reproduce LBB.
+- **Priors.** LBB's priors on $L_c$ and in particular on $\alpha$ (SD 2.5%,
+  centred on a value derived from each year's ascending limb) fix much of the
+  selectivity shape; together with the M/K prior they determine the split of
+  Z/K into M/K and F/K, which the data alone barely inform. In FLicc these
+  constraints are optional settings (priors, `sel_fixed`).
+- **Separate years.** Fitting each year separately lets selectivity and Linf
+  change between years, which absorbs recruitment pulses as apparent changes in
+  selectivity. The joint fit (`by_year = FALSE`) estimates one selectivity and
+  links F between years.
+- **Weighting.** LBB's Dirichlet concentration of $10^4$ gives the data a weight
+  close to $10^4$ fish per year whatever the sample size; FLicc's default
+  estimates the precision from the data.
+
+Within these choices, LBB's estimates can be reproduced in FLicc, and each
+assumption can be switched separately to see its effect.
+
 # Part III: Management {.unnumbered .part}
 
 # Use in an MSE
@@ -1936,6 +2090,18 @@ overdispersion.*
 
 # References
 
+Froese, R., Winker, H., Coro, G., Demirel, N., Tsikliras, A.C., Dimarchopoulou,
+D., Scarcella, G., Probst, W.N., Dureuil, M. and Pauly, D. (2018). A new approach
+for estimating stock status from length frequency data. *ICES Journal of Marine
+Science* 75(6): 2004-2015. doi:10.1093/icesjms/fsy078. R code:
+<https://github.com/SISTA16/LBB>
+
+Froese, R., Winker, H., Coro, G., Demirel, N., Tsikliras, A.C., Dimarchopoulou,
+D., Scarcella, G., Probst, W.N., Dureuil, M. and Pauly, D. (2019). On the pile-up
+effect and priors for Linf and M/K: response to a comment by Hordyk et al. on "A
+new approach for estimating stock status from length frequency data". *ICES
+Journal of Marine Science*. doi:10.1093/icesjms/fsy199
+
 Hordyk, A., Ono, K., Valencia, S., Loneragan, N. and Prince, J. (2015). A novel
 length-based empirical estimation method of spawning potential ratio (SPR), and
 tests of its performance, for small-scale, data-poor fisheries. *ICES Journal of
@@ -1946,6 +2112,11 @@ length-structured model based on life history ratios and incorporating
 size-dependent selectivity: application to spawning potential ratios for
 data-poor stocks. *Canadian Journal of Fisheries and Aquatic Sciences* 73(12):
 1787-1799. doi:10.1139/cjfas-2015-0422
+
+Hordyk, A.R., Prince, J.D., Carruthers, T.R. and Walters, C.J. (2019). Comment
+on "A new approach for estimating stock status from length frequency data" by
+Froese et al. (2018). *ICES Journal of Marine Science* 76(2): 457-460.
+doi:10.1093/icesjms/fsy168
 
 Kell, L.T., Mosqueira, I., Grosjean, P., Fromentin, J.-M., Garcia, D., Hillary,
 R., Jardim, E., Mardle, S., Pastoors, M.A., Poos, J.J., Scott, F. and Scott,
