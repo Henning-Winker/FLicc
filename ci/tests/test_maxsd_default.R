@@ -11,8 +11,10 @@ f_def <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg)
 stopifnot(f_def$tmb_data$ngtg == 19, length(f_def$tmb_data$gtg_z) == 19, max(f_def$tmb_data$gtg_z) == 3)
 
 time_fit <- function(set, se = TRUE, n = 3) {
-  t <- replicate(n, system.time(f <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg,
-                                             settings = set, se = se))[["elapsed"]])
+  t <- numeric(n)
+  for (i in seq_len(n))
+    t[i] <- system.time(f <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg,
+                                    settings = set, se = se))[["elapsed"]]
   list(fit = f, time = median(t))
 }
 res <- list(
