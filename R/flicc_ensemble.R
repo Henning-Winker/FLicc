@@ -234,3 +234,57 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
                   title = ttl) +
     ggplot2::theme_bw()
 }
+
+#' Summary table of several FLicc fits
+#'
+#' One row per fit with the convergence tier, SPR in the last year with its
+#' confidence interval, apical F over M, F at the SPR target, current F
+#' relative to it, and AIC. Useful to compare sensitivity runs.
+#'
+#' F/M uses each fit's own M (`stklen@lhpar["M"]`), so runs with different M
+#' are comparable. AIC is comparable only between fits with the same data and
+#' likelihood (see [ensemble_flicc()]); `dAIC` is given relative to the first
+#' fit for convenience and must be read with that in mind.
+#'
+#' @param fits A named list of fitted FLicc objects (from [fiticc()]), or a
+#'   single fit.
+#' @param spr Target SPR in percent for Fspr (default 40).
+#' @param level Interval level for SPR.
+#' @param digits Number of decimal places.
+#' @return A `data.frame` with columns run, conv, SPR, lwr, upr, FM, Fap,
+#'   Fspr, F_Fspr, AIC, dAIC.
+#' @examples
+#' \dontrun{
+#' fits_summary(list(reference = fit, tail_cut40 = fit_cut40, Lplus40 = fit_plus40))
+#' }
+#' @export
+fits_summary <- function(fits, spr = 40, level = 0.95, digits = 3) {
+  if (inherits(fits, "flicc_tmb_fit")) fits <- list(fit = fits)
+  if (!is.list(fits) || !length(fits)) stop("fits must be a fitted FLicc object or a list of them.")
+  if (is.null(names(fits)) || any(names(fits) == "")) names(fits) <- paste0("fit", seq_along(fits))
+  fits <- fits[!vapply(fits, is.null, logical(1))]
+  row <- function(nm) {
+    f <- fits[[nm]]
+    tr <- tryCatch(f$diagnostics$conv_tier, error = function(e) NULL)
+    sp <- tail(as.numeric(f$report$spr), 1)
+    ci <- tryCatch(spr_ci_flicc(f, level = level), error = function(e) NULL)
+    lw <- up <- NA_real_
+    if (!is.null(ci) && nrow(ci)) { lw <- tail(ci$lwr, 1); up <- tail(ci$upr, 1) }
+    fap <- tail(as.numeric(f$report$Fap), 1)
+    M <- as.numeric(f$stklen@lhpar["M"])
+    fs <- tryCatch(as.numeric(fspr_flicc(f, spr = spr))[1], error = function(e) NA_real_)
+    aic <- tryCatch(stats::AIC(LLflicc(f)), error = function(e) NA_real_)
+    data.frame(run = nm, conv = if (is.null(tr)) NA_character_ else tr,
+               SPR = sp, lwr = lw, upr = up, FM = fap / M, Fap = fap,
+               Fspr = fs, F_Fspr = fap / fs, AIC = aic, stringsAsFactors = FALSE)
+  }
+  out <- do.call(rbind, lapply(names(fits), row))
+  out$dAIC <- out$AIC - out$AIC[1]
+  names(out)[names(out) == "Fspr"] <- paste0("Fspr", spr)
+  names(out)[names(out) == "F_Fspr"] <- paste0("F_Fspr", spr)
+  num <- vapply(out, is.numeric, logical(1))
+  out[num] <- lapply(out[num], round, digits)
+  out$AIC <- round(out$AIC, 1); out$dAIC <- round(out$dAIC, 1)
+  rownames(out) <- NULL
+  out
+}

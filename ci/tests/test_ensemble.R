@@ -50,3 +50,8 @@ eb <- b$data[[which(lay == "GeomErrorbar")]]; pt <- b$data[[which(lay == "GeomPo
 xe <- tapply(eb$x, eb$colour, mean); xp <- tapply(pt$x, pt$colour, mean)
 print(rbind(errorbar = xe, point = xp[names(xe)]))
 stopifnot(max(abs(xe - xp[names(xe)])) < 1e-8)
+
+# fits_summary
+fs <- fits_summary(ds$fits); print(fs)
+stopifnot(nrow(fs) == length(ds$fits), all(c("run", "conv", "SPR", "lwr", "upr", "FM", "Fspr40", "AIC") %in% names(fs)))
+print(fits_summary(fit))
