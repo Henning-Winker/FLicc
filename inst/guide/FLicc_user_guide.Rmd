@@ -537,20 +537,34 @@ shown, `c(1000, 0.85, 0.7, 0.55, 0.4) x Linf`, are the default levels of the dom
 sensitivity below, from no dome to a moderate one. `sel_curve_flicc()` returns the
 values of a curve.
 
-The two-mode functions are explored the same way. Here, over the trawl
-composition, a small-fish mode at 22 cm and a large-fish mode at 36 cm:
+The two-mode functions are explored the same way. A composition with two
+size modes arises, for example, when the gears are pooled into one fleet.
+`combine_lfd()` pools the gears, each raised by its catch share (by weight,
+`cbg` = 70% trawl, 30% gillnet), and rescales the result to an effective sample
+size:
+
+```{r combine-lfd, fig.height = 3.5}
+yr_last  <- tail(as.numeric(dimnames(lfd[[1]])$year), 1)
+lfd_fleet <- combine_lfd(window(lfd, start = yr_last), catch_by_gear = cbg,
+                         lhpar = lhpar, ess.n = 500)
+plot_lfd(lfd_fleet)
+```
+
+The pooled fleet has a small-fish mode (from the trawl) at about 18 cm and a
+large-fish mode (mainly from the gillnet) at about 31 cm. Over it,
 `"binormal"` with two widths of the second curve, and `"bidsnormal"` with the
-second mode flat (`rsd2 = 1000`) or domed on the right, at two relative
-heights:
+second mode flat (`rsd2 = 1000`, asymptotic) or domed on the right:
 
 ```{r selfun-twomodes, fig.height = 4.5}
-tr <- lfd[["Trawl"]]
-plot_selfun("binormal", list(mode1 = 22, sd1 = 2, mode2 = 36, sd2 = c(3, 6), h = 0.5),
-            lfd = tr, ref = ref_L)
-plot_selfun("bidsnormal", list(mode1 = 22, sd1 = 2, mode2 = 36, lsd2 = 4,
-                               rsd2 = c(1000, 10, 5), h = c(0.5, 1)),
-            lfd = tr, ref = ref_L)
+plot_selfun("binormal", list(mode1 = 18, sd1 = 2.5, mode2 = 31, sd2 = c(4, 8), h = 0.6),
+            lfd = lfd_fleet, ref = ref_L)
+plot_selfun("bidsnormal", list(mode1 = 18, sd1 = 2.5, mode2 = 31, lsd2 = 4,
+                               rsd2 = c(1000, 12, 6), h = 0.6),
+            lfd = lfd_fleet, ref = ref_L)
 ```
+
+These curves are fitted to the pooled fleet in section *Sensitivity runs and
+ensembles: a single year*.
 
 ## Gear selectivity, availability and population selectivity
 
@@ -1240,6 +1254,44 @@ point with its interval. The two weightings answer different questions:
 
 The same functions work for several years and for the dome levels of
 `dome_sens_flicc()` (section *Dome sensitivity*).
+
+**One fleet with two size modes.** When catch shares by gear are uncertain,
+or for a quick single-fleet assessment, the gears can be pooled with
+`combine_lfd()` (section *Exploring selectivity shapes*) and fitted as one
+fleet. Its selectivity then has to describe both modes. The runs: logistic,
+`"binormal"`, `"bidsnormal"`, and `"bidsnormal"` with a flat second mode
+(`rsd2 = 1000` fixed):
+
+```{r one-fleet-fits}
+stk_fleet <- stocklen(lfd_fleet, lhpar, m_model = "constant")
+
+fleet_fun <- c(logistic = "logistic", binormal = "binormal",
+               bidsnormal = "bidsnormal", bidsnormal_flat = "bidsnormal")
+fleet_fix <- list(NULL, NULL, NULL, list(fleet = list(rsd2 = 1000)))
+
+fleet_runs <- Map(function(fun, fix) {
+  fiticc(lfd_fleet, stk_fleet, sel_fun = fun, catch_by_gear = 1,
+         settings = set_ref, sel_fixed = fix)
+}, fleet_fun, fleet_fix)
+
+tab_fleet <- fits_summary(fleet_runs)
+tab_fleet
+plot_compare_sel(fleet_runs[tab_fleet$conv == "ok"])
+```
+
+```{r one-fleet-len, fig.height = 3.5}
+best_fleet <- tab_fleet$run[tab_fleet$conv == "ok"][which.min(tab_fleet$AIC[tab_fleet$conv == "ok"])]
+best_fleet
+plot_len(fleet_runs[[best_fleet]])
+```
+
+AIC compares the fleet runs with each other (same pooled data), not with the
+two-gear runs. A logistic curve cannot follow two modes; the two-mode
+functions fit the pooled composition better, and SPR of the best run
+(`r round(tab_fleet$SPR[tab_fleet$run == best_fleet], 3)`) can be compared with
+the two-gear reference (`r round(tab1$SPR[1], 3)`). The two-gear fit is
+preferable where the catch shares are known: it keeps the selectivity of each
+gear, while pooling assumes that each gear's sample represents its catch.
 
 # Length-based indicators
 
