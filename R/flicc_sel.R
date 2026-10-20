@@ -43,7 +43,10 @@ sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "bi
 #' Useful for choosing fixed values for `sel_fixed` and the scenarios of
 #' [dome_sens_flicc()].
 #'
-#' @param sel_fun `"logistic"`, `"dsnormal"` or `"normal"`.
+#' @param sel_fun `"logistic"` (`SL50`, `SL95`), `"dsnormal"` (`mode`, `lsd`,
+#'   `rsd`), `"normal"` (`mode`, `sd`), `"binormal"` (`mode1`, `sd1`, `mode2`,
+#'   `sd2`, `h`) or `"bidsnormal"` (`mode1`, `sd1`, `mode2`, `lsd2`, `rsd2`,
+#'   `h`); see [fiticc()].
 #' @param pars Named list of parameters on the length scale; elements with
 #'   several values are crossed (`expand.grid`) and each combination is drawn.
 #' @param len Lengths at which to evaluate; default from `lfd` or `0:80`.
@@ -59,6 +62,11 @@ sel_curve_flicc <- function(L, sel_fun = c("logistic", "dsnormal", "normal", "bi
 #'             lfd = lfd$Gillnet, ref = c(L50 = 31.2, Linf = 55.7))
 #' plot_selfun("logistic", list(SL50 = c(26, 30, 34), SL95 = 38))
 #' }
+#' # two size modes (juveniles at 10 cm, adults at 25 cm), width of the adult curve
+#' plot_selfun("binormal", list(mode1 = 10, sd1 = 1, mode2 = 25, sd2 = c(4, 8), h = 0.3))
+#' # second mode from flat (rsd2 = 1000) to domed, and its relative height
+#' plot_selfun("bidsnormal", list(mode1 = 10, sd1 = 1, mode2 = 25, lsd2 = 5,
+#'                                rsd2 = c(1000, 15, 8), h = c(0.3, 1)))
 #' @export
 plot_selfun <- function(sel_fun = c("dsnormal", "logistic", "normal", "binormal", "bidsnormal"), pars, len = NULL,
                         lfd = NULL, ref = NULL) {
