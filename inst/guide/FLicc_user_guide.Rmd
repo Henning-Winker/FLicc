@@ -1189,9 +1189,9 @@ tab1
 `fits_summary()` gives, for each run, the convergence (`conv`), SPR with its
 confidence interval, F/M, apical F, Fspr40, current F relative to Fspr40, and
 AIC with dAIC relative to the first run. Use only runs with `conv = "ok"`: a
-run that fails is not a result. Here `r paste(tab1$run[tab1$conv != "ok"], collapse = ", ")`
-did not converge: with the smaller Linf, F slides to the lower bound of F/M and
-SPR to almost 1, i.e. the composition is explained without fishing. AIC is
+run that fails is not a result (a typical failure: F slides to the lower bound
+of F/M and SPR to almost 1, i.e. the composition is explained without fishing).
+`r if (any(tab1$conv != "ok")) paste0("Here ", paste(tab1$run[tab1$conv != "ok"], collapse = ", "), " did not converge and is left out of the ensembles.") else "Here all runs converged."` AIC is
 comparable between the runs because all use the same data and likelihood; a
 change of data (e.g. a tail cut, another ESS) breaks this.
 
