@@ -1153,11 +1153,13 @@ time. `fits_summary()` gives one table for a list of fits, and
 
 The reference fit and the sensitivity runs for the last year of the alfonsino
 data: the gillnet with a dome (right-hand SD fixed at 0.85, 0.7 and 0.55 x
-Linf), CVL 0.08 and 0.12, and Linf +/- 10%. `lapply()` runs one fit per value:
+Linf), CVL 0.08 and 0.12, and Linf +/- 10%. `lapply()` runs one fit per value.
+The upper bound of apical F/M is raised from its default (`FM_max = 4`) to 10, so
+that runs with a larger Linf can reach a higher F:
 
 ```{r one-year-fits}
 yr <- tail(as.numeric(dimnames(lfd[[1]])$year), 1)
-set_ref <- list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating")
+set_ref <- list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", FM_max = 10)
 
 fit1 <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                settings = set_ref, years = yr)
@@ -1186,9 +1188,12 @@ tab1
 
 `fits_summary()` gives, for each run, the convergence (`conv`), SPR with its
 confidence interval, F/M, apical F, Fspr40, current F relative to Fspr40, and
-AIC with dAIC relative to the first run. Use only runs with `conv = "ok"`. AIC
-is comparable here because all runs use the same data and likelihood; a change
-of data (e.g. a tail cut, another ESS) breaks this.
+AIC with dAIC relative to the first run. Use only runs with `conv = "ok"`: a
+run that fails is not a result. Here `r paste(tab1$run[tab1$conv != "ok"], collapse = ", ")`
+did not converge: with the smaller Linf, F slides to the lower bound of F/M and
+SPR to almost 1, i.e. the composition is explained without fishing. AIC is
+comparable between the runs because all use the same data and likelihood; a
+change of data (e.g. a tail cut, another ESS) breaks this.
 
 Two ensembles of the converged runs: equal weights, and Akaike weights:
 
@@ -1211,12 +1216,14 @@ point with its interval. The two weightings answer different questions:
   between (a dome, Linf, CVL): the ensemble interval adds the spread between
   the runs (`sd_between`) to the uncertainty within each fit (`sd_within`).
   This is the usual choice for structural uncertainty.
-- **Akaike weights** let the data decide. With hundreds or thousands of fish,
-  AIC differences of 10 or more are common, and the best run then takes almost
-  all the weight: the ensemble becomes a model selection. Use it as a check,
-  and only for runs with the same data and likelihood. Linf in particular is
-  informed mainly by the few largest fish, so AIC weights over Linf follow the
-  tail of the composition rather than growth studies.
+- **Akaike weights** let the data decide. Here the AIC differences are small
+  (at most `r round(max(ens_aic$members$dAIC), 1)`), so the weights spread over
+  the runs and favour the domes. With large samples (many fish, or an ESS of
+  500 per gear) AIC differences of 10 or more are common, and the best run then
+  takes almost all the weight: the ensemble becomes a model selection. Use it
+  as a check, and only for runs with the same data and likelihood. Linf in
+  particular is informed mainly by the few largest fish, so AIC weights over
+  Linf follow the tail of the composition rather than growth studies.
 
 The same functions work for several years and for the dome levels of
 `dome_sens_flicc()` (section *Dome sensitivity*).
