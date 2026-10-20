@@ -50,7 +50,7 @@ Each of these tools is a configuration of FLicc:
 
 | Tool | FLicc configuration |
 |---|---|
-| [LBSPR](#repro-lbspr) | `pop_model = "gtg"` (13 groups, CVL 0.1), `obs_model = "mn"`, Linf, M/k and CVL fixed, `by_year = TRUE` |
+| [LBSPR](#repro-lbspr) | `pop_model = "gtg"` (`ngtg = 13`, `maxsd = 2`, CVL 0.1), `obs_model = "mn"`, Linf, M/k and CVL fixed, `by_year = TRUE` |
 | [LBB](#repro-lbb) | `lbb_flicc()`: `pop_model = "gtg"` with `ngtg = 1`, `obs_model = "dm"` (fixed precision; `ess = 20000` matches LBB's Dirichlet), priors on Linf and M/k, `by_year = TRUE`, `pile = 0` or `1` |
 | [fishblicc](#repro-fishblicc) | `pop_model = "gamma"`, `obs_model = "nb"`, several gears, catch shares in numbers |
 | FLicc default | `pop_model = "gtg"`, `obs_model = "dm"` with the precision estimated (`dm_theta = "saturating"`), all years jointly with a random walk on F |
@@ -717,7 +717,7 @@ neff_flicc(fit)[1:4, ]
 | `obs_model` | `"dm"` | `"dm"`, `"mn"`, `"nb"` |
 | `dm_theta` | `"saturating"` | DM precision: estimated (`"saturating"`, `"linear"`) or `"fixed"` |
 | `CVL` | 0.1 | CV of Linf among growth groups (fixed unless `CVL.sd`) |
-| `ngtg`, `maxsd` | 13, 2 | GTG grid (as LBSPR) |
+| `ngtg`, `maxsd` | 19, 3 | GTG grid (LBSPR: 13, 2) |
 | `Mpow` | 0 | M/k at length $\propto (L_\infty/L)^{Mpow}$ |
 | `linf.sd`, `Mk.sd`, `CVL.sd` | `NULL` | estimate with a prior around the input |
 | `sigmaF` | 0.3 | random-walk SD of log F, fixed |
@@ -1607,11 +1607,11 @@ The realised spread can be computed directly from the group positions `z` and
 their normal weights `w`; the factor multiplies CVL:
 
 ```{r maxsd-cv}
-z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (default)
+z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (LBSPR)
 w <- dnorm(z) / sum(dnorm(z))
 sqrt(sum(w * z^2))                        # realised CV factor
 
-z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19
+z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19 (default)
 w <- dnorm(z) / sum(dnorm(z))
 sqrt(sum(w * z^2))
 
@@ -1647,11 +1647,16 @@ data.frame(maxsd      = maxsd_values,
            SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
 ```
 
-Recommendation: keep the LBSPR default for comparability and treat `maxsd = 3`
-as a sensitivity; with a tail cut the choice matters little, because the
-affected bins lie far above the cut. The effective CV matters when CVL is taken
-from external growth studies: with `maxsd = 2`, a CVL input of 0.1 corresponds
-to a realised spread of about 0.09.
+The default is `maxsd = 3, ngtg = 19` (from FLicc 1.0.11; before: LBSPR's
+`maxsd = 2, ngtg = 13`). With `maxsd = 2` the largest group is
+$1.2 L_\infty$ at CVL = 0.1, and fish above it get a near-zero probability:
+each such fish costs about the same in the likelihood. In sensitivity runs
+and Monte Carlo draws with a lower Linf or CVL, this gives steps in the AIC
+and failed refits. `maxsd = 3` extends the groups to $1.3 L_\infty$, and CVL
+is then close to the realised spread, which matters when CVL is taken from
+external growth studies (with `maxsd = 2`, a CVL input of 0.1 corresponds to
+a realised spread of about 0.09). At the input life history the two settings
+usually give similar results. Use `maxsd = 2, ngtg = 13` to reproduce LBSPR.
 
 ## Estimating Linf, M/k and CVL with priors
 
@@ -1943,7 +1948,8 @@ ggplot(lbspr_long, aes(year, value, colour = run)) +
 plot_spr(fit_lbspr_d, ci = TRUE)
 ```
 
-With LBSPR's configuration (`obs_model = "mn"`, each year separately) FLicc
+With LBSPR's configuration (`obs_model = "mn"`, `ngtg = 13`, `maxsd = 2`,
+each year separately) FLicc
 reproduces LBSPR's yearly estimates: SPR differs from LBSPR's by
 `r round(mean(abs(lbspr_runs[["FLicc mn, by year"]]$SPR - lbspr_out$SPR)), 3)` on
 average, F/M by

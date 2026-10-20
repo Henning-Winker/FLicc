@@ -16,7 +16,8 @@ spr_gtg_flicc(fit, mat = c("relative", "length"), sel_lag = 0, level = 0.95)
   model. \code{1} mimics LBSPR, whose GTG model (\code{LBSPRsim_()}) evaluates
   selectivity in the survival recursion one class below the class midpoint
   used for the predicted catch; with \code{mat = "relative", sel_lag = 1} the
-  result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.}
+  result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.
+(fit with LBSPR's growth-type groups: \code{ngtg = 13, maxsd = 2}).}
 
 \item{level}{Confidence level of the interval.}
 }

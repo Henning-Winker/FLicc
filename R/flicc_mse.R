@@ -616,7 +616,7 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
                      settings = list(
                        CVL = 0.1, GL = 30, catch.sd = 0.05,
                        pop_model = "gtg", obs_model = "dm",
-                       ngtg = 13, maxsd = 2, Mpow = 0
+                       ngtg = 19, maxsd = 3, Mpow = 0
                      ),
                      spr = 40, thresh = 0.75, ess.g = 150,
                      lbi = c("spr", "mean"),  # LBIspr() and/or LBImean()

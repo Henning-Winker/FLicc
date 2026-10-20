@@ -154,8 +154,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   Galpha_init <- 1 / CVL_init^2
 
   # GTG controls
-  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 13L
-  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 2
+  ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 19L
+  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 3
   Mpow  <- if (!is.null(settings$Mpow))  as.numeric(settings$Mpow)  else 0
 
   # GTG distribution over Linf on a standardised grid. The Linf groups are
@@ -573,8 +573,8 @@ fiticc_core <- function(lfd, stklen,
     catch_units = "weight",
     dm_prior_sd = 1,
     pile = 1,
-    ngtg = 13,
-    maxsd = 2,
+    ngtg = 19,
+    maxsd = 3,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
@@ -1041,13 +1041,17 @@ fiticc_core <- function(lfd, stklen,
 #'       correction, Pile = 0); values in between mix the two as LBB.
 #'       Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
 #'     \item{\code{ngtg}}{Number of growth-type groups for
-#'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
-#'     \item{\code{maxsd}}{Range (in standard deviations) for GTG Linf
-#'       distribution. Default is 2, as in LBSPR. The groups cover
-#'       \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the actual Linf
-#'       spread (about 0.88-0.91 * CVL at 2, 0.99 * CVL at 3) and caps the
-#'       largest length the model can produce. \code{maxsd = 3, ngtg = 19}
-#'       makes CVL close to the actual spread.}
+#'       \code{pop_model = "gtg"}. Default is 19 (LBSPR: 13).}
+#'     \item{\code{maxsd}}{Range (in standard deviations) of the GTG Linf
+#'       distribution. Default is 3 (LBSPR: 2). The groups cover
+#'       \code{Linf * (1 +/- maxsd * CVL)}: no fish in the model grows beyond
+#'       \code{Linf * (1 + maxsd * CVL)}, and observed fish above it get a
+#'       near-zero probability. Truncation also narrows the actual Linf spread
+#'       (0.99 * CVL at 3, about 0.88-0.91 * CVL at 2). With
+#'       \code{maxsd = 2}, a few large fish can cause steps in the likelihood
+#'       when Linf or CVL change (sensitivity runs, Monte Carlo). Use
+#'       \code{maxsd = 2, ngtg = 13} to reproduce LBSPR. Default changed from
+#'       2 and 13 in FLicc 1.0.11.}
 #'     \item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
 #'       fish lie in length bins at or above the largest GTG Linf, where the
 #'       model gives them near-zero probability. Default \code{FALSE}.}
@@ -1230,8 +1234,8 @@ fiticc <- function(lfd, stklen,
                      catch.sd = 0.05,
                      pop_model = "gtg",
                      obs_model = "dm",
-                     ngtg = 13,
-                     maxsd = 2,
+                     ngtg = 19,
+                     maxsd = 3,
                      Mpow = 0,
                      linf.sd = NULL,
                      Mk.sd = NULL,

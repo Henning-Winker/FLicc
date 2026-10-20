@@ -25,6 +25,7 @@
 #'   selectivity in the survival recursion one class below the class midpoint
 #'   used for the predicted catch; with `mat = "relative", sel_lag = 1` the
 #'   result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.
+#'   (fit with LBSPR's growth-type groups: \code{ngtg = 13, maxsd = 2}).
 #' @param level Confidence level of the interval.
 #' @return A `data.frame` by year with `spr` (FLicc), `spr_gtg` (recomputed
 #'   with `mat`), the factor `adj = spr_gtg / spr`, and `lwr`, `upr`: FLicc's

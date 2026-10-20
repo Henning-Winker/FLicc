@@ -10,7 +10,7 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "dm", ngtg = 13, maxsd = 2, Mpow = 0, linf.sd = NULL, Mk.sd = NULL, CVL.sd = NULL),
+    "dm", ngtg = 19, maxsd = 3, Mpow = 0, linf.sd = NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
   compile = FALSE,
@@ -106,13 +106,17 @@ survivorship at the class bound (\code{0}, LBB without the pile-up
 correction, Pile = 0); values in between mix the two as LBB.
 Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
 \item{\code{ngtg}}{Number of growth-type groups for
-\code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
-\item{\code{maxsd}}{Range (in standard deviations) for GTG Linf
-distribution. Default is 2, as in LBSPR. The groups cover
-\code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the actual Linf
-spread (about 0.88-0.91 * CVL at 2, 0.99 * CVL at 3) and caps the
-largest length the model can produce. \code{maxsd = 3, ngtg = 19}
-makes CVL close to the actual spread.}
+\code{pop_model = "gtg"}. Default is 19 (LBSPR: 13).}
+\item{\code{maxsd}}{Range (in standard deviations) of the GTG Linf
+distribution. Default is 3 (LBSPR: 2). The groups cover
+\code{Linf * (1 +/- maxsd * CVL)}: no fish in the model grows beyond
+\code{Linf * (1 + maxsd * CVL)}, and observed fish above it get a
+near-zero probability. Truncation also narrows the actual Linf spread
+(0.99 * CVL at 3, about 0.88-0.91 * CVL at 2). With
+\code{maxsd = 2}, a few large fish can cause steps in the likelihood
+when Linf or CVL change (sensitivity runs, Monte Carlo). Use
+\code{maxsd = 2, ngtg = 13} to reproduce LBSPR. Default changed from
+2 and 13 in FLicc 1.0.11.}
 \item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
 fish lie in length bins at or above the largest GTG Linf, where the
 model gives them near-zero probability. Default \code{FALSE}.}
