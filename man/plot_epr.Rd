@@ -36,7 +36,7 @@ plot_epr(
 
 \item{reflines}{Logical; draw reference lines.}
 
-\item{ref_levels}{EPR reference levels (default 0.4 and 0.2). For LBB's reference use \code{attr(lbb$table, "BFM1B0")} (B/B0 at F = M and Lc = Lc_opt) and half of it.}
+\item{ref_levels}{EPR reference levels (default 0.4, 0.2 and 0.1). For LBB's reference use \code{attr(lbb$table, "BFM1B0")} (B/B0 at F = M and Lc = Lc_opt) and half of it.}
 
 \item{ref_colours}{Colours of the reference lines.}
 

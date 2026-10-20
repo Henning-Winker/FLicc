@@ -84,7 +84,7 @@ plot_spr <- function(fit,
 #' standard errors of log EPR (`TMB::sdreport()`), reference lines.
 #'
 #' @inheritParams plot_spr
-#' @param ref_levels EPR reference levels (default 0.4 and 0.2). For LBB's
+#' @param ref_levels EPR reference levels (default 0.4, 0.2 and 0.1). For LBB's
 #'   reference use `attr(lbb$table, "BFM1B0")` (B/B0 at F = M and Lc = Lc_opt,
 #'   a proxy for Bmsy/B0) and half of it.
 #' @return A `ggplot` object.
