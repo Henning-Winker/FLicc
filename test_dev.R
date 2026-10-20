@@ -38,7 +38,7 @@ rbind(fixed     = c(Linf = c(fit.fix$report$lhpar["linf"]), Mk = c(fit.fix$repor
                     CVL = c(fit.est$report$pars["CVL"]), SPR = lastspr(fit.est)))
 
 # GTG Linf groups follow the estimates: Linf * (1 + CVL * z)
-z <- fit.est$tmb_data$gtg_z          # default grid: seq(-3, 3, length.out = 19)                             # default maxsd = 2, ngtg = 13
+z <- fit.est$tmb_data$gtg_z                 # default grid: seq(-3, 3, length.out = 19)
 stopifnot(isTRUE(all.equal(fit.est$report$gtgLinfs,
   c(fit.est$report$lhpar["linf"]) * (1 + c(fit.est$report$pars["CVL"]) * z))))
 # estimated parameters actually change the population model
