@@ -1294,15 +1294,24 @@ plot_len(fleet_runs[[best_fleet]])
 
 ```{r one-fleet-pars}
 selpars_flicc(fleet_runs$bidsnormal)
+selpars_flicc(fleet_runs$bidsnormal_flat)
 ```
 
 AIC compares the fleet runs with each other (same pooled data), not with the
 two-gear runs. A logistic curve cannot follow two modes: it reads the decline
 after the first mode as fishing mortality. The free `"bidsnormal"` shows the
-risk of six parameters on one year of data: its second curve can collapse onto
-the first (`mode2` close to `mode1`, a near-zero `lsd2`, i.e. a step instead
-of a second mode); check `selpars_flicc()` before using it. Fixing the right
-limb (`rsd2 = 1000`) or using `"binormal"` keeps the second mode identifiable.
+risk of six parameters on one year of data: its right limb runs to a very large
+SD (`rsd2` of
+`r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal)[[1]]["rsd2"]))` cm), a flat
+direction of the likelihood, and the fit fails. With `rsd2 = 1000` fixed
+(`bidsnormal_flat`) the same shape converges: a first mode at about
+`r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal_flat)[[1]]["mode1"]))` cm and,
+from about `r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal_flat)[[1]]["mode2"]))` cm,
+a plateau at the relative height `h`: the larger fish are retained at a
+constant, lower level. A near-zero `lsd2` (a step up to the plateau instead of a
+second mode) is typical when the data show no separate second mode; check
+`selpars_flicc()` and `plot_compare_sel()` before using a two-mode fit.
+`"binormal"` converges, but its SPR interval is wide.
 
 SPR of the pooled runs spans
 `r round(min(tab_fleet$SPR), 3)` to `r round(max(tab_fleet$SPR), 3)`, against
