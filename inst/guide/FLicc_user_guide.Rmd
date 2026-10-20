@@ -1260,7 +1260,10 @@ or for a quick single-fleet assessment, the gears can be pooled with
 `combine_lfd()` (section *Exploring selectivity shapes*) and fitted as one
 fleet. Its selectivity then has to describe both modes. The runs: logistic,
 `"binormal"`, `"bidsnormal"`, and `"bidsnormal"` with a flat second mode
-(`rsd2 = 1000` fixed):
+(`rsd2 = 1000` fixed). The pooled composition is rescaled to an ESS of 500 and
+shows no overdispersion beyond it, so the Dirichlet-multinomial precision is
+fixed (`dm_theta = "fixed"`); estimated, it runs to its upper bound and the
+fits fail the convergence check:
 
 ```{r one-fleet-fits}
 stk_fleet <- stocklen(lfd_fleet, lhpar, m_model = "constant")
@@ -1269,9 +1272,11 @@ fleet_fun <- c(logistic = "logistic", binormal = "binormal",
                bidsnormal = "bidsnormal", bidsnormal_flat = "bidsnormal")
 fleet_fix <- list(NULL, NULL, NULL, list(fleet = list(rsd2 = 1000)))
 
+set_fleet <- modifyList(set_ref, list(dm_theta = "fixed"))
+
 fleet_runs <- Map(function(fun, fix) {
   fiticc(lfd_fleet, stk_fleet, sel_fun = fun, catch_by_gear = 1,
-         settings = set_ref, sel_fixed = fix)
+         settings = set_fleet, sel_fixed = fix)
 }, fleet_fun, fleet_fix)
 
 tab_fleet <- fits_summary(fleet_runs)
@@ -1287,13 +1292,26 @@ best_fleet
 plot_len(fleet_runs[[best_fleet]])
 ```
 
+```{r one-fleet-pars}
+selpars_flicc(fleet_runs$bidsnormal)
+```
+
 AIC compares the fleet runs with each other (same pooled data), not with the
-two-gear runs. A logistic curve cannot follow two modes; the two-mode
-functions fit the pooled composition better, and SPR of the best run
-(`r round(tab_fleet$SPR[tab_fleet$run == best_fleet], 3)`) can be compared with
-the two-gear reference (`r round(tab1$SPR[1], 3)`). The two-gear fit is
-preferable where the catch shares are known: it keeps the selectivity of each
-gear, while pooling assumes that each gear's sample represents its catch.
+two-gear runs. A logistic curve cannot follow two modes: it reads the decline
+after the first mode as fishing mortality. The free `"bidsnormal"` shows the
+risk of six parameters on one year of data: its second curve can collapse onto
+the first (`mode2` close to `mode1`, a near-zero `lsd2`, i.e. a step instead
+of a second mode); check `selpars_flicc()` before using it. Fixing the right
+limb (`rsd2 = 1000`) or using `"binormal"` keeps the second mode identifiable.
+
+SPR of the pooled runs spans
+`r round(min(tab_fleet$SPR), 3)` to `r round(max(tab_fleet$SPR), 3)`, against
+`r round(tab1$SPR[1], 3)` for the two-gear reference: with one fleet, the
+selectivity curve and F share the information in one composition, and the
+shape chosen for the large-fish mode decides how much of the decline is
+attributed to fishing. The two-gear fit is preferable where the catch shares
+are known: it keeps the selectivity of each gear, while pooling assumes that
+each gear's sample represents its catch.
 
 # Length-based indicators
 
