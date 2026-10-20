@@ -22,7 +22,20 @@ stopifnot(max(abs(cf2[[1]]@.Data - cf[[1]]@.Data)) < 1e-8, max(abs(cf3[[1]]@.Dat
 yr <- tail(dimnames(lfd[[1]])$year, 1)
 lf <- window(cf, start = as.numeric(yr))
 stk <- stocklen(lf, lhpar, m_model = "constant")
-for (sf in c("logistic", "binormal", "bidsnormal")) {
-  f <- fiticc(lf, stk, sel_fun = sf, catch_by_gear = 1)
-  cat(sf, ": SPR", round(sprcur_flicc(f), 3), " conv", f$diagnostics$conv_tier, "\n")
+nraw <- sum(window(lfd, start = as.numeric(yr))[[1]]) + sum(window(lfd, start = as.numeric(yr))[[2]])
+cat("fish measured in", yr, ":", nraw, "\n")
+lf_raw <- window(combine_lfd(lfd, c(0.7, 0.3), lhpar, ess.n = nraw), start = as.numeric(yr))
+variants <- list(
+  ess500_dmsat   = list(lf = lf,     set = list(CVL = 0.1, FM_max = 10)),
+  ess500_dmfixed = list(lf = lf,     set = list(CVL = 0.1, FM_max = 10, dm_theta = "fixed")),
+  essraw_dmsat   = list(lf = lf_raw, set = list(CVL = 0.1, FM_max = 10)),
+  ess500_mn      = list(lf = lf,     set = list(CVL = 0.1, FM_max = 10, obs_model = "mn")))
+for (v in names(variants)) for (sf in c("logistic", "binormal", "bidsnormal")) {
+  f <- try(fiticc(variants[[v]]$lf, stk, sel_fun = sf, catch_by_gear = 1, settings = variants[[v]]$set,
+                  verbose = FALSE), silent = TRUE)
+  if (inherits(f, "try-error")) { cat(v, sf, ": error\n"); next }
+  cc <- flicc_convergence(f)
+  cat(sprintf("%-15s %-11s SPR %.3f conv %-7s maxgrad %.2g passed %s\n", v, sf, sprcur_flicc(f),
+              f$diagnostics$conv_tier, f$max_gradient, paste(cc$passed, collapse = ",")))
+  if (sf == "bidsnormal" && v == "ess500_dmfixed") print(selpars_flicc(f))
 }

@@ -1276,11 +1276,13 @@ fleet_runs <- Map(function(fun, fix) {
 
 tab_fleet <- fits_summary(fleet_runs)
 tab_fleet
-plot_compare_sel(fleet_runs[tab_fleet$conv == "ok"])
+plot_compare_sel(fleet_runs)
 ```
 
 ```{r one-fleet-len, fig.height = 3.5}
-best_fleet <- tab_fleet$run[tab_fleet$conv == "ok"][which.min(tab_fleet$AIC[tab_fleet$conv == "ok"])]
+ok_fleet   <- tab_fleet$conv == "ok"
+best_fleet <- if (any(ok_fleet)) tab_fleet$run[ok_fleet][which.min(tab_fleet$AIC[ok_fleet])] else
+  tab_fleet$run[which.min(tab_fleet$AIC)]
 best_fleet
 plot_len(fleet_runs[[best_fleet]])
 ```
