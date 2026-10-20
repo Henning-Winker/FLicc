@@ -119,7 +119,7 @@ when Linf or CVL change (sensitivity runs, Monte Carlo). Use
 2 and 13 in FLicc 1.0.11.}
 \item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
 fish lie in length bins at or above the largest GTG Linf, where the
-model gives them near-zero probability. Default \code{FALSE}.}
+model gives them near-zero probability. Default \code{TRUE} (from FLicc 1.0.11).}
 \item{\code{Mpow}}{Optional length-dependent mortality scaling
 exponent (GTG only). Default is 0.}
 \item{\code{sigmaF}, default}{By default log F follows a random walk by gear

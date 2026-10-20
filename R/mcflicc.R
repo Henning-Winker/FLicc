@@ -403,7 +403,7 @@ mc_flicc <- function(
 
     settings_i <- modifyList(
       fit$settings,
-      list(CVL = draws$CVL[i])
+      list(CVL = draws$CVL[i], tail_warning = FALSE)
     )
 
     sel_fun <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[fit$tmb_data$sel_type]

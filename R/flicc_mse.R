@@ -687,6 +687,7 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
   }
 
   # --- Fit one iteration, with diagnostics and optional refit -------------
+  if (is.null(settings$tail_warning)) settings$tail_warning <- verbose   # no warnings per iteration and year
   fit_one <- function(i) {
     lfd_i    <- iter(FLQuants(lfd), i)
     stklen_i <- stocklen(lfd_i, lhpar = lhpar, m_model = m_model)
