@@ -194,6 +194,14 @@ plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
 
   df <- df[!is.na(df$data), ]
   df$year_num <- as.numeric(as.character(df$year))
+  # one order of the runs for points, lines and intervals (dodge positions
+  # follow the factor levels; character names would be dodged alphabetically)
+  if ("qname" %in% names(df)) {
+    run_levels <- unique(as.character(df$qname))
+    if (is.factor(df$qname)) run_levels <- intersect(levels(df$qname), run_levels)
+    df$qname <- factor(as.character(df$qname), levels = run_levels)
+    if (!is.null(ci_df)) ci_df$qname <- factor(ci_df$qname, levels = run_levels)
+  }
 
   if (is.null(ymax)) {
     ymax <- max(df$data, ref_levels, 0.6, if (!is.null(ci_df)) ci_df$upr, na.rm = TRUE)
@@ -216,7 +224,8 @@ plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
                              inherit.aes = FALSE, alpha = 0.2, fill = line_colour)
     } else {
       p <- p + if (multi)
-        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr, colour = qname),
+        ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr,
+                                                          colour = qname, group = qname),
                                inherit.aes = FALSE, width = 0.25, position = pd, show.legend = FALSE) else
         ggplot2::geom_errorbar(data = ci_df, ggplot2::aes(x = year_num, ymin = lwr, ymax = upr),
                                inherit.aes = FALSE, width = 0.25, colour = line_colour)
@@ -233,11 +242,11 @@ plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
     )
   } else {
     p <- p+ ggplot2::geom_line(
-      aes(colour = qname),
+      ggplot2::aes(colour = qname, group = qname),
       linewidth = linewidth, position = pd
     ) +
       ggplot2::geom_point(
-        aes(colour = qname),
+        ggplot2::aes(colour = qname, group = qname),
         size = point_size, position = pd
       )
    }

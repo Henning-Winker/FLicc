@@ -41,3 +41,12 @@ print(e1$table)
 ggplot2::ggsave(file.path(od, "ensemble_1yr.png"), plot_ensemble_flicc(e1), width = 6, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "ensemble_1yr_brel.png"),
                 plot_ensemble_flicc(ensemble_flicc(ds1$fits, s = 0.75), "brel"), width = 6, height = 4, dpi = 100)
+
+# plot_spr with ci: error bars at the same dodge positions as their points
+fl <- list(zz = ds$fits[[2]], aa = ds$fits[[3]], mm = ds$fits[[1]])   # list order != alphabetical
+b <- ggplot2::ggplot_build(plot_spr(fl, ci = TRUE))
+lay <- vapply(b$plot$layers, function(l) class(l$geom)[1], character(1))
+eb <- b$data[[which(lay == "GeomErrorbar")]]; pt <- b$data[[which(lay == "GeomPoint")]]
+xe <- tapply(eb$x, eb$colour, mean); xp <- tapply(pt$x, pt$colour, mean)
+print(rbind(errorbar = xe, point = xp[names(xe)]))
+stopifnot(max(abs(xe - xp[names(xe)])) < 1e-8)
