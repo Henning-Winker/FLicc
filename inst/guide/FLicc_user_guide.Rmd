@@ -751,7 +751,7 @@ neff_flicc(fit)[1:4, ]
 | `obs_model` | `"dm"` | `"dm"`, `"mn"`, `"nb"` |
 | `dm_theta` | `"saturating"` | DM precision: estimated (`"saturating"`, `"linear"`) or `"fixed"` |
 | `CVL` | 0.1 | CV of Linf among growth groups (fixed unless `CVL.sd`) |
-| `ngtg`, `maxsd` | 19, 3 | GTG grid (LBSPR: 13, 2) |
+| `ngtg`, `maxsd` | 13, 3 | GTG grid (LBSPR: 13, 2) |
 | `Mpow` | 0 | M/k at length $\propto (L_\infty/L)^{Mpow}$ |
 | `linf.sd`, `Mk.sd`, `CVL.sd` | `NULL` | estimate with a prior around the input |
 | `sigmaF` | 0.3 | random-walk SD of log F, fixed |
@@ -1723,7 +1723,7 @@ z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (LBSPR)
 w <- dnorm(z) / sum(dnorm(z))
 sqrt(sum(w * z^2))                        # realised CV factor
 
-z <- seq(-3, 3, length.out = 19)          # maxsd = 3, ngtg = 19 (default)
+z <- seq(-3, 3, length.out = 13)          # maxsd = 3, ngtg = 13 (default)
 w <- dnorm(z) / sum(dnorm(z))
 sqrt(sum(w * z^2))
 
@@ -1732,15 +1732,15 @@ sqrt(sum(w * z^2))
 
 With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
 CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
-groups matters little beyond about 13.
+groups matters little beyond about 13, and computing time grows with it.
 
-The fits below compare the two settings (`maxsd_values` with matching
-`ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
+The fits below compare LBSPR's grid with the default and a finer grid
+(`maxsd_values` with matching `ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
 parallel.
 
 ```{r maxsd-sens}
-maxsd_values <- c(2, 3)
-ngtg_values  <- c(13, 19)
+maxsd_values <- c(2, 3, 3)
+ngtg_values  <- c(13, 13, 19)
 
 fits_maxsd <- Map(function(maxsd, ngtg) {
   fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
@@ -1759,8 +1759,9 @@ data.frame(maxsd      = maxsd_values,
            SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
 ```
 
-The default is `maxsd = 3, ngtg = 19` (from FLicc 1.0.11; before: LBSPR's
-`maxsd = 2, ngtg = 13`). With `maxsd = 2` the largest group is
+The default is `maxsd = 3, ngtg = 13` (from FLicc 1.0.11; before: LBSPR's
+`maxsd = 2, ngtg = 13`); 19 groups give the same result at about 25% more
+computing time. With `maxsd = 2` the largest group is
 $1.2 L_\infty$ at CVL = 0.1, and fish above it get a near-zero probability:
 each such fish costs about the same in the likelihood. In sensitivity runs
 and Monte Carlo draws with a lower Linf or CVL, this gives steps in the AIC
@@ -1768,7 +1769,7 @@ and failed refits. `maxsd = 3` extends the groups to $1.3 L_\infty$, and CVL
 is then close to the realised spread, which matters when CVL is taken from
 external growth studies (with `maxsd = 2`, a CVL input of 0.1 corresponds to
 a realised spread of about 0.09). At the input life history the two settings
-usually give similar results. Use `maxsd = 2, ngtg = 13` to reproduce LBSPR.
+usually give similar results. Use `maxsd = 2` to reproduce LBSPR.
 
 ## Estimating Linf, M/k and CVL with priors
 
@@ -1992,7 +1993,7 @@ tool's published output, and adds FLicc's default for comparison.
 ## LBSPR: the multi-year example {#repro-lbspr}
 
 LBSPR (Hordyk et al. 2015, 2016) fits the GTG model (13 growth-type groups, CV
-of Linf 0.1, groups over $\pm 2$ SD; FLicc's default since 1.0.11 is 19 groups over
+of Linf 0.1, groups over $\pm 2$ SD; FLicc's default since 1.0.11 is 13 groups over
 $\pm 3$ SD, so LBSPR's grid is set explicitly with `ngtg = 13, maxsd = 2`) with a multinomial likelihood to each year
 separately, with Linf, M/k and CVL fixed, and estimates SL50, SL95 and F/M
 (apical F over M) by year. The example is LBSPR's multi-year length-frequency
@@ -2011,7 +2012,7 @@ stk_lbspr <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
 Three fits: LBSPR's configuration (multinomial, LBSPR's growth-type groups,
 each year separately), the same likelihood and groups with all years fitted
 jointly (one selectivity, random walk on F), and FLicc's default
-(Dirichlet-multinomial with estimated precision, `maxsd = 3, ngtg = 19`, years
+(Dirichlet-multinomial with estimated precision, `maxsd = 3`, years
 jointly).
 For the separate years `Map()` fits one model per year:
 
@@ -2387,7 +2388,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 |---|---|
 | Observation model | `dm` with real data |
 | Sample size | `dm` with `dm_theta = "saturating"` on raw counts or ESS >= 500 (the data set their weight); with fixed precision or `mn`, ESS about 150-200 per gear-year, never raw thousands |
-| Growth | fix Linf and CVL; Linf is the main sensitivity; default `maxsd = 3, ngtg = 19` (`maxsd = 2, ngtg = 13` only to reproduce LBSPR) |
+| Growth | fix Linf and CVL; Linf is the main sensitivity; default `maxsd = 3, ngtg = 13` (`maxsd = 2` only to reproduce LBSPR) |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.4 x Linf); `binormal`/`bidsnormal` for two size modes |
 | Sensitivity runs | `fits_summary()` for the table; `ensemble_flicc()` with equal weights (AIC weights as a check, same data only) |
 | Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |

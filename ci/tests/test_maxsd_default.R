@@ -1,4 +1,4 @@
-# Default GTG grid (maxsd = 3, ngtg = 19, FLicc >= 1.0.11) vs LBSPR's (2, 13): results and speed
+# Default GTG grid (maxsd = 3, ngtg = 13, FLicc >= 1.0.11) vs LBSPR's (2, 13) and finer grids: results and speed
 library(FLicc)
 data("alfonsino")
 lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, c("len", "year", "data", "qname")]),
@@ -8,7 +8,7 @@ stklen <- stocklen(lfd, lhpar, m_model = "constant")
 sf <- c("dsnormal", "logistic"); cbg <- c(0.7, 0.3)
 
 f_def <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg)
-stopifnot(f_def$tmb_data$ngtg == 19, length(f_def$tmb_data$gtg_z) == 19, max(f_def$tmb_data$gtg_z) == 3)
+stopifnot(f_def$tmb_data$ngtg == 13, length(f_def$tmb_data$gtg_z) == 13, max(f_def$tmb_data$gtg_z) == 3)
 
 time_fit <- function(set, se = TRUE, n = 3) {
   t <- numeric(n)
