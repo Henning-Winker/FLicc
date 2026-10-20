@@ -20,6 +20,8 @@ time_fit <- function(set, se = TRUE, n = 3) {
 res <- list(
   sd2_13 = time_fit(list(maxsd = 2, ngtg = 13)),
   sd3_19 = time_fit(list(maxsd = 3, ngtg = 19)),
+  sd3_13 = time_fit(list(maxsd = 3, ngtg = 13)),
+  sd3_15 = time_fit(list(maxsd = 3, ngtg = 15)),
   sd2_13_noSE = time_fit(list(maxsd = 2, ngtg = 13), se = FALSE),
   sd3_19_noSE = time_fit(list(maxsd = 3, ngtg = 19), se = FALSE))
 tab <- data.frame(run = names(res),
@@ -28,6 +30,13 @@ tab <- data.frame(run = names(res),
                   nll = sapply(res, function(r) r$fit$opt$objective),
                   conv = sapply(res, function(r) paste(flicc_convergence(r$fit)$passed, collapse = ",")))
 print(tab, row.names = FALSE)
-cat("time ratio 3/19 vs 2/13: with SE", round(tab$time_s[2] / tab$time_s[1], 2),
-    " without SE", round(tab$time_s[4] / tab$time_s[3], 2), "\n")
+tab$time_rel <- round(tab$time_s / tab$time_s[1], 2)
+print(tab[, c("run", "time_rel", "SPR", "nll")], row.names = FALSE)
+# predicted length composition of the gillnet in the tail: smoothness with fewer groups
+tail_pred <- try(sapply(res[c("sd2_13", "sd3_19", "sd3_15", "sd3_13")], function(r) {
+  q <- r$fit$report$predlen_gear[[2]]
+  p <- apply(q@.Data, 1, mean); L <- as.numeric(dimnames(q)$len)
+  round(1000 * p[L >= 45 & L <= 62] / sum(p), 3)            # per mille, gillnet, 45-62 cm
+}))
+print(tail_pred)
 stopifnot(abs(tab$SPR[1] - tab$SPR[2]) < 0.05)
