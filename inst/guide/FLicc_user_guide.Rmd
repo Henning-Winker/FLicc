@@ -17,6 +17,19 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.align = "center",
                       fig.width = 7, fig.height = 4.5, message = FALSE, warning = FALSE)
 ```
 
+```{css, echo = FALSE}
+/* notes in block quotes: same size as the text, muted */
+blockquote {
+  font-size: 0.9em;
+  color: #555;
+  background: none;
+  margin: 0.5em 0;
+  padding: 0.3em 0.9em;
+  border-left: 3px solid #ddd;
+}
+blockquote p { margin-bottom: 0.4em; }
+```
+
 # FLicc: a framework for length-interval catch curves
 
 FLicc fits **length-interval catch curves (ICC)**: equilibrium models that
