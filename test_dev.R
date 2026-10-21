@@ -1,8 +1,8 @@
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 # Tests for FLicc dev-lbsrp additions (versions 1.0.6 - 1.0.9)
 #  1. GTG uses estimated Linf, M/K and CVL
-#  2. GTG tails: maxsd / ngtg (defaults as in LBSPR: maxsd = 2, ngtg = 13)
-#  3. Optional warning for fish beyond the largest GTG Linf (tail_warning)
+#  2. GTG tails: maxsd / ngtg (defaults maxsd = 3, ngtg = 13; LBSPR: maxsd = 2)
+#  3. Warning for fish beyond the largest GTG Linf (tail_warning, default TRUE)
 #  4. Robust likelihood options: rob_eps and Lplus
 #  5. Steepness: spr2brel(), sprbrel_flicc(), fbrel_flicc(),
 #     flicc2FLStockR(s = )
@@ -66,8 +66,9 @@ round(c(maxsd2 = cv_gtg(fit.fix), maxsd3 = cv_gtg(fit.wide)), 3)     # ~0.091 vs
 # 3. Warning when observed fish lie beyond the largest GTG Linf
 #><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>
 w <- NULL
-fit.nowarn <- fitf(maxsd = 0.5, ngtg = 7)                    # off by default: silent
-fit.narrow <- withCallingHandlers(fitf(maxsd = 0.5, ngtg = 7, tail_warning = TRUE),
+# a very narrow GTG range (largest group at 1.01 Linf) so that observed fish lie beyond it
+fit.nowarn <- fitf(maxsd = 0.1, ngtg = 3, tail_warning = FALSE)   # switched off: silent
+fit.narrow <- withCallingHandlers(fitf(maxsd = 0.1, ngtg = 3, tail_warning = TRUE),
   warning = function(x) { w <<- c(w, conditionMessage(x)); invokeRestart("muffleWarning") })
 print(w[grepl("largest GTG Linf", w)])
 stopifnot(any(grepl("largest GTG Linf", w)))

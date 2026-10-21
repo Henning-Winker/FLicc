@@ -932,6 +932,16 @@ in the largest fish. This is the first plot to look at:
 plot_resid_len(res_osa, pool_years = TRUE)
 ```
 
+Here two runs stand out. In the trawl, the OSA residuals are positive from about
+28 to 35 cm: of the fish at these lengths or larger, more stop at each length
+than predicted, i.e. the trawl catches fewer fish above 35 cm than the fitted
+dome allows (its right limb falls more steeply). In the gillnet, positive
+residuals from about 45 to 50 cm say the same for the largest fish: fewer reach
+the largest lengths than predicted, which points to Linf or CVL (the growth of
+the largest fish), to a slight dome of the gillnet, or to a higher F on the
+largest fish. Both runs are at the same lengths in every year (below), so they
+are not year classes.
+
 By year, a misfit that moves to larger lengths from one year to the next is a
 year class growing through; one that stays at the same length is selectivity.
 The last three years, as OSA and as Pearson residuals:
@@ -940,6 +950,13 @@ The last three years, as OSA and as Pearson residuals:
 plot_resid_len(res_osa, year = 2022:2024)
 plot_resid_len(fit, type = "pearson", year = 2022:2024)
 ```
+
+The trawl run at about 30-35 cm is there in all three years, together with a
+deficit at about 20-28 cm, as OSA and as Pearson residuals: a shape the trawl
+selectivity does not follow, not a year class (which would move by a few cm per
+year). In the Pearson panels, the long rows of small negative bars at both ends
+of each panel are the empty bins beyond the observed fish: they carry no
+information.
 
 **Pearson or OSA?** Both measure how far the observed count in a bin is from
 its expectation, in standard deviations, but they answer different questions:
