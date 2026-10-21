@@ -11,7 +11,6 @@ License: GPL (>= 3)
 Encoding: UTF-8
 LazyData: true
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.4
 Depends:
   FLCore (>= 2.6.16),
   ggplot2,
@@ -30,3 +29,4 @@ Suggests:
     testthat,
     knitr,
     rmarkdown
+Config/roxygen2/version: 8.1.1
