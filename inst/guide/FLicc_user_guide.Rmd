@@ -917,12 +917,52 @@ plot_resid_bubble(res_osa, fit = fit, cohorts = TRUE)
 ```
 
 
-```{r resid-peason, fig.height = 5}
-plot_resid_len(fit,years="each")
+**Residuals by length.** `plot_resid_len()` draws the residuals against length
+as bars, with the same panels as `plot_len()`: one panel per year and gear
+(`year =`, `gear =` select them), the gears pooled with `by_gear = FALSE`, or the
+years pooled with `pool_years = TRUE`. Pooled residuals are summed and divided
+by $\sqrt{k}$ (for $k$ residuals per bin), so the dashed lines at $\pm 2$ keep
+their meaning.
+
+Pooled over all years, year classes largely cancel out, and what remains is
+misfit at the same lengths in every year: the selectivity shape, or Linf and CVL
+in the largest fish. This is the first plot to look at:
+
+```{r resid-len-pooled, fig.height = 3.5}
+plot_resid_len(res_osa, pool_years = TRUE)
 ```
-```{r resid-osa, fig.height = 5}
-plot_resid_len(fit,years="each",type="osa")
+
+By year, a misfit that moves to larger lengths from one year to the next is a
+year class growing through; one that stays at the same length is selectivity.
+The last three years, as OSA and as Pearson residuals:
+
+```{r resid-len-years, fig.height = 6}
+plot_resid_len(res_osa, year = 2022:2024)
+plot_resid_len(fit, type = "pearson", year = 2022:2024)
 ```
+
+**Pearson or OSA?** Both measure how far the observed count in a bin is from
+its expectation, in standard deviations, but they answer different questions:
+
+| | Pearson | OSA |
+|---|---|---|
+| Question | Is the count in this bin far from $n\pi$? | Given the fish in the smaller bins, is the count in this bin unusual? |
+| Independence | correlated within a composition (they sum to about zero: a misfit at one length forces opposite residuals elsewhere) | independent under a correct model |
+| Distribution | skewed for small expected counts: observed zeros give small negative values, one fish where 0.05 are expected gives about +4 | standard normal, also for small counts |
+| Tails | drawn for every bin, so the empty bins beyond the largest fish form a fringe of small negative bars | end at the largest fish of each composition (and the last bin has none) |
+| Randomness | none | a random draw within each count's step (`seed`): small details change with the seed, patterns do not |
+| Use | bubble plots, a quick look at where the fit is high or low | QQ plot, sd, tests, the $\pm 2$ rule |
+
+In practice: read patterns with either, judge size and significance with OSA.
+A pattern that shows in both (e.g. too few fish at one range of lengths and too
+many at the next) is real. A single large Pearson residual at the largest
+lengths that is small as OSA residual is one rare fish, not a misfit.
+
+The sign of an OSA residual is conditional: a positive residual at length $L$
+means that, of the fish at $L$ or larger, more were in bin $L$ than predicted.
+A run of negative OSA residuals followed by a run of positive ones therefore
+marks a dip followed by a surplus in the composition, e.g. a second mode or a
+year class at the larger lengths.
 
 
 **Mean length and runs test.** The observed mean length of each composition is
@@ -1235,13 +1275,21 @@ tab1 <- fits_summary(runs1)
 tab1
 ```
 
-Residual options for single year fits.
+**Residuals of a single year.** With one year, the residuals by length are the
+residual plot (a bubble plot collapses to one column). Pearson and OSA
+residuals of the reference fit:
 
-```{r, resid-singleyr}
-plot_resid_len(fit1,type="pearson")
-plot_resid_len(fit1,type="osa")
-
+```{r resid-singleyr, fig.height = 3.5}
+plot_resid_len(fit1, type = "pearson")
+plot_resid_len(fit1, type = "osa")
 ```
+
+A run of residuals of one sign over several bins, in both types, means the
+model cannot follow the composition at those lengths. With a single year it is
+not possible to tell a year class from a selectivity misfit: both leave the
+same pattern in one composition. The multi-year fit can separate them (section
+*Residual diagnostics*). Residuals of a fit to one year also tend to be smaller
+than 1 in sd, because the parameters are estimated from the same few data.
 
 
 
