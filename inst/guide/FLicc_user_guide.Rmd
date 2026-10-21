@@ -251,10 +251,17 @@ First check that the fit converged: all lines should show `passed = TRUE`.
 flicc_convergence(fit1)
 ```
 
-The fitted (lines) against the observed (bars) length compositions, by gear:
+The fitted (lines) against the observed (bars) length compositions
 
 ```{r qs-plot-len, fig.height = 5}
-plot_len(fit1, by_gear = TRUE)
+plot_len(fit1)
+```
+
+
+also shown by gear
+
+```{r qs-plot-lengear, fig.height = 5}
+plot_len(fit1, by_gear = TRUE,year=2020:2024)
 ```
 
 The estimated selectivity of each gear:
@@ -381,7 +388,9 @@ view of total mortality by year and of its trend:
 lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
                a = 0.004721956 / 1000, b = 3.146168)
 plot_zlcc(lfd$Trawl, lhpar)
+plot_zlcc(lfd$Gillnet, lhpar)
 ```
+
 
 | | |
 |---|---|
@@ -524,11 +533,13 @@ choose values for `sel_fixed` and the dome scenarios below:
 ```{r selfun, fig.height = 4.5}
 gn <- lfd[["Gillnet"]]
 Lmid_g <- as.numeric(dimnames(gn)$len) + 0.5
-Lmean_g <- round(sum(Lmid_g * apply(gn@.Data, 1, sum)) / sum(gn@.Data), 1)
+Lmean_g <- round(sum(Lmid_g * apply(gn, 1, sum)) / sum(gn), 1)
+Lmean_g
+
 ref_L <- c(L50mat = 31.2, Lmean = Lmean_g, Linf = 55.7)
 plot_selfun("dsnormal", list(mode = 34, lsd = 4, rsd = c(1000, round(c(0.85, 0.7, 0.55, 0.4) * 55.7, 1))),
             lfd = gn, ref = ref_L)
-plot_selfun("logistic", list(SL50 = c(28, 31, 34), SL95 = 37), lfd = gn, ref = ref_L)
+plot_selfun("logistic", list(SL50 = c(28, 31, 34), SL95 = 37), lfd = gn, ref = ref_L[c(1,3)])
 ```
 
 A double-sided normal with a very large right-hand SD (`rsd = 1000`) has a flat
@@ -811,7 +822,7 @@ flicc_convergence(fit)
 ## Check 8: fit to the compositions
 
 ```{r check-len, fig.height = 6}
-plot_len(fit, by_gear = TRUE, year = 2021:2024)
+plot_len(fit, by_gear = TRUE, year = 2020:2024)
 plot_len(fit)
 ```
 
@@ -1134,7 +1145,8 @@ plot_contour_flicc(cf, s = 0.75)
 ```
 
 ```{r contour-numbers, include = FALSE}
-eng <- FLicc:::pr_engine_flicc(fit); st <- FLicc:::gear_state_flicc(fit)
+eng <- FLicc:::pr_engine_flicc(fit); 
+st <- FLicc:::gear_state_flicc(fit)
 sel_g <- function(g, loc = NULL) {
   p <- st$pars[[g]]
   if (!is.null(loc)) p <- FLicc:::shift_sel_flicc(st$type[[g]], p, loc)
