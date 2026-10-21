@@ -1162,7 +1162,8 @@ plot_eqcurves <- function(eqstk,
 #'
 #' Plots annual spawning potential ratio relative to a target SPR level,
 #' \code{SPR / SPRtarget}, from a fitted \code{flicc_tmb_fit} object using
-#' \code{ggplot2}. The background is shaded using FAO-style stock status bands.
+#' \code{ggplot2}, with confidence intervals. The background is shaded using
+#' FAO-style stock status bands.
 #'
 #' By default, the status zones are:
 #' \itemize{
@@ -1174,9 +1175,22 @@ plot_eqcurves <- function(eqstk,
 #' The two upper zones are shown with the same blue fill and separated by a
 #' white dashed line, following the intended FAO/SOSI visual style.
 #'
+#' The confidence intervals are those of \code{\link{spr_ci_flicc}}: from the
+#' standard errors of log SPR (\code{TMB::sdreport()}), back-transformed and
+#' divided by the target. With fewer than four years they are drawn as error
+#' bars, otherwise as a shaded band (\code{ci_style = "auto"}). Fits without
+#' standard errors (\code{se = FALSE}) are plotted without intervals, with a
+#' warning.
+#'
 #' @param fit A fitted \code{flicc_tmb_fit} object.
 #' @param spr.tgt Numeric SPR target in percent. Default is \code{40}, so the
 #'   plotted quantity is \code{SPR / 0.4}.
+#' @param ci Logical; draw confidence intervals. Default \code{TRUE}.
+#' @param level Confidence level of the intervals. Default \code{0.95}.
+#' @param ci_style \code{"auto"} (default: error bars for fewer than four
+#'   years, otherwise a band), \code{"ribbon"} or \code{"errorbar"}.
+#' @param ci_colour Colour of the interval band or error bars.
+#' @param ci_alpha Transparency of the interval band.
 #' @param title Optional plot title. Defaults to \code{"FAO Status"}.
 #' @param line_colour Colour of the time-series line.
 #' @param point_colour Colour of the annual points.
@@ -1184,7 +1198,8 @@ plot_eqcurves <- function(eqstk,
 #' @param point_size Point size for the annual observations.
 #' @param side_alpha Transparency of the side status bar.
 #' @param ymax Optional upper y-axis limit. If \code{NULL}, this is set to the
-#'   maximum of the scaled SPR series and \code{1.5}.
+#'   maximum of the scaled SPR series, the upper confidence limits and
+#'   \code{1.5}. Intervals above \code{ymax} are cut at the top of the panel.
 #' @param overfished_col Fill colour for the overfished zone.
 #' @param sustainable_col Fill colour for the sustainable and underfished
 #'   zones.
@@ -1196,9 +1211,21 @@ plot_eqcurves <- function(eqstk,
 #' @param y_breaks Numeric vector of y-axis breaks.
 #'
 #' @return A \code{ggplot} object.
+#' @seealso \code{\link{spr_ci_flicc}}, \code{\link{plot_spr}}
+#' @examples
+#' \dontrun{
+#' plot_lbfao(fit)                          # with 95% intervals
+#' plot_lbfao(fit, ci_style = "errorbar")   # error bars in every year
+#' plot_lbfao(fit, ci = FALSE)              # point estimates only
+#' }
 #' @export
 plot_lbfao <- function(fit,
                        spr.tgt = 40,
+                       ci = TRUE,
+                       level = 0.95,
+                       ci_style = c("auto", "ribbon", "errorbar"),
+                       ci_colour = "black",
+                       ci_alpha = 0.25,
                        title = "FAO Status",
                        line_colour = "black",
                        point_colour = "black",
@@ -1213,158 +1240,94 @@ plot_lbfao <- function(fit,
                        separator_linetype = 3,
                        separator_linewidth = 0.7,
                        y_breaks = seq(0, 10, 0.2)) {
-
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required.")
-  }
-
-  if (is.null(fit$report$spr)) {
-    stop("fit$report$spr not found.")
-  }
+  ci_style <- match.arg(ci_style)
+  if (!requireNamespace("ggplot2", quietly = TRUE)) stop("Package 'ggplot2' is required.")
+  if (is.null(fit$report$spr)) stop("fit$report$spr not found.")
 
   df <- as.data.frame(fit$report$spr)
-
-  if (!all(c("year", "data") %in% names(df))) {
+  if (!all(c("year", "data") %in% names(df)))
     stop("Could not coerce fit$report$spr to a data.frame with columns 'year' and 'data'.")
-  }
-
   df <- df[!is.na(df$data), , drop = FALSE]
+  if (nrow(df) == 0) stop("No non-missing SPR values found in fit$report$spr.")
   df$year_num <- as.numeric(as.character(df$year))
   df$status_ratio <- df$data / (spr.tgt / 100)
 
-  if (nrow(df) == 0) {
-    stop("No non-missing SPR values found in fit$report$spr.")
+  # confidence intervals of SPR (from the standard errors of log SPR)
+  df$lwr <- df$upr <- NA_real_
+  if (ci) {
+    cis <- tryCatch(spr_ci_flicc(fit, level = level), error = function(e) NULL)
+    if (is.null(cis)) {
+      warning("No standard errors in the fit (se = FALSE?): plotted without intervals.")
+      ci <- FALSE
+    } else {
+      m <- match(as.character(df$year_num), as.character(cis$year))
+      df$lwr <- cis$lwr[m] / (spr.tgt / 100)
+      df$upr <- cis$upr[m] / (spr.tgt / 100)
+    }
   }
 
-  if (is.null(ymax)) {
-    ymax <- max(df$status_ratio, 1.5, na.rm = TRUE)
-  }
+  if (is.null(ymax)) ymax <- max(c(df$status_ratio, if (ci) df$upr, 1.5), na.rm = TRUE)
+  df$upr_plot <- pmin(df$upr, ymax)          # keep intervals inside the panel
 
-  xmin <- min(df$year_num, na.rm = TRUE) - 0.5
-  xmax <- max(df$year_num, na.rm = TRUE) + 0.5
-
-  band_df <- data.frame(
-    xmin = c(xmin, xmin, xmin),
-    xmax = c(xmax, xmax, xmax),
-    ymin = c(0, 0.8, 1.2),
-    ymax = c(0.8, 1.2, ymax),
-    fill = factor(
-      c("overfished", "sustainable", "underfished"),
-      levels = c("overfished", "sustainable", "underfished", "unsustainable")
-    )
-  )
-
+  xmin <- min(df$year_num) - 0.5
+  xmax <- max(df$year_num) + 0.5
+  lev <- c("overfished", "sustainable", "underfished", "unsustainable")
+  band_df <- data.frame(xmin = xmin, xmax = xmax,
+                        ymin = c(0, 0.8, 1.2), ymax = c(0.8, 1.2, ymax),
+                        fill = factor(c("overfished", "sustainable", "underfished"), levels = lev))
   status_cut <- 0.8
   bar_xmin <- xmax + 0.15
   bar_xmax <- xmax + 0.50
+  status_bar <- data.frame(xmin = bar_xmin, xmax = bar_xmax,
+                           ymin = c(0, status_cut), ymax = c(status_cut, ymax),
+                           fill = factor(c("unsustainable", "sustainable"), levels = lev))
+  fill_vals <- c(overfished = overfished_col, sustainable = sustainable_col,
+                 underfished = sustainable_col, unsustainable = overfished_col)
 
-  status_bar <- data.frame(
-    xmin = c(bar_xmin, bar_xmin),
-    xmax = c(bar_xmax, bar_xmax),
-    ymin = c(0, status_cut),
-    ymax = c(status_cut, ymax),
-    fill = factor(
-      c("unsustainable", "sustainable"),
-      levels = c("overfished", "sustainable", "underfished", "unsustainable")
-    )
-  )
-
-  fill_vals <- c(
-    overfished = overfished_col,
-    sustainable = sustainable_col,
-    underfished = sustainable_col,
-    unsustainable = overfished_col
-  )
+  # band for several years, error bars for one to three years (or on request)
+  style <- if (ci_style == "auto") (if (nrow(df) < 4) "errorbar" else "ribbon") else ci_style
 
   p <- ggplot2::ggplot(df, ggplot2::aes(x = year_num, y = status_ratio)) +
-    ggplot2::geom_rect(
-      data = band_df,
-      ggplot2::aes(
-        xmin = xmin, xmax = xmax,
-        ymin = ymin, ymax = ymax,
-        fill = fill
-      ),
-      inherit.aes = FALSE,
-      alpha = band_alpha,
-      colour = NA
-    ) +
-    ggplot2::geom_rect(
-      data = status_bar,
-      ggplot2::aes(
-        xmin = xmin, xmax = xmax,
-        ymin = ymin, ymax = ymax,
-        fill = fill
-      ),
-      inherit.aes = FALSE,
-      alpha = side_alpha,
-      colour = NA
-    ) +
-    ggplot2::scale_fill_manual(
-      values = fill_vals,
-      guide = "none"
-    ) +
-    ggplot2::geom_hline(
-      yintercept = 1.2,
-      colour = separator_colour,
-      linetype = separator_linetype,
-      linewidth = separator_linewidth
-    ) +
-    ggplot2::geom_line(
-      colour = line_colour,
-      linewidth = linewidth
-    ) +
-    ggplot2::geom_point(
-      shape = 21,
-      fill = "white",
-      colour = point_colour,
-      size = point_size,
-      stroke = 0.6
-    ) +
-    ggplot2::annotate(
-      "text",
-      x = (bar_xmin + bar_xmax) / 2,
-      y = status_cut / 2,
-      label = "UNSUSTAINABLE",
-      angle = 90,
-      size = 3,
-      fontface = "bold",
-      colour = "grey30"
-    ) +
-    ggplot2::annotate(
-      "text",
-      x = (bar_xmin + bar_xmax) / 2,
-      y = status_cut + (ymax - status_cut) / 2,
-      label = "SUSTAINABLE",
-      angle = 90,
-      size = 3,
-      fontface = "bold",
-      colour = "grey30"
-    ) +
-    ggplot2::scale_x_continuous(
-      breaks = df$year_num,
-      expand = c(0, 0)
-    ) +
-    ggplot2::scale_y_continuous(
-      breaks = y_breaks
-    ) +
-    ggplot2::coord_cartesian(
-      xlim = c(xmin, bar_xmax + 0.25),
-      ylim = c(0, ymax),
-      expand = FALSE,
-      clip = "off"
-    ) +
-    ggplot2::labs(
-      x = "Year",
-      y = paste0("SPR / SPR", spr.tgt),
-      title = title
-    ) +
-    ggplot2::theme_bw() +
-    ggplot2::theme(
-      panel.grid.minor = ggplot2::element_blank(),
-      plot.title = ggplot2::element_text(hjust = 0.5),
-      plot.margin = ggplot2::margin(5.5, 35, 5.5, 5.5)
-    )
+    ggplot2::geom_rect(data = band_df,
+                       ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill),
+                       inherit.aes = FALSE, alpha = band_alpha, colour = NA) +
+    ggplot2::geom_rect(data = status_bar,
+                       ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill),
+                       inherit.aes = FALSE, alpha = side_alpha, colour = NA) +
+    ggplot2::scale_fill_manual(values = fill_vals, guide = "none") +
+    ggplot2::geom_hline(yintercept = 1.2, colour = separator_colour,
+                        linetype = separator_linetype, linewidth = separator_linewidth)
 
+  if (ci && style == "ribbon") {
+    p <- p + ggplot2::geom_ribbon(ggplot2::aes(ymin = lwr, ymax = upr_plot),
+                                  fill = ci_colour, alpha = ci_alpha, colour = NA)
+  }
+  if (ci && style == "errorbar") {
+    p <- p + ggplot2::geom_errorbar(ggplot2::aes(ymin = lwr, ymax = upr_plot),
+                                    width = 0.15, colour = ci_colour, linewidth = 0.6)
+  }
+
+  p <- p +
+    ggplot2::geom_line(colour = line_colour, linewidth = linewidth) +
+    ggplot2::geom_point(shape = 21, fill = "white", colour = point_colour,
+                        size = point_size, stroke = 0.6) +
+    ggplot2::annotate("text", x = (bar_xmin + bar_xmax) / 2, y = status_cut / 2,
+                      label = "UNSUSTAINABLE", angle = 90, size = 3,
+                      fontface = "bold", colour = "grey30") +
+    ggplot2::annotate("text", x = (bar_xmin + bar_xmax) / 2,
+                      y = status_cut + (ymax - status_cut) / 2,
+                      label = "SUSTAINABLE", angle = 90, size = 3,
+                      fontface = "bold", colour = "grey30") +
+    ggplot2::scale_x_continuous(breaks = df$year_num, expand = c(0, 0)) +
+    ggplot2::scale_y_continuous(breaks = y_breaks) +
+    ggplot2::coord_cartesian(xlim = c(xmin, bar_xmax + 0.25), ylim = c(0, ymax),
+                             expand = FALSE, clip = "off") +
+    ggplot2::labs(x = "Year", y = paste0("SPR / SPR", spr.tgt), title = title,
+                  caption = if (ci) paste0(round(100 * level), "% confidence interval") else NULL) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
+                   plot.title = ggplot2::element_text(hjust = 0.5),
+                   plot.margin = ggplot2::margin(5.5, 35, 5.5, 5.5))
   p
 }
 

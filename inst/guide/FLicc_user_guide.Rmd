@@ -228,14 +228,14 @@ one entry per gear in the order of `names(lfd)` (here Trawl, Gillnet):
   Here the trawl catches small fish and few large ones, the gillnet the larger
   fish.
 - **`catch_by_gear`**: the share of the total catch taken by each gear, e.g.
-  `c(0.7, 0.3)` for 70% and 30%. It tells the model how to split F between the
+  `c(0.95, 0.05)` for 95% and 5%. It tells the model how to split F between the
   gears; FLicc matches it to the predicted catch **in weight**, so the shares
   of the landings in tonnes can be used directly.
 
 ```{r qs-fit}
 fit1 <- fiticc(lfd, stklen,
                sel_fun = c("dsnormal", "logistic"),
-               catch_by_gear = c(0.7, 0.3))
+               catch_by_gear = c(0.95, 0.05))
 ```
 
 All other settings are at their defaults: growth and M fixed at the input
@@ -306,14 +306,14 @@ least 500 per gear and year. Every other option is a deliberate change.
 
 The rest of the guide uses one reference fit of the alfonsino data: the raw
 counts, a double-sided normal (dome) selectivity for the trawl and a logistic
-one for the gillnet, catch shares of 70% and 30% by weight, CVL = 0.1, and the
+one for the gillnet, catch shares of 95% and 5% by weight, CVL = 0.1, and the
 default Dirichlet-multinomial likelihood with the precision estimated from the
 data (`dm_theta = "saturating"`, section *Effective sample size and observation
 models*; given explicitly below for clarity).
 
 ```{r reference-fit}
 sel_fun <- c("dsnormal", "logistic")
-cbg <- c(0.7, 0.3)
+cbg <- c(0.95, 0.05)
 fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
               settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
 sprcur_flicc(fit)
@@ -409,8 +409,8 @@ the reference model.
 
 ```{r missing}
 lfd_miss <- lfd
-lfd_miss[["Gillnet"]][, c("2016", "2017")] <- 0
-lfd_miss[["Trawl"]][, "2020"] <- 0
+lfd_miss[["Gillnet"]][, c("2016", "2017","2022")] <- 0
+lfd_miss[["Trawl"]][, c("2020","2022")] <- 0
 fit_miss <- fiticc(lfd_miss, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
 flicc_convergence(fit_miss)
@@ -550,14 +550,15 @@ values of a curve.
 
 The two-mode functions are explored the same way. A composition with two
 size modes arises, for example, when the gears are pooled into one fleet.
-`combine_lfd()` pools the gears, each raised by its catch share (by weight,
+`combine_lfd()` pools the gears, each raised by its catch share (for this example by weight,
 `cbg` = 70% trawl, 30% gillnet), and rescales the result to an effective sample
 size:
 
 ```{r combine-lfd, fig.height = 3.5}
 yr_last  <- tail(as.numeric(dimnames(lfd[[1]])$year), 1)
-lfd_fleet <- combine_lfd(window(lfd, start = yr_last), catch_by_gear = cbg,
+lfd_fleet <- combine_lfd(window(lfd, start = yr_last), catch_by_gear = c(0.7,0.3) ,
                          lhpar = lhpar, ess.n = 500)
+plot_lfd(window(lfd, start = yr_last))
 plot_lfd(lfd_fleet)
 ```
 
@@ -567,10 +568,10 @@ large-fish mode (mainly from the gillnet) at about 31 cm. Over it,
 second mode flat (`rsd2 = 1000`, asymptotic) or domed on the right:
 
 ```{r selfun-twomodes, fig.height = 4.5}
-plot_selfun("binormal", list(mode1 = 18, sd1 = 2.5, mode2 = 31, sd2 = c(4, 8), h = 0.6),
+plot_selfun("binormal", list(mode1 = 22, sd1 = 3.3, mode2 = 31, sd2 = c(3, 8), h = 0.8),
             lfd = lfd_fleet, ref = ref_L)
-plot_selfun("bidsnormal", list(mode1 = 18, sd1 = 2.5, mode2 = 31, lsd2 = 4,
-                               rsd2 = c(1000, 12, 6), h = 0.6),
+plot_selfun("bidsnormal", list(mode1 = 22, sd1 = 3.3, mode2 = 31, lsd2 = 3,
+                               rsd2 = c(1000, 10, 4), h = 0.7),
             lfd = lfd_fleet, ref = ref_L)
 ```
 
@@ -915,6 +916,15 @@ growth tracks of year classes (grey lines):
 plot_resid_bubble(res_osa, fit = fit, cohorts = TRUE)
 ```
 
+
+```{r resid-peason, fig.height = 5}
+plot_resid_len(fit,years="each")
+```
+```{r resid-osa, fig.height = 5}
+plot_resid_len(fit,years="each",type="osa")
+```
+
+
 **Mean length and runs test.** The observed mean length of each composition is
 compared with its expectation, standardized with the standard error implied by
 the observation model (Francis 2011). A runs test checks whether the residuals
@@ -1197,8 +1207,8 @@ The upper bound of apical F/M is raised from its default (`FM_max = 4`) to 10, s
 that runs with a larger Linf can reach a higher F:
 
 ```{r one-year-fits}
-yr <- tail(as.numeric(dimnames(lfd[[1]])$year), 1)
-set_ref <- list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", FM_max = 10)
+yr <- 2024
+set_ref <- list(CVL = 0.1, obs_model = "mn", FM_max = 4)
 
 fit1 <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                settings = set_ref, years = yr)
@@ -1224,6 +1234,16 @@ runs1 <- c(list(reference = fit1), dome_runs, cvl_runs, linf_runs)
 tab1 <- fits_summary(runs1)
 tab1
 ```
+
+Residual options for single year fits.
+
+```{r, resid-singleyr}
+plot_resid_len(fit1,type="pearson")
+plot_resid_len(fit1,type="osa")
+
+```
+
+
 
 `fits_summary()` gives, for each run, the convergence (`conv`), SPR with its
 confidence interval, F/M, apical F, Fspr40, current F relative to Fspr40, and
@@ -1278,7 +1298,18 @@ fixed (`dm_theta = "fixed"`); estimated, it runs to its upper bound and the
 fits fail the convergence check:
 
 ```{r one-fleet-fits}
+
+fit2gear <-fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+
+lfd_fleet <- combine_lfd(lfd, catch_by_gear = c(0.95,0.05) ,
+                         lhpar = lhpar, ess.n = 500)
+
+
 stk_fleet <- stocklen(lfd_fleet, lhpar, m_model = "constant")
+
+
+
 
 fleet_fun <- c(logistic = "logistic", binormal = "binormal",
                bidsnormal = "bidsnormal", bidsnormal_flat = "bidsnormal")
@@ -1291,7 +1322,7 @@ fleet_runs <- Map(function(fun, fix) {
          settings = set_fleet, sel_fixed = fix)
 }, fleet_fun, fleet_fix)
 
-tab_fleet <- fits_summary(fleet_runs)
+tab_fleet <- fits_summary(c(list(ref2gear=fit2gear),fleet_runs))
 tab_fleet
 plot_compare_sel(fleet_runs)
 ```
@@ -1457,7 +1488,7 @@ last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
 
 ```{r ess-demo}
 sel_fun <- c("dsnormal", "logistic")
-cbg <- c(0.7, 0.3)
+cbg <- c(0.95, 0.05)
 stklen <- stocklen(lfd, lhpar, m_model = "constant")
 
 ess_values <- c(50, 100, 200, 500, 1000)
