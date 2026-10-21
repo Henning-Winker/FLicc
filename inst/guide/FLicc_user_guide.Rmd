@@ -513,6 +513,7 @@ plot_growth_phase(gph)
 
 ```{r growth-lfd, fig.height = 6}
 plot_growth_lfd(gph)
+plot_growth_lfd(gph, ages = c(2, 12))     # selected ages only
 ```
 
 For alfonsino the profile is flat (it varies by only

@@ -338,6 +338,8 @@ plot_growth_phase <- function(x) {
 #' @param phase Optional phase to draw instead of the estimate.
 #' @param band Logical; draw the \eqn{\pm 2} SD bands.
 #' @param scale Width of the largest composition, in years.
+#' @param ages Ages of the tracks shown: `c(min, max)` (e.g. `c(1, 6)`), or
+#'   `NULL` (default) for ages 0 up to `maxtracks`.
 #' @param maxtracks Largest age of the tracks drawn; default the age at which
 #'   the mean length reaches the largest observed length. The \eqn{\pm 2} SD
 #'   bands are drawn only up to the age at which the annual growth increment
@@ -352,7 +354,7 @@ plot_growth_phase <- function(x) {
 #' plot_growth_lfd(gp)
 #' }
 #' @export
-plot_growth_lfd <- function(x, phase = NULL, band = TRUE, scale = 0.9, maxtracks = NULL, ...) {
+plot_growth_lfd <- function(x, phase = NULL, ages = NULL, band = TRUE, scale = 0.9, maxtracks = NULL, ...) {
   if (!inherits(x, "flicc_growth_phase")) x <- growth_phase_flicc(x, ...)
   ph <- if (is.null(phase)) x$best$phase else phase
   kk <- x$k; linf <- x$linf
@@ -378,10 +380,12 @@ plot_growth_lfd <- function(x, phase = NULL, band = TRUE, scale = 0.9, maxtracks
   amax <- if (is.null(maxtracks)) {
     if (any(mu_a >= Lobs)) a[which(mu_a >= Lobs)[1]] else max(a)
   } else maxtracks
+  amin <- 0
+  if (!is.null(ages)) { amin <- min(ages); amax <- max(ages) }
   tr <- do.call(rbind, lapply(seq(min(yrs) - ceiling(amax), max(yrs)), function(b) {
     yy <- seq(min(yrs), max(yrs) + 1, by = 0.1)
     age <- yy - b + ph                 # year class b is in component 0 in year b
-    ok <- age >= 0 & age <= amax
+    ok <- age >= amin & age <= amax
     if (!any(ok)) return(NULL)
     mu <- linf * (1 - exp(-kk * age[ok]))
     s <- sqrt((x$cv_real * mu)^2 + x$sd0^2)
