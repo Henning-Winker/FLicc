@@ -126,13 +126,13 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
   ref <- ref[order(ref$L), ]
   close <- c(FALSE, diff(ref$L) < 0.04 * ymax)
   run <- ave(seq_along(close), cumsum(!close), FUN = seq_along)          # position within a cluster
-  ref$vj <- ifelse(run %% 2 == 0, 1.3, -0.3)                             # alternate above / below
+  ref$xl <- maxage * (1 - 0.3 * ((run - 1) %% 3))                        # labels of close lines side by side
   p <- ggplot2::ggplot(d, ggplot2::aes(age, L, group = group)) +
     ggplot2::geom_line(ggplot2::aes(alpha = shade), colour = "grey20", linewidth = 0.5) +
     ggplot2::geom_line(data = d[d$group == central, ], colour = "black", linewidth = 1.2) +
     ggplot2::geom_hline(data = ref, ggplot2::aes(yintercept = L), colour = ref$col,
                         linetype = ref$lty, inherit.aes = FALSE) +
-    ggplot2::annotate("text", x = maxage, y = ref$L, label = ref$what, hjust = 1, vjust = ref$vj,
+    ggplot2::annotate("text", x = ref$xl, y = ref$L, label = ref$what, hjust = 1, vjust = -0.3,
                       size = 3, colour = ref$col) +
     ggplot2::scale_alpha(range = c(0.2, 1), guide = "none") +
     ggplot2::coord_cartesian(ylim = c(0, ymax)) +
@@ -341,7 +341,9 @@ plot_growth_phase <- function(x) {
 #' @param ages Ages of the tracks shown: `c(min, max)` (e.g. `c(1, 6)`), or
 #'   `NULL` (default) for ages 0 up to `maxtracks`.
 #' @param maxtracks Largest age of the tracks drawn; default the age at which
-#'   the mean length reaches the largest observed length. The \eqn{\pm 2} SD
+#'   the annual growth increment falls below one length class (tracks closer
+#'   than that cannot be told apart in the plot), at most the age at which the
+#'   mean length reaches the largest observed length. The \eqn{\pm 2} SD
 #'   bands are drawn only up to the age at which the annual growth increment
 #'   falls below two standard deviations of length at age: beyond it
 #'   neighbouring year classes overlap and cannot be followed (given in the
@@ -377,8 +379,11 @@ plot_growth_lfd <- function(x, phase = NULL, ages = NULL, band = TRUE, scale = 0
   asep <- if (any(inc < 2 * sd_a)) a[which(inc < 2 * sd_a)[1]] else max(a)
   Lsep <- linf * (1 - exp(-kk * (asep + ph)))
   Lobs <- max(dd$L[dd$p > 0], na.rm = TRUE)
+  binw <- if (length(unique(dd$L)) > 1) min(diff(sort(unique(dd$L)))) else 1
   amax <- if (is.null(maxtracks)) {
-    if (any(mu_a >= Lobs)) a[which(mu_a >= Lobs)[1]] else max(a)
+    a_obs <- if (any(mu_a >= Lobs)) a[which(mu_a >= Lobs)[1]] else max(a)
+    a_inc <- if (any(inc < binw)) a[which(inc < binw)[1]] else max(a)
+    min(a_obs, a_inc)
   } else maxtracks
   amin <- 0
   if (!is.null(ages)) { amin <- min(ages); amax <- max(ages) }
