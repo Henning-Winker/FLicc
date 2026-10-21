@@ -518,9 +518,9 @@ plot_growth_lfd(gph)
 For alfonsino the profile is flat (it varies by only
 `r round(gph$contrast, 1)` log-likelihood units over the phase): with k = 0.08
 the fish grow about 2-3 cm a year at the lengths caught, less than the spread of
-length at age, so year classes cannot be followed in the compositions, and the
-tracks are drawn only for the first few ages, where the increment exceeds two
-standard deviations. The data neither support nor contradict the growth
+length at age, so year classes cannot be followed in the compositions: they are
+separable (shaded bands) only at lengths below those caught, and at the lengths
+caught the tracks run closer together than the width of a year class. The data neither support nor contradict the growth
 parameters here, and the t0 candidates are not informative. For fast-growing
 species with seasonal recruitment, sampled over a short period of the year, the
 modes are separate and the profile has a clear peak; simulated compositions

@@ -125,7 +125,8 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
   ymax <- max(c(ref$L, d$L), na.rm = TRUE) * 1.05
   ref <- ref[order(ref$L), ]
   close <- c(FALSE, diff(ref$L) < 0.04 * ymax)
-  ref$vj <- ifelse(close & c(FALSE, !close[-length(close)]), 1.3, -0.3)   # alternate above / below
+  run <- ave(seq_along(close), cumsum(!close), FUN = seq_along)          # position within a cluster
+  ref$vj <- ifelse(run %% 2 == 0, 1.3, -0.3)                             # alternate above / below
   p <- ggplot2::ggplot(d, ggplot2::aes(age, L, group = group)) +
     ggplot2::geom_line(ggplot2::aes(alpha = shade), colour = "grey20", linewidth = 0.5) +
     ggplot2::geom_line(data = d[d$group == central, ], colour = "black", linewidth = 1.2) +
@@ -337,9 +338,12 @@ plot_growth_phase <- function(x) {
 #' @param phase Optional phase to draw instead of the estimate.
 #' @param band Logical; draw the \eqn{\pm 2} SD bands.
 #' @param scale Width of the largest composition, in years.
-#' @param maxtracks Largest age of the tracks drawn. Default: the age at which the
-#'   annual growth increment falls below two standard deviations of length at
-#'   age, beyond which neighbouring year classes overlap and cannot be followed.
+#' @param maxtracks Largest age of the tracks drawn; default the age at which
+#'   the mean length reaches the largest observed length. The \eqn{\pm 2} SD
+#'   bands are drawn only up to the age at which the annual growth increment
+#'   falls below two standard deviations of length at age: beyond it
+#'   neighbouring year classes overlap and cannot be followed (given in the
+#'   title).
 #' @param ... Passed to [growth_phase_flicc()] when `x` is not its output.
 #' @return A `ggplot`.
 #' @examples
@@ -364,13 +368,16 @@ plot_growth_lfd <- function(x, phase = NULL, band = TRUE, scale = 0.9, maxtracks
   dd$gear <- factor(dd$gear, levels = x$gears)
   dd$x <- dd$year + scale * dd$p / max(dd$p)
   yrs <- sort(unique(dd$year))
-  if (is.null(maxtracks)) {
-    a <- seq(0, log(100) / kk, by = 0.05)
-    mu_a <- linf * (1 - exp(-kk * (a + ph)))
-    inc <- (linf - mu_a) * (1 - exp(-kk))
-    sd_a <- sqrt((x$cv_real * mu_a)^2 + x$sd0^2)
-    amax <- max(1, a[which(inc < 2 * sd_a)[1]], na.rm = TRUE)
-  } else amax <- maxtracks
+  a <- seq(0, log(100) / kk, by = 0.05)
+  mu_a <- linf * (1 - exp(-kk * (a + ph)))
+  inc <- (linf - mu_a) * (1 - exp(-kk))
+  sd_a <- sqrt((x$cv_real * mu_a)^2 + x$sd0^2)
+  asep <- if (any(inc < 2 * sd_a)) a[which(inc < 2 * sd_a)[1]] else max(a)
+  Lsep <- linf * (1 - exp(-kk * (asep + ph)))
+  Lobs <- max(dd$L[dd$p > 0], na.rm = TRUE)
+  amax <- if (is.null(maxtracks)) {
+    if (any(mu_a >= Lobs)) a[which(mu_a >= Lobs)[1]] else max(a)
+  } else maxtracks
   tr <- do.call(rbind, lapply(seq(min(yrs) - ceiling(amax), max(yrs)), function(b) {
     yy <- seq(min(yrs), max(yrs) + 1, by = 0.1)
     age <- yy - b + ph                 # year class b is in component 0 in year b
@@ -378,10 +385,11 @@ plot_growth_lfd <- function(x, phase = NULL, band = TRUE, scale = 0.9, maxtracks
     if (!any(ok)) return(NULL)
     mu <- linf * (1 - exp(-kk * age[ok]))
     s <- sqrt((x$cv_real * mu)^2 + x$sd0^2)
-    data.frame(cohort = b, year = yy[ok], mu = mu, lo = mu - 2 * s, hi = mu + 2 * s)
+    data.frame(cohort = b, year = yy[ok], mu = mu, lo = mu - 2 * s, hi = mu + 2 * s,
+               sep = age[ok] <= asep)
   }))
   p <- ggplot2::ggplot()
-  if (band) p <- p + ggplot2::geom_ribbon(data = tr, ggplot2::aes(year, ymin = lo, ymax = hi, group = cohort),
+  if (band && any(tr$sep)) p <- p + ggplot2::geom_ribbon(data = tr[tr$sep, ], ggplot2::aes(year, ymin = lo, ymax = hi, group = cohort),
                                           fill = "#D6604D", alpha = 0.12)
   p <- p +
     ggplot2::geom_polygon(data = do.call(rbind, lapply(split(dd, list(dd$gear, dd$year), drop = TRUE), function(z) {
@@ -389,12 +397,13 @@ plot_growth_lfd <- function(x, phase = NULL, band = TRUE, scale = 0.9, maxtracks
       rbind(z, transform(z[rev(seq_len(nrow(z))), ], x = year))
     })), ggplot2::aes(x, L, group = interaction(gear, year)), fill = "#6BAED6", colour = NA, alpha = 0.8) +
     ggplot2::geom_line(data = tr, ggplot2::aes(year, mu, group = cohort), colour = "#B2182B",
-                       linetype = "dashed", linewidth = 0.4) +
+                       linetype = "dashed", linewidth = 0.3) +
     ggplot2::facet_wrap(~gear, ncol = 1) +
     ggplot2::coord_cartesian(ylim = c(0, max(dd$L[dd$p > 0], na.rm = TRUE) * 1.05)) +
     ggplot2::scale_x_continuous(breaks = yrs) +
     ggplot2::labs(x = "Year", y = "Length",
-                  title = sprintf("Cohort tracks: Linf %.1f, k %.3f, phase %.2f (ages up to %.1f)", linf, kk, ph, amax)) +
+                  title = sprintf("Cohort tracks: Linf %.1f, k %.3f, phase %.2f", linf, kk, ph),
+                  subtitle = sprintf("Year classes separable (increment > 2 SD, shaded) up to age %.1f, %.0f cm", asep, Lsep)) +
     ggplot2::theme_bw() + ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
   p
 }
