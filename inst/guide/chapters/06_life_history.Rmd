@@ -67,11 +67,14 @@ With the samples taken $\tau$ years after spawning (`sample - spawn`, as
 fractions of the year), $t_0 = \tau - \phi - m$. The integer $m$ (is the first
 mode age 0 or age 1?) is not identified by lengths alone; `$t0` lists the
 candidates with the implied lengths at age 1 and 2, to be chosen with knowledge
-of the biology. This is also the information needed for growth in age-based
+of the biology. `age_first` is the true age of the first age component under
+each candidate (negative: that component is not yet born and the first mode is
+the next one), and `phase_interval` the approximate 95% interval of the phase
+(`NA` when the profile is flat). This is also the information needed for growth in age-based
 models (e.g. the length at a minimum age and the CV of young fish in SS3).
 
 ```{r growth-phase, fig.height = 3.5}
-gph <- growth_phase_flicc(fit)
+gph <- growth_phase_flicc(fit, spawn = 0, sample = 0.5)   # spawning at the start, sampling mid-year
 gph$best
 gph$t0
 plot_growth_phase(gph)

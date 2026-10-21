@@ -184,11 +184,16 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
 #'
 #' **From phase to t0.** With the compositions sampled \eqn{\tau} years after
 #' spawning (`sample - spawn`, as fractions of the year),
-#' \eqn{t_0 = \tau - \phi - m}. The integer \eqn{m} is not identified by the
-#' lengths alone (is the first mode age 0 or age 1?); the candidates
-#' \eqn{m = -1, 0, 1} are returned with the implied lengths at age 1 and 2, to be
-#' chosen with knowledge of the biology. In SS3 terms, the length at age 1 (or
-#' at `Amin`) and CVL as the CV of the young fish.
+#' \eqn{t_0 = \tau - \phi - m}. The lengths fix the phase only within a
+#' year: whether the smallest age component holds fish of the year or one-year
+#' olds is not identified. The integer \eqn{m} labels this choice;
+#' `age_first` is the true age at sampling of the first age component
+#' (\eqn{\tau - m}; a negative value means that component is not yet born and
+#' holds no fish, so the first mode is the next one). The candidates \eqn{m = -1, \dots, 2} are returned with
+#' their t0, its approximate 95% interval (from the phase interval) and the
+#' implied lengths at age 1 and 2, to be chosen with knowledge of the biology
+#' (e.g. the length of fish in their first year). In SS3 terms, the length at
+#' age 1 (or at `Amin`) and CVL as the CV of the young fish.
 #'
 #' Partly selected small fish shift the first mode upwards; exclude them with
 #' `Lmin`. Compositions pooled over months smear the modes; use compositions
@@ -210,9 +215,11 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
 #' @param spawn,sample Spawning and sampling time as fractions of the year.
 #' @param maxage Largest age component (default: age at 0.99 Linf).
 #' @return A list of class `"flicc_growth_phase"`: `profile` (k, phase,
-#'   logLik, dLL), `best` (k, phase, logLik), `t0` (candidates with lengths at
-#'   age 1 and 2), the inputs, and `contrast` (largest minus smallest logLik of
-#'   the profile; near zero means no information on the phase).
+#'   logLik, dLL), `best` (k, phase, logLik), `t0` (candidates: `m`,
+#'   `age_first`, `t0` with interval, lengths at age 1 and 2),
+#'   `phase_interval` (approximate 95%, `NA` if the profile is flat),
+#'   `informative` (`FALSE` when all phases lie within the interval), the
+#'   inputs, and `contrast` (largest minus smallest logLik of the profile).
 #' @references Fournier, D.A., Sibert, J.R., Majkowski, J. and Hampton, J.
 #'   (1990). MULTIFAN a likelihood-based method for estimating growth parameters
 #'   and age composition from multiple length frequency data sets. Canadian
@@ -282,12 +289,25 @@ growth_phase_flicc <- function(x, lfd = NULL, CVL = NULL, maxsd = NULL, k = NULL
   prof$dLL <- prof$logLik - max(prof$logLik)
   b <- prof[which.max(prof$logLik), ]
   tau <- sample - spawn
-  m <- -1:1
+  # approximate 95% interval of the phase (at the best k): phases with dLL > -1.92
+  pk <- prof[prof$k == b$k, ]
+  inside <- pk$phase[pk$dLL > -1.92]
+  informative <- length(inside) < nrow(pk)
+  ph_int <- if (informative) range(inside) else c(NA_real_, NA_real_)
+  m <- -1:2
   t0 <- tau - b$phase - m
-  t0tab <- data.frame(m = m, t0 = round(t0, 3),
+  t0tab <- data.frame(m = m,
+                      age_first = round(tau - m, 2),
+                      t0 = round(t0, 3),
+                      t0_lwr = round(tau - ph_int[2] - m, 3),
+                      t0_upr = round(tau - ph_int[1] - m, 3),
                       L_age1 = round(gp$linf * (1 - exp(-b$k * (1 - t0))), 2),
                       L_age2 = round(gp$linf * (1 - exp(-b$k * (2 - t0))), 2))
-  out <- list(profile = prof, best = b, t0 = t0tab, contrast = diff(range(prof$logLik)),
+  if (!informative)
+    message("growth_phase_flicc(): the profile is flat (all phases within dLL > -1.92): ",
+            "the compositions carry no information on the phase or t0.")
+  out <- list(profile = prof, best = b, t0 = t0tab, phase_interval = ph_int,
+              informative = informative, contrast = diff(range(prof$logLik)),
               linf = gp$linf, k = b$k, cv_real = gp$cv_real, sd0 = sd0, spawn = spawn,
               sample = sample, ess = ess, gears = gears, lfd = lfd, CVL = gp$CVL)
   class(out) <- c("flicc_growth_phase", "list")
