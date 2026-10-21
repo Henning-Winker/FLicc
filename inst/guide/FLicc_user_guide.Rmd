@@ -460,6 +460,72 @@ uncertainty should be considered jointly (as in `mc_flicc()`).
 | **Red flags** | Linf well below the largest fish (many fish beyond Linf) or far above it; Linf from another region or sex; M/k outside 0.5-3 without justification. |
 | **Action** | Linf is the dominant sensitivity (simulation: a 10% error shifts SPR by +75% / -30%); run Linf sensitivities and include Linf in the ensemble. |
 
+### Growth and the growth-type groups
+
+`plot_growth()` draws the growth curves of the growth-type groups the model
+uses (as in Fig. 1 of Hordyk et al. 2015), with Linf, the Linf of the largest
+group (no fish in the model grows beyond it), L50 and the largest observed fish
+of each gear. It needs only the life history and the GTG settings, so it is a
+check **before** the fit: the largest fish should lie below the largest group.
+`composition = TRUE` adds the unfished length composition of each group on the
+same length axis:
+
+```{r growth, fig.height = 4.5}
+plot_growth(lhpar, CVL = 0.1, lfd = lfd, composition = TRUE)
+```
+
+After a fit, `plot_growth(fit)` shows the groups of the fitted model (with the
+estimated Linf and CVL when `linf.sd` or `CVL.sd` are used).
+
+### Cohort modes and t0
+
+FLicc does not need t0: it works in length, and t0 only shifts the age axis. But
+the length compositions can say something about growth when year classes show
+as modes. `growth_phase_flicc()` fits each composition as a mixture of age
+components whose mean lengths follow the growth curve,
+$\mu_j = L_\infty(1 - e^{-k(j + \phi)})$, with widths from the growth-type groups
+($\mathrm{CVL}\,\mu_j$, plus a small extra spread `sd0`), as in MULTIFAN
+(Fournier et al. 1990). The weights of the components are free in each
+composition, so year-class strength and selectivity do not matter; only the
+positions and widths of the modes have to fit. The phase $\phi$ is common to all
+years and gears and is profiled:
+
+- a clear maximum of the profile means that the modes follow the growth curve;
+- a flat profile means that the compositions carry no information on the phase:
+  the annual growth increment $(L_\infty - L)(1 - e^{-k})$ is small compared with
+  the spread of length at age, so neighbouring year classes overlap;
+- a vector of `k` gives a joint profile over phase and k, a check of the growth
+  rate (with Linf fixed).
+
+With the samples taken $\tau$ years after spawning (`sample - spawn`, as
+fractions of the year), $t_0 = \tau - \phi - m$. The integer $m$ (is the first
+mode age 0 or age 1?) is not identified by lengths alone; `$t0` lists the
+candidates with the implied lengths at age 1 and 2, to be chosen with knowledge
+of the biology. This is also the information needed for growth in age-based
+models (e.g. the length at a minimum age and the CV of young fish in SS3).
+
+```{r growth-phase, fig.height = 3.5}
+gph <- growth_phase_flicc(fit)
+gph$best
+gph$t0
+plot_growth_phase(gph)
+```
+
+```{r growth-lfd, fig.height = 6}
+plot_growth_lfd(gph)
+```
+
+For alfonsino the profile is flat (it varies by only
+`r round(gph$contrast, 1)` log-likelihood units over the phase): with k = 0.08
+the fish grow about 2-3 cm a year at the lengths caught, less than the spread of
+length at age, so year classes cannot be followed in the compositions, and the
+tracks are drawn only for the first few ages, where the increment exceeds two
+standard deviations. The data neither support nor contradict the growth
+parameters here, and the t0 candidates are not informative. For fast-growing
+species with seasonal recruitment, sampled over a short period of the year, the
+modes are separate and the profile has a clear peak; simulated compositions
+with k = 0.25 recover the phase to within 0.02 years and pick the right k.
+
 # Selectivity
 
 ## Functions and parameterisation
@@ -2586,7 +2652,7 @@ est <- mseCtrl(method = flicc.sa, args = list(
 | 2 | composition consistency (`plot_lfd`) | shifts in mode or left limb | split gears/periods; restrict years |
 | 3 | largest fish vs Linf | > 1% at or above Linf | revisit Linf; tail cut |
 | 4 | empirical catch curves (`plot_zlcc`) | curved limbs, jumping slopes | dome or tail cut; keep random walk |
-| 5 | life-history inputs | Linf inconsistent with data; odd M/k | Linf sensitivity; priors (`linf.sd`) as a check |
+| 5 | life-history inputs (`plot_growth`, `growth_phase_flicc`) | Linf inconsistent with data; odd M/k; largest fish beyond the largest growth group; cohort modes not following the growth curve | Linf sensitivity; priors (`linf.sd`) as a check; maxsd; growth check of k |
 | 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data; dome sensitivity (`dome_sens_flicc`) |
 | 7 | convergence (`flicc_convergence`) | gradient, Hessian, bounds | restarts; simplify; tail cut |
 | 8 | fit to compositions (`plot_len`, `plot_resid_bubble`, `lmean_resid_flicc`, `ppc_flicc`) | systematic misfit; failed runs test; many values outside predictive intervals | selectivity, Linf, tail cut; lower ESS; cohort patterns are expected |
@@ -2613,6 +2679,12 @@ how SPR, the tail cut and sigmaF respond over time; estimated Dirichlet-multinom
 overdispersion.*
 
 # References
+
+Fournier, D.A., Sibert, J.R., Majkowski, J. and Hampton, J. (1990). MULTIFAN a
+likelihood-based method for estimating growth parameters and age composition
+from multiple length frequency data sets illustrated using data for southern
+bluefin tuna (*Thunnus maccoyii*). Canadian Journal of Fisheries and Aquatic
+Sciences 47: 301-317.
 
 Froese, R., Winker, H., Coro, G., Demirel, N., Tsikliras, A.C., Dimarchopoulou,
 D., Scarcella, G., Probst, W.N., Dureuil, M. and Pauly, D. (2018). A new approach
