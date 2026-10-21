@@ -12,7 +12,9 @@ plot_mcsprdist(
   n = 300,
   bw = 0.04,
   trim = 0.01,
-  show_fit = TRUE
+  show_fit = TRUE,
+  weights = "aic",
+  ref = c(0.4, 0.2, 0.1)
 )
 }
 \arguments{
@@ -41,6 +43,12 @@ than two percent of the yearly maximum density. Default is \code{0.01}.}
 
 \item{show_fit}{Logical. If \code{TRUE}, show the original fitted SPR values
 from \code{mc$fit$spr}.}
+
+\item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
+  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
+
+\item{ref}{SPR reference lines (default 0.4, 0.2, 0.1 in green, orange,
+red, as \code{plot_spr()}); \code{NULL} for none.}
 }
 \value{
 A \code{ggplot} object.

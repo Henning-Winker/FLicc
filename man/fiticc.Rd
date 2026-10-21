@@ -10,8 +10,7 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "dm", ngtg = 13, maxsd = 2, Mpow = 0, prior_sigmaF = c(log(0.5), 0.3, 1), linf.sd =
-    NULL, Mk.sd = NULL, CVL.sd = NULL),
+    "dm", ngtg = 13, maxsd = 3, Mpow = 0, linf.sd = NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
   compile = FALSE,
@@ -38,9 +37,30 @@ length-frequency data by gear. Values can be counts or proportions.}
 \item{stklen}{An \code{FLStockLen}-like object containing life-history
 parameters (e.g. Linf, k, M) and matching dimensions to \code{lfd}.}
 
-\item{sel_fun}{Character vector specifying selectivity function per gear.
-Supported options include \code{"logistic"}, \code{"normal"},
-and \code{"dsnormal"}.}
+\item{sel_fun}{Character vector (named by gear, or in the order of
+\code{lfd}) giving the selectivity function of each gear; parameters are
+on the length scale:
+\describe{
+\item{\code{"logistic"}}{Asymptotic: \code{SL50}, \code{SL95}.}
+\item{\code{"dsnormal"}}{Double-sided normal (dome): \code{mode},
+\code{lsd} (left), \code{rsd} (right); \code{rsd = 1000} in
+\code{sel_fixed} makes it asymptotic.}
+\item{\code{"normal"}}{Symmetric dome: \code{mode}, \code{sd}.}
+\item{\code{"binormal"}}{Two size modes, the sum of two normal curves
+scaled to a maximum of 1: \code{mode1}, \code{sd1} (first curve),
+\code{mode2 > mode1}, \code{sd2} (second curve) and \code{h}, the
+height of the second curve relative to the first. For gears whose
+catch has two size groups, e.g. juveniles and adults, or a gillnet
+fleet with two mesh groups.}
+\item{\code{"bidsnormal"}}{Two size modes with a double-sided second
+curve: \code{mode1}, \code{sd1}, \code{mode2}, \code{lsd2},
+\code{rsd2}, \code{h}. The right limb of the large-fish mode is
+separate; \code{rsd2 = 1000} in \code{sel_fixed} gives an asymptotic
+second mode.}
+}
+Use \code{plot_selfun()} to look at the shapes over the data before
+fitting. The two-mode functions have five or six parameters and need
+enough data in both modes.}
 
 \item{catch_by_gear}{Numeric vector of relative catch proportions by gear,
 in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
@@ -52,90 +72,129 @@ Must sum to 1.}
 \code{"gtg"} (default), a growth-type-group approximation inspired
 by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
 growth formulation.}
-
-\if{html}{\out{<div class="sourceCode">}}\preformatted{\\item\{\code{obs_model}\}\{Observation likelihood. Options are:
-  \code{"dm"} (default, Dirichlet-multinomial with the precision estimated
-  by default, see \code{dm_theta}; give raw counts or an effective sample size
-  of at least 500), \code{"mn"} (multinomial, as LBSPR) and \code{"nb"}
-  (negative binomial, as fishblicc).\}
-
-\\item\{\code{CVL}\}\{Coefficient of variation in length-at-age.\}
-
-\\item\{\code{GL}\}\{Number of Gauss–Laguerre quadrature nodes (used only
-  when \code{pop_model = "gamma"}).\}
-
-\\item\{\code{catch.sd}\}\{Standard deviation for catch penalty.\}
-
-\\item\{\code{catch_units}\}\{Units of \code{catch_by_gear}: \code{"weight"} (default; predicted catch-at-length times weight at length is compared with the input shares, e.g. landings in tonnes) or \code{"numbers"} (predicted catch in numbers, as in fishblicc).\}
-
-\\item\{\code{dm_theta}\}\{Precision of the Dirichlet-multinomial (\code{obs_model = "dm"}): \code{"saturating"} (default; alpha0 = beta estimated; the effective sample size n (1 + beta)/(n + beta) levels off at beta + 1, so the fit becomes insensitive to the input sample size), \code{"linear"} (alpha0 = theta n, theta estimated) or \code{"fixed"} (alpha0 = n, effective sample size about n/2). Thorson et al. (2017, Fisheries Research 192: 84-93).\}
-
-\\item\{\code{dm_shared}\}\{Logical; one precision parameter for all gears instead of one per gear (default \code{FALSE}).\}
-
-\\item\{\code{dm_prior_sd}\}\{SD of a weak normal prior on the log precision (default 1; 0 = none), centred on beta = 10 max(n) (saturating) or theta = 10 (linear), i.e. close to a multinomial. It only matters when the data show no overdispersion, where it keeps the precision finite.\}
-
-\\item\{\code{ngtg}\}\{Number of growth-type groups for
-  \code{pop_model = "gtg"}. Default is 13, as in LBSPR.\}
-
-\\item\{\code{maxsd}\}\{Range (in standard deviations) for GTG Linf
-  distribution. Default is 2, as in LBSPR. The groups cover
-  \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the actual Linf
-  spread (about 0.88-0.91 * CVL at 2, 0.99 * CVL at 3) and caps the
-  largest length the model can produce. \code{maxsd = 3, ngtg = 19}
-  makes CVL close to the actual spread.\}
-
-\\item\{\code{tail_warning}\}\{Logical. If \code{TRUE}, warn when observed
-  fish lie in length bins at or above the largest GTG Linf, where the
-  model gives them near-zero probability. Default \code{FALSE}.\}
-
-\\item\{\code{Mpow}\}\{Optional length-dependent mortality scaling
-  exponent (GTG only). Default is 0.\}
-
-\\item\{\code{prior_sigmaF}\}\{Random walk on log F by gear and its
-  standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
-  log(sigmaF) with \code{use = 1} switching the random walk on. With
-  \code{sd = NA} there is no prior on sigmaF.\}
-
-\\item\{\code{F_re}\}\{Logical. If \code{TRUE}, log F by year and gear are
-  random effects (state-space random walk) integrated out by the Laplace
-  approximation, so sigmaF is estimated from the marginal likelihood and
-  standard errors include the F process. If \code{FALSE} (default), log F
-  are fixed effects with a random-walk penalty, where sigmaF is mainly
-  set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
-  supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.\}
-
-\\item\{\code{sigmaF}\}\{Optional fixed value of sigmaF (random-walk SD of
-  log F). Fits are then as fast as the penalised default. A practical
-  use is to estimate sigmaF once with \code{F_re = TRUE} on the full
-  data, then fix it for repeated fits (e.g. in an MSE); the yearly
-  estimates closely match the full random-effects fit.\}
-
-\\item\{\code{rob_eps}\}\{Robustness of the composition likelihood to
-  sparse or outlying bins. Predicted proportions become
-  \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
-  few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).\}
-
-\\item\{\code{Lplus}\}\{Optional plus-group length. Observed and predicted
-  counts in bins with lower bound \code{>= Lplus} are pooled into one
-  bin before the likelihood (tail compression). Reduces the influence
-  of the binning and sampling of the largest fish. Default \code{NULL}
-  (off). Predicted compositions in the report stay unpooled.\}
-
-\\item\{\code{spr_ref}\}\{SPR target(s) in percent (default \code{40}).
-  The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
-  per-recruit numbers-at-length, computed in TMB after fitting at no
-  cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
-  reuse them for these targets.\}
-
-\\item\{\code{linf.sd, Mk.sd, CVL.sd}\}\{Optional penalties on life-history
-  parameters. Supplying one makes that parameter estimated (otherwise it
-  is fixed at its input value). For \code{pop_model = "gtg"}, the
-  estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
-  \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
-  M/K is \code{Mk * (Linf / L)^Mpow}.\}
-}\if{html}{\out{</div>}}
-
+\item{\code{obs_model}}{Observation likelihood. Options are:
+\code{"dm"} (default, Dirichlet-multinomial, with the precision
+estimated by default, see \code{dm_theta}; give raw counts or an
+effective sample size of at least 500), \code{"mn"} (multinomial, as
+LBSPR) and \code{"nb"} (negative binomial, as fishblicc).}
+\item{\code{CVL}}{Coefficient of variation in length-at-age.}
+\item{\code{GL}}{Number of Gauss–Laguerre quadrature nodes (used only
+when \code{pop_model = "gamma"}).}
+\item{\code{catch.sd}}{Standard deviation for catch penalty.}
+\item{\code{catch_units}}{Units of \code{catch_by_gear}: \code{"weight"}
+(default; predicted catch-at-length times weight at length is compared
+with the input shares, e.g. landings in tonnes) or \code{"numbers"}
+(predicted catch in numbers, as in fishblicc).}
+\item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
+(\code{obs_model = "dm"}): \code{"saturating"} (default;
+\eqn{\alpha_0 = \beta} estimated; the effective
+sample size \eqn{n(1+\beta)/(n+\beta)} levels off at \eqn{\beta + 1}, so
+the fit becomes insensitive to the input sample size),
+\code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
+\code{"fixed"} (\eqn{\alpha_0 = n}, effective sample size about
+\eqn{n/2}). Thorson et al. (2017, Fisheries Research 192: 84-93).}
+\item{\code{dm_shared}}{Logical; one precision parameter for all gears
+instead of one per gear (default \code{FALSE}).}
+\item{\code{dm_prior_sd}}{SD of a weak normal prior on the log precision
+(default 1; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
+or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
+matters when the data show no overdispersion (input sample size below
+what the data support), where it keeps the precision finite.}
+\item{\code{pile}}{GTG only: predicted length composition from numbers
+integrated over each length class (\code{1}, default) or from the
+survivorship at the class bound (\code{0}, LBB without the pile-up
+correction, Pile = 0); values in between mix the two as LBB.
+Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
+\item{\code{ngtg}}{Number of growth-type groups for
+\code{pop_model = "gtg"}. Default is 13, as in LBSPR; with \code{maxsd = 3}
+more groups (e.g. 19) give practically the same fit at higher cost.}
+\item{\code{maxsd}}{Range (in standard deviations) of the GTG Linf
+distribution. Default is 3 (LBSPR: 2). The groups cover
+\code{Linf * (1 +/- maxsd * CVL)}: no fish in the model grows beyond
+\code{Linf * (1 + maxsd * CVL)}, and observed fish above it get a
+near-zero probability. Truncation also narrows the actual Linf spread
+(0.99 * CVL at 3, about 0.88-0.91 * CVL at 2). With
+\code{maxsd = 2}, a few large fish can cause steps in the likelihood
+when Linf or CVL change (sensitivity runs, Monte Carlo). Use
+\code{maxsd = 2} to reproduce LBSPR. Default changed from 2 in FLicc
+1.0.11.}
+\item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
+fish lie in length bins at or above the largest GTG Linf, where the
+model gives them near-zero probability. Default \code{TRUE} (from FLicc 1.0.11).}
+\item{\code{Mpow}}{Optional length-dependent mortality scaling
+exponent (GTG only). Default is 0.}
+\item{\code{sigmaF}, default}{By default log F follows a random walk by gear
+with sigmaF fixed at 0.3 (fast and stable). sigmaF is estimated only
+when \code{prior_sigmaF} is given (penalised fixed effect with that
+prior) or with \code{F_re = TRUE} (random effects). The random walk is
+switched off with \code{prior_sigmaF = FALSE}.}
+\item{\code{prior_sigmaF}}{Random walk on log F by gear and its
+standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
+log(sigmaF) with \code{use = 1} switching the random walk on. With
+\code{sd = NA} there is no prior on sigmaF.}
+\item{\code{F_re}}{Logical. If \code{TRUE}, log F by year and gear are
+random effects (state-space random walk) integrated out by the Laplace
+approximation, so sigmaF is estimated from the marginal likelihood and
+standard errors include the F process. If \code{FALSE} (default), log F
+are fixed effects with a random-walk penalty, where sigmaF is mainly
+set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
+supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.}
+\item{\code{sigmaF}}{Optional fixed value of sigmaF (random-walk SD of
+log F). Fits are then as fast as the penalised default. A practical
+use is to estimate sigmaF once with \code{F_re = TRUE} on the full
+data, then fix it for repeated fits (e.g. in an MSE); the yearly
+estimates closely match the full random-effects fit.}
+\item{\code{rob_eps}}{Robustness of the composition likelihood to
+sparse or outlying bins. Predicted proportions become
+\code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
+few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).}
+\item{\code{Lplus}}{Optional plus-group length. Observed and predicted
+counts in bins with lower bound \code{>= Lplus} are pooled into one
+bin before the likelihood (tail compression). Reduces the influence
+of the binning and sampling of the largest fish. Default \code{NULL}
+(off). Predicted compositions in the report stay unpooled.}
+\item{\code{tail_cut}}{Optional tail cut, an absolute length in the
+units of the length bins (as \code{Lplus}), e.g. \code{50}. Length
+bins with lower bound \code{>= tail_cut} are excluded from the
+composition likelihood: observed and predicted compositions are
+truncated and the predicted proportions renormalised over the retained
+bins, so the fit conditions on fish below the cut. Reduces the
+influence of the largest fish, which are most sensitive to
+\eqn{L_\infty}, growth variability (CVL), dome-shaped selectivity and
+the memory of past F. As a fixed length, the same bins are used
+whatever \eqn{L_\infty} is assumed (sensitivity runs, MSE
+iterations). \code{LBIspr()} and \code{LBImean()} apply the same cut by
+default. Values <= 1.5 are read as a fraction of \eqn{L_\infty} (earlier
+definition) with a warning. Default \code{NULL} (off).}
+\item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
+The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
+per-recruit numbers-at-length, computed in TMB after fitting at no
+cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
+reuse them for these targets.}
+\item{\code{FM_min}, \code{FM_max}, \code{FMpen_sd}}{Bounds on
+apical F/M (F at the most selected length over M at that length) by
+year: outside [\code{FM_min}, \code{FM_max}] (defaults 0.05 and 4) a
+steep one-sided penalty on log F/M applies; inside there is no
+penalty. \code{FMpen_sd > 0} (default 0.2) switches the bounds on,
+\code{0} off. The lower bound stops F sliding to 0 (SPR = 1) when no
+gear is asymptotic; raise \code{FM_max} (e.g. 20) for heavily fished
+stocks if F/M sits at 4.}
+\item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
+parameters. Supplying one makes that parameter estimated (otherwise it
+is fixed at its input value). For \code{pop_model = "gtg"}, the
+estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
+\code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
+M/K is \code{Mk * (Linf / L)^Mpow}.}
 }}
+
+\item{years}{Optional vector of years to fit (default all years in \code{lfd}).}
+
+\item{iter}{Iteration of \code{lfd} and \code{stklen} to fit.}
+
+\item{compile,dll}{Compile the TMB template (\code{FALSE}, default, uses
+the compiled package library \code{dll}).}
+
+\item{silent}{Logical; suppress TMB tracing output.}
 
 \item{start}{Optional numeric vector of starting values for the estimated
 TMB parameters. A common use is \code{start = fit$opt$par} to restart
@@ -146,6 +205,22 @@ for ordinary multi-year fits; it is ignored for \code{by_year = TRUE}.}
 for each year (LBSPR-style). Only the final fit object is retained, while
 annual report quantities are updated and combined across years.
 Default is \code{FALSE}.}
+
+\item{sel_fixed}{Optional named list (by gear) of selectivity parameters
+fixed at given values on the length scale, with the names used by
+\code{sel_fun}: \code{SL50}, \code{SL95} (logistic); \code{mode},
+\code{lsd}, \code{rsd} (dsnormal); \code{mode}, \code{sd} (normal);
+\code{mode1}, \code{sd1}, \code{mode2}, \code{sd2}, \code{h}
+(binormal); \code{mode1}, \code{sd1}, \code{mode2}, \code{lsd2},
+\code{rsd2}, \code{h} (bidsnormal). E.g.
+\code{list(TZGN = list(rsd = 12), TZLN = list(rsd2 = 1000))}. Unnamed
+parameters are estimated. \code{selpars_flicc(fit)} gives values in the
+same form.}
+
+\item{FLRreport}{Logical; return reported quantities as \code{FLQuants}.}
+
+\item{safe_fit,refit_GL}{For \code{pop_model = "gamma"}: refit with
+\code{refit_GL} quadrature nodes if the gradient check fails.}
 
 \item{n_restart}{Integer. Number of automatic optimizer restarts from the
 current optimum. Restarts can reduce residual gradients when \code{nlminb()}
@@ -161,7 +236,8 @@ Values supplied here override the FLicc defaults.}
 
 \item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped: no
 standard errors, but faster (useful in an MSE). The Hessian is still
-checked by the Newton polishing. Default \code{TRUE}.}
+checked by the Newton polishing.
+Default \code{TRUE}.}
 
 \item{newton}{Integer. Maximum number of Newton steps after \code{nlminb()}
 (default 3; 0 = none). Each step uses the Hessian of the objective and is

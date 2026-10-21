@@ -4,13 +4,18 @@
 \alias{mc_aic_weights}
 \title{Compute Akaike weights for FLicc Monte Carlo fits}
 \usage{
-mc_aic_weights(mc, dAIC_cut = NULL)
+mc_aic_weights(mc, dAIC_cut = NULL, weights = c("aic", "equal"))
 }
 \arguments{
 \item{mc}{An object returned by \code{mc_flicc()}.}
 
 \item{dAIC_cut}{Optional delta AIC cutoff. If supplied, iterations with
 \code{dAIC > dAIC_cut} receive zero weight before weights are normalized.}
+
+\item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
+  (each retained refit counts the same: propagation of the prior uncertainty in
+  the life-history inputs). Failed or non-converged refits (\code{mc$ok = FALSE})
+  always get weight zero.}
 }
 \value{
 A data frame with iteration number, log-likelihood, delta AIC,

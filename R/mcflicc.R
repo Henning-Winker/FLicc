@@ -208,7 +208,13 @@ draw_lh_mc <- function(
 #' @param n_restart Number of optimizer restarts passed to \code{fiticc()}.
 #'   The default \code{0} is recommended for Monte Carlo refits because each
 #'   run starts from the original optimum.
-#' @param ... Additional arguments passed to internal fitting routines.
+#' @param se Logical; compute standard errors in each refit (default
+#'   \code{FALSE}: the ensemble summarises point estimates, and skipping
+#'   \code{sdreport} makes the refits much faster).
+#' @param accept Convergence tiers (see \code{fit$diagnostics$conv_tier}) that
+#'   count as converged. Default \code{"ok"}; \code{c("ok", "warning")} also
+#'   keeps refits with a small remaining gradient or Newton decrement.
+#' @param ... Additional arguments passed to \code{fiticc()} in each refit.
 #'
 #' @details
 #' The Monte Carlo procedure is designed for uncertainty propagation rather than
@@ -224,9 +230,25 @@ draw_lh_mc <- function(
 #' \eqn{\Delta AIC \le 20} as a broad plausible set for structural uncertainty,
 #' while using \eqn{\Delta AIC \le 10} as a more strongly supported subset.
 #'
+#' Each refit uses the settings and fixed selectivity parameters
+#' (\code{sel_fixed}) of \code{fit}. A refit counts as successful
+#' (\code{mc$ok}) only if it ran without error and its convergence tier is in
+#' \code{accept}; for the other iterations \code{logLik} and all reported
+#' quantities are \code{NA}, so they cannot enter summaries as copies of the
+#' reference fit. \code{mc$conv} gives the tier of every refit ("error" if it
+#' failed).
+#'
+#' Because the life-history inputs are drawn from their prior distributions,
+#' the unweighted ensemble of successful refits (\code{weights = "equal"} in
+#' the summary functions) is the propagation of that prior uncertainty. Akaike
+#' weights additionally condition on how well each draw fits the length data;
+#' with large samples they can collapse onto few draws (check the effective
+#' number of draws, \code{n_eff}, in \code{mc_spr_tab()}).
+#'
 #' @return An object of class \code{mcflicc}. The object contains propagated
-#'   FLR quantities, Monte Carlo life-history draws, fitted parameter values,
-#'   selectivity parameters, log-likelihoods, convergence flags, and the
+#'   FLR quantities, Monte Carlo life-history draws (\code{draws}, all
+#'   iterations), fitted parameter values, selectivity parameters,
+#'   log-likelihoods, convergence flags (\code{ok}, \code{conv}), and the
 #'   original fitted report stored in \code{mc$fit}.
 #'
 #' @examples
@@ -281,8 +303,11 @@ mc_flicc <- function(
     parallel = FALSE,
     workers = NULL,
     n_restart = 0,
+    se = FALSE,
+    accept = "ok",
     ...
 ) {
+  dots <- list(...)
 
   if (!is.null(seed)) set.seed(seed)
 
@@ -296,12 +321,16 @@ mc_flicc <- function(
 
   is_flq <- vapply(mc, inherits, logical(1), "FLQuant")
   is_flp <- vapply(mc, inherits, logical(1), "FLPar")
+  # keep the names: mc gains further elements below, and a short logical
+  # index would be recycled over them
+  flq_names <- names(mc)[is_flq]
+  flp_names <- names(mc)[is_flp]
   #is_flqs <- vapply(mc, inherits, logical(1), "FLQuants")
-  for (nm in names(mc)[is_flq]) {
+  for (nm in flq_names) {
     mc[[nm]] <- FLCore::propagate(mc[[nm]], nsim)
   }
 
-  for (nm in names(mc)[is_flp]) {
+  for (nm in flp_names) {
     mc[[nm]] <- FLCore::propagate(mc[[nm]], nsim)
   }
   #for (nm in names(mc)[is_flqs]) {
@@ -315,8 +344,11 @@ mc_flicc <- function(
   lhpar <- rbind(lhpar,FLPar(CVL=fit$settings$CVL))
   mc$lhpar <- FLCore::propagate( lhpar, nsim)
 
-  # 4. Convergence flag
+  # 4. Convergence flags
   mc$ok <- rep(FALSE, nsim)
+  mc$conv <- rep("error", nsim)
+  mc$logLik <- rep(NA_real_, nsim)
+  for (nm in flq_names) mc[[nm]][] <- NA
 
   # 5. Paralell computing
   if (parallel) {
@@ -371,32 +403,37 @@ mc_flicc <- function(
 
     settings_i <- modifyList(
       fit$settings,
-      list(CVL = draws$CVL[i])
+      list(CVL = draws$CVL[i], tail_warning = FALSE)
     )
 
-    sel_fun <- c("logistic", "dsnormal", "normal")[fit$tmb_data$sel_type]
+    sel_fun <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[fit$tmb_data$sel_type]
 
-    fit_i <- try(
-      fiticc(
-        fit$report$obslen,
-        stk_i,
-        sel_fun = sel_fun,
-        catch_by_gear = fit$report$catch_by_gear,
-        settings = settings_i,
-        start = fit$opt$par,
-        n_restart = n_restart,
-        verbose = FALSE
-      ),
-      silent = TRUE
-    )
+    args_i <- c(list(
+      fit$report$obslen,
+      stk_i,
+      sel_fun = sel_fun,
+      catch_by_gear = fit$report$catch_by_gear,
+      settings = settings_i,
+      sel_fixed = fit$sel_fixed,
+      start = fit$opt$par,
+      n_restart = n_restart,
+      se = se,
+      verbose = FALSE
+    ), dots)
+    fit_i <- try(do.call(fiticc, args_i), silent = TRUE)
 
     if (inherits(fit_i, "try-error")) {
-      return(list(i = i, ok = FALSE))
+      return(list(i = i, ok = FALSE, conv = "error", lhpar = lh))
     }
+    tier <- if (!is.null(fit_i$diagnostics$conv_tier)) fit_i$diagnostics$conv_tier else
+      if (identical(as.integer(fit_i$opt$convergence), 0L)) "ok" else "warning"
+    ll_i <- as.numeric(fit_i$report$logLik)
+    if (!is.finite(ll_i)) tier <- "fail"
 
     list(
       i = i,
-      ok = TRUE,
+      ok = tier %in% accept,
+      conv = tier,
       lhpar = lh,
       pars = fit_i$report$pars,
       selpars = fit_i$report$selpars,
@@ -462,6 +499,8 @@ mc_flicc <- function(
   for (ri in res) {
 
     i <- ri$i
+    if (!is.null(ri$conv)) mc$conv[i] <- ri$conv
+    if (!is.null(ri$lhpar)) iter(mc$lhpar, i) <- ri$lhpar
 
     if (!isTRUE(ri$ok)) next
 
@@ -475,7 +514,7 @@ mc_flicc <- function(
       iter(mc$selpars[[g]], i) <- ri$selpars[[g]]
     }
 
-    for (nm in names(mc)[is_flq]) {
+    for (nm in flq_names) {
       if (!is.null(ri$report[[nm]]) &&
           inherits(ri$report[[nm]], "FLQuant")) {
         mc[[nm]][, , , , , i] <- ri$report[[nm]]
@@ -504,7 +543,11 @@ mc_flicc <- function(
 
     cat("\nMonte Carlo FLicc completed in ", msg, "\n", sep = "")
   }
+  mc$draws <- draws
   mc$fit = fit$report[names(fit$report)%in%choose]
+  if (verbose) cat("Converged refits:", sum(mc$ok), "of", nsim,
+                   if (any(!mc$ok)) paste0(" (", paste(names(table(mc$conv[!mc$ok])),
+                     table(mc$conv[!mc$ok]), sep = ": ", collapse = ", "), ")") else "", "\n")
   mc$fit$lhpar <- rbind(mc$fit$lhpar,FLPar(CVL = fit$settings$CVL))
 
   class(mc) <- c("mcflicc", class(mc))
@@ -540,30 +583,34 @@ mc_dAIC <- function(mc) {
 #' @param mc An object returned by \code{mc_flicc()}.
 #' @param dAIC_cut Optional delta AIC cutoff. If supplied, iterations with
 #'   \code{dAIC > dAIC_cut} receive zero weight before weights are normalized.
+#' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
+#'   (each retained refit counts the same: propagation of the prior
+#'   uncertainty in the life-history inputs). Failed or non-converged refits
+#'   (\code{mc$ok = FALSE}) always get weight zero.
 #'
 #' @return A data frame with iteration number, log-likelihood, delta AIC,
-#'   normalized Akaike weight and retained/filtered flag.
+#'   normalized weight and retained/filtered flag.
 #'
 #' @export
-mc_aic_weights <- function(mc, dAIC_cut = NULL) {
+mc_aic_weights <- function(mc, dAIC_cut = NULL, weights = c("aic", "equal")) {
 
+  weights <- match.arg(weights)
   dAIC <- mc_dAIC(mc)
+  ok <- is.finite(dAIC) & (if (is.null(mc$ok)) TRUE else mc$ok)
+  keep <- ok & (if (is.null(dAIC_cut)) TRUE else dAIC <= dAIC_cut)
 
-  w <- exp(-0.5 * dAIC)
-
-  if (!is.null(dAIC_cut)) {
-    w[dAIC > dAIC_cut] <- 0
-  }
+  w <- if (weights == "aic") exp(-0.5 * dAIC) else rep(1, length(dAIC))
+  w[!keep] <- 0
 
   w <- w / sum(w, na.rm = TRUE)
 
-  data.frame(
+  return(data.frame(
     iter = seq_along(dAIC),
     logLik = as.numeric(mc$logLik),
     dAIC = dAIC,
     weight = w,
-    keep = if (is.null(dAIC_cut)) TRUE else dAIC <= dAIC_cut
-  )
+    keep = keep
+  ))
 
    data.frame(
     iter = seq_along(w),
@@ -628,14 +675,16 @@ wquantile <- function(x, w, probs = c(0.025, 0.5, 0.975), na.rm = TRUE) {
 #' @param probs Numeric vector of weighted quantiles to compute. Default is
 #'   \code{c(0.025, 0.5, 0.975)}.
 #'
+#' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
+#'   (unweighted ensemble of the retained refits); see [mc_aic_weights()].
 #' @return A data frame with year, weighted mean, lower quantile, median, upper
 #'   quantile, number of simulations and effective sample size.
 #'
 #' @export
 mc_spr_summary <- function(mc, years = NULL, dAIC_cut = NULL,
-                           probs = c(0.025, 0.5, 0.975)) {
+                           probs = c(0.025, 0.5, 0.975), weights = "aic") {
 
-  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut, weights = weights)
   w <- wtab$weight
 
   yrs <- dimnames(mc$spr)$year
@@ -695,18 +744,23 @@ mc_spr_summary <- function(mc, years = NULL, dAIC_cut = NULL,
 #' @param show_fit Logical. If \code{TRUE}, show the original fitted SPR values
 #'   from \code{mc$fit$spr}.
 #'
+#' @param ref SPR reference lines (default 0.4, 0.2, 0.1 in green, orange,
+#'   red, as [plot_spr()]); `NULL` for none.
+#' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
+#'   (unweighted ensemble of the retained refits); see [mc_aic_weights()].
 #' @return A \code{ggplot} object.
 #'
 #' @export
 plot_mcsprdist <- function(mc, years = NULL, dAIC_cut = 20,
                            scale = 0.45, n = 300,
                            bw = 0.04, trim = 0.01,
-                           show_fit = TRUE)  {
+                           show_fit = TRUE, weights = "aic",
+                           ref = c(0.4, 0.2, 0.1))  {
 
   if (!requireNamespace("ggplot2", quietly = TRUE))
     stop("Package 'ggplot2' is required.")
 
-  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut, weights = weights)
   w <- wtab$weight
 
   yrs <- dimnames(mc$spr)$year
@@ -754,6 +808,8 @@ plot_mcsprdist <- function(mc, years = NULL, dAIC_cut = 20,
   }
 
   p <- ggplot2::ggplot() +
+    (if (length(ref)) ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                        colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref)))) +
     ggplot2::geom_polygon(
       data = dens_df,
       ggplot2::aes(x = x, y = spr, group = year_id),
@@ -883,7 +939,9 @@ plot_mcpars <- function(mc,
 #' Produces faceted scatter plots for selected pairs of life-history parameters
 #' sampled during a FLicc Monte Carlo uncertainty run. Points are classified by
 #' delta AIC support. Fits with \code{dAIC <= dAIC_cut} are shown using a colour
-#' gradient, while less-supported fits are shown as open grey circles. The
+#' gradient, less-supported converged fits as open grey circles, and draws whose
+#' refit failed or did not converge (\code{mc$ok = FALSE}) as light grey
+#' crosses. The
 #' original fitted parameter combination stored in \code{mc$fit$lhpar} is shown
 #' as a blue star.
 #'
@@ -935,7 +993,9 @@ plot_mccor <- function(mc,
   names(wide) <- sub("^value\\.", "", names(wide))
 
   wide$dAIC <- mc_dAIC(mc)
-  wide$keep <- wide$dAIC <= dAIC_cut
+  conv_ok <- is.finite(wide$dAIC) & (if (is.null(mc$ok)) TRUE else mc$ok[wide$iter])
+  wide$keep <- conv_ok & wide$dAIC <= dAIC_cut
+  wide$failed <- !conv_ok
 
   pd <- data.frame()
   panel_levels <- character(length(pairs))
@@ -956,7 +1016,8 @@ plot_mccor <- function(mc,
       x = wide[[z[1]]],
       y = wide[[z[2]]],
       dAIC = wide$dAIC,
-      keep = wide$keep
+      keep = wide$keep,
+      failed = wide$failed
     ))
   }
 
@@ -964,7 +1025,13 @@ plot_mccor <- function(mc,
 
   p <- ggplot2::ggplot(pd, ggplot2::aes(x = x, y = y)) +
     ggplot2::geom_point(
-      data = pd[!pd$keep, ],
+      data = pd[pd$failed, ],
+      shape = 4,
+      colour = "grey80",
+      size = 1.2
+    ) +
+    ggplot2::geom_point(
+      data = pd[!pd$keep & !pd$failed, ],
       shape = 1,
       colour = "grey55",
       alpha = 0.75,
@@ -991,11 +1058,7 @@ plot_mccor <- function(mc,
 
 
     get_fit_par <- function(z) {
-      if (z == "CVL") {
-        fit$settings$CVL
-      } else {
-        as.numeric(fit_lh[z])
-      }
+      as.numeric(fit_lh[z])
     }
 
     fit_pd <- data.frame()
@@ -1210,6 +1273,8 @@ mc_lhtab <- function(mc,
 #' @param years Optional vector of years to summarize. If \code{NULL}, all years
 #'   in \code{mc$spr} are used.
 #'
+#' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
+#'   (unweighted ensemble of the retained refits); see [mc_aic_weights()].
 #' @return A data frame with columns \code{year}, \code{mle}, \code{mean_uw},
 #'   \code{cv_uw}, \code{mean_w}, \code{cv_w}, \code{n_retained}, and
 #'   \code{n_eff}. Attributes \code{dAIC_cut} and \code{n_total} store the AIC
@@ -1226,14 +1291,14 @@ mc_lhtab <- function(mc,
 #' @export
 mc_spr_tab <- function(mc,
                                  dAIC_cut = 20,
-                                 years = NULL) {
+                                 years = NULL, weights = "aic") {
 
   if (is.null(years))
     years <- dimnames(mc$spr)$year
 
   years <- as.character(years)
 
-  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut, weights = weights)
 
   w <- wtab$weight
   keep <- wtab$keep
@@ -1319,6 +1384,8 @@ mc_spr_tab <- function(mc,
 #'   \code{mc$fit}. Default is \code{TRUE}.
 #' @param ncol Number of columns in the faceted plot. Default is \code{3}.
 #'
+#' @param weights \code{"aic"} (Akaike weights, default) or \code{"equal"}
+#'   (unweighted ensemble of the retained refits); see [mc_aic_weights()].
 #' @return A \code{ggplot} object.
 #'
 #' @details
@@ -1342,7 +1409,7 @@ mc_spr_tab <- function(mc,
 #' }
 plot_mcsprwts<- function(mc, years = NULL, dAIC_cut = 20,
                                  n = 300, bw = 0.04,
-                                 show_fit = TRUE, ncol = 3) {
+                                 show_fit = TRUE, ncol = 3, weights = "aic") {
 
   if (!requireNamespace("ggplot2", quietly = TRUE))
     stop("Package 'ggplot2' is required.")
@@ -1351,7 +1418,7 @@ plot_mcsprwts<- function(mc, years = NULL, dAIC_cut = 20,
   if (is.null(years)) years <- yrs
   years <- as.character(years)
 
-  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut)
+  wtab <- mc_aic_weights(mc, dAIC_cut = dAIC_cut, weights = weights)
   w <- wtab$weight
   keep <- wtab$keep
 

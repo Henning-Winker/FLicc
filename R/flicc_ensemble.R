@@ -28,8 +28,9 @@
 #' reports its weighted mean and the range over the members.
 #'
 #' @param fits A named list of fitted FLicc objects (from [fiticc()]), fitted
-#'   to the same years. Fits without standard errors (`se = FALSE`) enter with
-#'   their point estimate only.
+#'   to the same years. Fits without standard errors (`se = FALSE`, or not
+#'   computable because the Hessian is not positive definite) enter with their
+#'   point estimate only.
 #' @param weights `"equal"`, `"aic"` or a numeric vector, one per fit.
 #' @param level Interval level.
 #' @param s Optional Beverton-Holt steepness for B/Btgt.
@@ -92,8 +93,13 @@ ensemble_flicc <- function(fits, weights = "equal", level = 0.95, s = NULL, spr_
       data.frame(year = yrs, mu = log(as.numeric(f$report$spr)), se = 0)
     } else data.frame(year = ci$year, mu = log(ci$spr), se = ci$se_log)
   })
-  if (any(vapply(est, function(e) all(e$se == 0), logical(1))))
-    warning("Some fits have no standard errors (se = FALSE); they enter with their point estimates only.", call. = FALSE)
+  # standard errors that could not be computed (e.g. Hessian not positive
+  # definite) count as missing: the fit enters with its point estimate
+  nose <- vapply(est, function(e) any(!is.finite(e$se) | e$se == 0), logical(1))
+  est <- lapply(est, function(e) { e$se[!is.finite(e$se)] <- 0; e })
+  if (any(nose))
+    warning("No standard errors for: ", paste(names(fits)[nose], collapse = ", "),
+            "; they enter with their point estimates only.", call. = FALSE)
   MU <- sapply(est, `[[`, "mu"); SE <- sapply(est, `[[`, "se")
   if (!is.matrix(MU)) { MU <- matrix(MU, nrow = 1); SE <- matrix(SE, nrow = 1) }
 
@@ -146,11 +152,15 @@ ensemble_flicc <- function(fits, weights = "equal", level = 0.95, s = NULL, spr_
 #' SPR by year: the ensemble median and interval (ribbon) with the member fits
 #' as thin lines (line width proportional to the weight). With `what = "brel"`
 #' (needs `s` in [ensemble_flicc()]) spawning biomass relative to the target.
+#' With fewer than four years the plot shows error bars instead: each member's
+#' estimate and interval (labelled with its weight) and the ensemble median and
+#' interval, one panel per year.
 #'
 #' @param x Output of [ensemble_flicc()].
 #' @param what `"spr"` or `"brel"`.
 #' @param members Logical; draw the member fits.
-#' @param ref Reference lines (proportions of SPR, or of the target for brel).
+#' @param ref Reference lines (default SPR 0.4, 0.2, 0.1 in green, orange,
+#'   red, as [plot_spr()]; for brel 1, 0.5, 0.25 of the target).
 #' @return A `ggplot` object.
 #' @export
 plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref = NULL) {
@@ -159,12 +169,47 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
   if (what == "brel") {
     if (is.null(tab$brel)) stop("what = \"brel\" needs s in ensemble_flicc().")
     tab$y <- tab$brel; tab$lo <- tab$brel_lwr; tab$hi <- tab$brel_upr
-    if (is.null(ref)) ref <- c(1, 0.5)
+    if (is.null(ref)) ref <- c(1, 0.5, 0.25)
     ylab <- "B / B target"
   } else {
     tab$y <- tab$spr; tab$lo <- tab$lwr; tab$hi <- tab$upr
-    if (is.null(ref)) ref <- c(0.4, 0.2)
+    if (is.null(ref)) ref <- c(0.4, 0.2, 0.1)
     ylab <- "SPR"
+  }
+  tg_of <- function(f) if (!is.null(f$report$spr_ref)) f$report$spr_ref[1] / 100 else 0.4
+  to_brel <- function(v, f) pmax(4 * x$s * v - (1 - x$s), 0) / (4 * x$s * tg_of(f) - (1 - x$s))
+  ttl <- paste0("Ensemble of ", length(x$fits), " fits (", round(100 * x$level), "% interval)")
+  # few years: estimate and interval of each member and of the ensemble as error bars
+  if (length(unique(tab$year)) < 4) {
+    md <- do.call(rbind, lapply(names(x$fits), function(nm) {
+      f <- x$fits[[nm]]
+      ci <- tryCatch(spr_ci_flicc(f, level = x$level), error = function(e) NULL)
+      v <- as.numeric(f$report$spr)
+      lo <- if (is.null(ci)) v else ci$lwr; hi <- if (is.null(ci)) v else ci$upr
+      lo[!is.finite(lo)] <- v[!is.finite(lo)]; hi[!is.finite(hi)] <- v[!is.finite(hi)]
+      if (what == "brel") { v <- to_brel(v, f); lo <- to_brel(lo, f); hi <- to_brel(hi, f) }
+      data.frame(year = as.numeric(f$tmb_data$year_names), y = v, lo = lo, hi = hi,
+                 member = nm, w = x$weights[[nm]], type = "member")
+    }))
+    if (!isTRUE(members)) md <- md[0, ]
+    ed <- data.frame(year = tab$year, y = tab$y, lo = tab$lo, hi = tab$hi,
+                     member = "Ensemble", w = 1, type = "ensemble")
+    d <- rbind(md, ed)
+    d$member <- factor(d$member, levels = c(names(x$fits), "Ensemble"))
+    d$lab <- if (isTRUE(members)) sprintf("w = %.2f", d$w) else ""
+    d$lab[d$type == "ensemble"] <- ""
+    p <- ggplot2::ggplot(d, ggplot2::aes(member, y, colour = type)) +
+      ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                          colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref))) +
+      ggplot2::geom_errorbar(ggplot2::aes(ymin = lo, ymax = hi), width = 0.25) +
+      ggplot2::geom_point(ggplot2::aes(size = type)) +
+      ggplot2::geom_text(ggplot2::aes(y = hi, label = lab), vjust = -0.6, size = 3, colour = "grey30") +
+      ggplot2::scale_colour_manual(values = c(member = "grey35", ensemble = "#08519C"), guide = "none") +
+      ggplot2::scale_size_manual(values = c(member = 1.8, ensemble = 3), guide = "none") +
+      ggplot2::labs(x = NULL, y = ylab, title = ttl) + ggplot2::theme_bw() +
+      ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+    if (length(unique(d$year)) > 1) p <- p + ggplot2::facet_wrap(~year)
+    return(p)
   }
   p <- ggplot2::ggplot(tab, ggplot2::aes(year)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = lo, ymax = hi), fill = "#9ECAE1", alpha = 0.6)
@@ -172,8 +217,7 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
     md <- do.call(rbind, lapply(names(x$fits), function(nm) {
       f <- x$fits[[nm]]; v <- as.numeric(f$report$spr)
       if (what == "brel") {
-        s <- x$s; tg <- if (!is.null(f$report$spr_ref)) f$report$spr_ref[1] / 100 else 0.4
-        v <- pmax(4 * s * v - (1 - s), 0) / (4 * s * tg - (1 - s))
+        v <- to_brel(v, f)
       }
       data.frame(year = as.numeric(f$tmb_data$year_names), y = v, member = nm, w = x$weights[[nm]])
     }))
@@ -181,12 +225,66 @@ plot_ensemble_flicc <- function(x, what = c("spr", "brel"), members = TRUE, ref 
                                 colour = "grey35", alpha = 0.7) +
       ggplot2::scale_linewidth(range = c(0.2, 1.2), guide = "none")
   }
-  p + ggplot2::geom_hline(yintercept = ref, linetype = c("solid", rep("dashed", length(ref) - 1)),
-                          colour = c("darkgreen", rep("orange", length(ref) - 1))) +
+  p + ggplot2::geom_hline(yintercept = ref, linetype = 2,
+                          colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref))) +
     ggplot2::geom_line(ggplot2::aes(y = y), colour = "#08519C", linewidth = 1.1) +
     ggplot2::geom_point(ggplot2::aes(y = y), colour = "#08519C", size = 1.6) +
     ggplot2::scale_x_continuous(breaks = function(z) unique(round(pretty(z)))) +
     ggplot2::labs(x = "Year", y = ylab,
-                  title = paste0("Ensemble of ", length(x$fits), " fits (", round(100 * x$level), "% interval)")) +
+                  title = ttl) +
     ggplot2::theme_bw()
+}
+
+#' Summary table of several FLicc fits
+#'
+#' One row per fit with the convergence tier, SPR in the last year with its
+#' confidence interval, apical F over M, F at the SPR target, current F
+#' relative to it, and AIC. Useful to compare sensitivity runs.
+#'
+#' F/M uses each fit's own M (`stklen@lhpar["M"]`), so runs with different M
+#' are comparable. AIC is comparable only between fits with the same data and
+#' likelihood (see [ensemble_flicc()]); `dAIC` is given relative to the first
+#' fit for convenience and must be read with that in mind.
+#'
+#' @param fits A named list of fitted FLicc objects (from [fiticc()]), or a
+#'   single fit.
+#' @param spr Target SPR in percent for Fspr (default 40).
+#' @param level Interval level for SPR.
+#' @param digits Number of decimal places.
+#' @return A `data.frame` with columns run, conv, SPR, lwr, upr, FM, Fap,
+#'   Fspr, F_Fspr, AIC, dAIC.
+#' @examples
+#' \dontrun{
+#' fits_summary(list(reference = fit, tail_cut40 = fit_cut40, Lplus40 = fit_plus40))
+#' }
+#' @export
+fits_summary <- function(fits, spr = 40, level = 0.95, digits = 3) {
+  if (inherits(fits, "flicc_tmb_fit")) fits <- list(fit = fits)
+  if (!is.list(fits) || !length(fits)) stop("fits must be a fitted FLicc object or a list of them.")
+  if (is.null(names(fits)) || any(names(fits) == "")) names(fits) <- paste0("fit", seq_along(fits))
+  fits <- fits[!vapply(fits, is.null, logical(1))]
+  row <- function(nm) {
+    f <- fits[[nm]]
+    tr <- tryCatch(f$diagnostics$conv_tier, error = function(e) NULL)
+    sp <- tail(as.numeric(f$report$spr), 1)
+    ci <- tryCatch(spr_ci_flicc(f, level = level), error = function(e) NULL)
+    lw <- up <- NA_real_
+    if (!is.null(ci) && nrow(ci)) { lw <- tail(ci$lwr, 1); up <- tail(ci$upr, 1) }
+    fap <- tail(as.numeric(f$report$Fap), 1)
+    M <- as.numeric(f$stklen@lhpar["M"])
+    fs <- tryCatch(as.numeric(fspr_flicc(f, spr = spr))[1], error = function(e) NA_real_)
+    aic <- tryCatch(stats::AIC(LLflicc(f)), error = function(e) NA_real_)
+    data.frame(run = nm, conv = if (is.null(tr)) NA_character_ else tr,
+               SPR = sp, lwr = lw, upr = up, FM = fap / M, Fap = fap,
+               Fspr = fs, F_Fspr = fap / fs, AIC = aic, stringsAsFactors = FALSE)
+  }
+  out <- do.call(rbind, lapply(names(fits), row))
+  out$dAIC <- out$AIC - out$AIC[1]
+  names(out)[names(out) == "Fspr"] <- paste0("Fspr", spr)
+  names(out)[names(out) == "F_Fspr"] <- paste0("F_Fspr", spr)
+  num <- vapply(out, is.numeric, logical(1))
+  out[num] <- lapply(out[num], round, digits)
+  out$AIC <- round(out$AIC, 1); out$dAIC <- round(out$dAIC, 1)
+  rownames(out) <- NULL
+  out
 }

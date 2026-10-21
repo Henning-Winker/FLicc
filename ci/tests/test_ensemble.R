@@ -28,3 +28,30 @@ print(ensemble_flicc(list(no_cut = fit, cut47 = fcut))$members)
 od <- if (dir.exists("out/tests")) "out/tests" else "."
 ggplot2::ggsave(file.path(od, "ensemble_dome.png"), plot_ensemble_flicc(ens), width = 8, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "ensemble_dome_brel.png"), plot_ensemble_flicc(ens_aic, "brel"), width = 8, height = 4, dpi = 100)
+
+# few years: error-bar layout
+yrs <- dimnames(lfd[[1]])$year
+y1 <- yrs[which.max(sapply(yrs, function(y) min(sapply(lfd, function(x) sum(x[, y])))))]
+lfd1 <- FLQuants(lapply(lfd, function(x) x[, y1]))
+st1 <- stocklen(lfd1, lhpar, m_model = "constant")
+f1 <- fiticc(lfd1, st1, sel_fun = sf, catch_by_gear = cbg, settings = set0)
+ds1 <- dome_sens_flicc(f1, gear = "Gillnet", rsd = c(1000, 40))
+e1 <- ensemble_flicc(ds1$fits)
+print(e1$table)
+ggplot2::ggsave(file.path(od, "ensemble_1yr.png"), plot_ensemble_flicc(e1), width = 6, height = 4, dpi = 100)
+ggplot2::ggsave(file.path(od, "ensemble_1yr_brel.png"),
+                plot_ensemble_flicc(ensemble_flicc(ds1$fits, s = 0.75), "brel"), width = 6, height = 4, dpi = 100)
+
+# plot_spr with ci: error bars at the same dodge positions as their points
+fl <- list(zz = ds$fits[[2]], aa = ds$fits[[3]], mm = ds$fits[[1]])   # list order != alphabetical
+b <- ggplot2::ggplot_build(plot_spr(fl, ci = TRUE))
+lay <- vapply(b$plot$layers, function(l) class(l$geom)[1], character(1))
+eb <- b$data[[which(lay == "GeomErrorbar")]]; pt <- b$data[[which(lay == "GeomPoint")]]
+xe <- tapply(eb$x, eb$colour, mean); xp <- tapply(pt$x, pt$colour, mean)
+print(rbind(errorbar = xe, point = xp[names(xe)]))
+stopifnot(max(abs(xe - xp[names(xe)])) < 1e-8)
+
+# fits_summary
+fs <- fits_summary(ds$fits); print(fs)
+stopifnot(nrow(fs) == length(ds$fits), all(c("run", "conv", "SPR", "lwr", "upr", "FM", "Fspr40", "AIC") %in% names(fs)))
+print(fits_summary(fit))

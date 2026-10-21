@@ -4,7 +4,13 @@
 \alias{mc_spr_summary}
 \title{Summarize likelihood-weighted SPR trajectories}
 \usage{
-mc_spr_summary(mc, years = NULL, dAIC_cut = NULL, probs = c(0.025, 0.5, 0.975))
+mc_spr_summary(
+  mc,
+  years = NULL,
+  dAIC_cut = NULL,
+  probs = c(0.025, 0.5, 0.975),
+  weights = "aic"
+)
 }
 \arguments{
 \item{mc}{An object returned by \code{mc_flicc()}.}
@@ -17,6 +23,9 @@ If \code{NULL}, all iterations are weighted by their relative AIC support.}
 
 \item{probs}{Numeric vector of weighted quantiles to compute. Default is
 \code{c(0.025, 0.5, 0.975)}.}
+
+\item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
+  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
 }
 \value{
 A data frame with year, weighted mean, lower quantile, median, upper

@@ -78,16 +78,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     stop("length(sel_fun) must equal number of gears")
   }
 
-  sel_type <- ifelse(sel_fun == "logistic", 1L,
-                     ifelse(sel_fun == "dsnormal", 2L,
-                            ifelse(sel_fun == "normal", 3L, NA_integer_)))
+  sel_type <- unname(c(logistic = 1L, dsnormal = 2L, normal = 3L, binormal = 4L,
+                       bidsnormal = 5L)[sel_fun])
   if (any(is.na(sel_type))) {
-    stop("Supported selectivity options are logistic, dsnormal, normal")
+    stop("Supported selectivity options are logistic, dsnormal, normal, binormal, bidsnormal")
   }
 
-  sm_n <- ifelse(sel_fun == "logistic", 2L,
-                 ifelse(sel_fun == "dsnormal", 3L,
-                        ifelse(sel_fun == "normal", 2L, NA_integer_)))
+  sm_n <- unname(c(2L, 3L, 2L, 5L, 6L)[sel_type])
   sm_start <- cumsum(c(0L, head(sm_n, -1L)))  # 0-based for C++
 
 
@@ -158,7 +155,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
   # GTG controls
   ngtg  <- if (!is.null(settings$ngtg))  as.integer(settings$ngtg)  else 13L
-  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 2
+  maxsd <- if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 3
   Mpow  <- if (!is.null(settings$Mpow))  as.numeric(settings$Mpow)  else 0
 
   # GTG distribution over Linf on a standardised grid. The Linf groups are
@@ -425,6 +422,24 @@ init_tmb_flicc <- function(tmb_data) {
       sd_rel <- 0.10
       Sm[pos:(pos + 1L)] <- c(log(mode_rel), log(sd_rel))
       pos <- pos + 2L
+
+    } else if (sel_type[g] == 4L) {
+      # binormal: modes at the 20% and 80% quantiles of the observed lengths
+      cs <- cumsum(obs_g) / max(sum(obs_g), 1e-12)
+      q1 <- Lmid[which(cs >= 0.2)[1]]; q2 <- Lmid[which(cs >= 0.8)[1]]
+      if (!is.finite(q1) || !is.finite(q2) || q2 <= q1) { q1 <- 0.8 * mode_g; q2 <- 1.2 * mode_g }
+      Sm[pos:(pos + 4L)] <- c(log(max(q1 / Linf, 1e-4)), log(0.05), log(max((q2 - q1) / Linf, 1e-3)),
+                              log(0.05), 0)
+      pos <- pos + 5L
+
+    } else if (sel_type[g] == 5L) {
+      # bidsnormal: as binormal, second curve double-sided (lsd2, rsd2)
+      cs <- cumsum(obs_g) / max(sum(obs_g), 1e-12)
+      q1 <- Lmid[which(cs >= 0.2)[1]]; q2 <- Lmid[which(cs >= 0.8)[1]]
+      if (!is.finite(q1) || !is.finite(q2) || q2 <= q1) { q1 <- 0.8 * mode_g; q2 <- 1.2 * mode_g }
+      Sm[pos:(pos + 5L)] <- c(log(max(q1 / Linf, 1e-4)), log(0.05), log(max((q2 - q1) / Linf, 1e-3)),
+                              log(0.05), log(0.10), 0)
+      pos <- pos + 6L
     }
   }
 
@@ -469,8 +484,8 @@ init_tmb_flicc <- function(tmb_data) {
 #' @param stklen An \code{FLStockLen} object, or compatible FLR object,
 #'   containing stock and life-history information.
 #' @param sel_fun Character vector giving the selectivity function for each
-#'   gear. Supported options include \code{"logistic"}, \code{"normal"}, and
-#'   \code{"dsnormal"}.
+#'   gear. Supported options include \code{"logistic"}, \code{"normal"},
+#'   \code{"dsnormal"}, \code{"binormal"} and \code{"bidsnormal"}.
 #' @param catch_by_gear Relative catch by gear, in weight (e.g. landings in
 #'   tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 #'   vector or as an \code{FLQuants} object.
@@ -559,7 +574,7 @@ fiticc_core <- function(lfd, stklen,
     dm_prior_sd = 1,
     pile = 1,
     ngtg = 13,
-    maxsd = 2,
+    maxsd = 3,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
@@ -571,7 +586,7 @@ fiticc_core <- function(lfd, stklen,
     sigmaF = NULL,
     tail_cut = NULL,
     spr_ref = 40,
-    tail_warning = FALSE,
+    tail_warning = TRUE,
     FM_min = 0.05,
     FM_max = 4,
     FMpen_sd = 0.2
@@ -927,6 +942,7 @@ fiticc_core <- function(lfd, stklen,
   fit$max_gradient <- opt$max_gradient
   fit$n_restarts <- opt$n_restarts
   fit$restart_log <- opt$restart_log
+  fit$sel_fixed <- sel_fixed
 
   fit$logLik <- LLflicc(fit)
   fit$diagnostics <- diagnostics_flicc(fit)
@@ -956,9 +972,30 @@ fiticc_core <- function(lfd, stklen,
 #' @param stklen An \code{FLStockLen}-like object containing life-history
 #'   parameters (e.g. Linf, k, M) and matching dimensions to \code{lfd}.
 #'
-#' @param sel_fun Character vector specifying selectivity function per gear.
-#'   Supported options include \code{"logistic"}, \code{"normal"},
-#'   and \code{"dsnormal"}.
+#' @param sel_fun Character vector (named by gear, or in the order of
+#'   \code{lfd}) giving the selectivity function of each gear; parameters are
+#'   on the length scale:
+#'   \describe{
+#'     \item{\code{"logistic"}}{Asymptotic: \code{SL50}, \code{SL95}.}
+#'     \item{\code{"dsnormal"}}{Double-sided normal (dome): \code{mode},
+#'       \code{lsd} (left), \code{rsd} (right); \code{rsd = 1000} in
+#'       \code{sel_fixed} makes it asymptotic.}
+#'     \item{\code{"normal"}}{Symmetric dome: \code{mode}, \code{sd}.}
+#'     \item{\code{"binormal"}}{Two size modes, the sum of two normal curves
+#'       scaled to a maximum of 1: \code{mode1}, \code{sd1} (first curve),
+#'       \code{mode2 > mode1}, \code{sd2} (second curve) and \code{h}, the
+#'       height of the second curve relative to the first. For gears whose
+#'       catch has two size groups, e.g. juveniles and adults, or a gillnet
+#'       fleet with two mesh groups.}
+#'     \item{\code{"bidsnormal"}}{Two size modes with a double-sided second
+#'       curve: \code{mode1}, \code{sd1}, \code{mode2}, \code{lsd2},
+#'       \code{rsd2}, \code{h}. The right limb of the large-fish mode is
+#'       separate; \code{rsd2 = 1000} in \code{sel_fixed} gives an asymptotic
+#'       second mode.}
+#'   }
+#'   Use \code{plot_selfun()} to look at the shapes over the data before
+#'   fitting. The two-mode functions have five or six parameters and need
+#'   enough data in both modes.
 #'
 #' @param catch_by_gear Numeric vector of relative catch proportions by gear,
 #'   in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}.
@@ -970,25 +1007,19 @@ fiticc_core <- function(lfd, stklen,
 #'       \code{"gtg"} (default), a growth-type-group approximation inspired
 #'       by LBSPR, and \code{"gamma"}, the original FLicc/BLICC continuous
 #'       growth formulation.}
-#'
 #'     \item{\code{obs_model}}{Observation likelihood. Options are:
 #'       \code{"dm"} (default, Dirichlet-multinomial, with the precision
 #'       estimated by default, see \code{dm_theta}; give raw counts or an
 #'       effective sample size of at least 500), \code{"mn"} (multinomial, as
 #'       LBSPR) and \code{"nb"} (negative binomial, as fishblicc).}
-#'
 #'     \item{\code{CVL}}{Coefficient of variation in length-at-age.}
-#'
 #'     \item{\code{GL}}{Number of Gauss–Laguerre quadrature nodes (used only
 #'       when \code{pop_model = "gamma"}).}
-#'
 #'     \item{\code{catch.sd}}{Standard deviation for catch penalty.}
-#'
 #'     \item{\code{catch_units}}{Units of \code{catch_by_gear}: \code{"weight"}
 #'       (default; predicted catch-at-length times weight at length is compared
 #'       with the input shares, e.g. landings in tonnes) or \code{"numbers"}
 #'       (predicted catch in numbers, as in fishblicc).}
-#'
 #'     \item{\code{dm_theta}}{Precision of the Dirichlet-multinomial
 #'       (\code{obs_model = "dm"}): \code{"saturating"} (default;
 #'       \eqn{\alpha_0 = \beta} estimated; the effective
@@ -997,50 +1028,45 @@ fiticc_core <- function(lfd, stklen,
 #'       \code{"linear"} (\eqn{\alpha_0 = \theta n}, \eqn{\theta} estimated) or
 #'       \code{"fixed"} (\eqn{\alpha_0 = n}, effective sample size about
 #'       \eqn{n/2}). Thorson et al. (2017, Fisheries Research 192: 84-93).}
-#'
 #'     \item{\code{dm_shared}}{Logical; one precision parameter for all gears
 #'       instead of one per gear (default \code{FALSE}).}
-#'
 #'     \item{\code{dm_prior_sd}}{SD of a weak normal prior on the log precision
 #'       (default 1; 0 = none), centred on \eqn{\beta = 10\max n} (saturating)
 #'       or \eqn{\theta = 10} (linear), i.e. close to a multinomial. It only
 #'       matters when the data show no overdispersion (input sample size below
 #'       what the data support), where it keeps the precision finite.}
-#'
 #'     \item{\code{pile}}{GTG only: predicted length composition from numbers
 #'       integrated over each length class (\code{1}, default) or from the
 #'       survivorship at the class bound (\code{0}, LBB without the pile-up
 #'       correction, Pile = 0); values in between mix the two as LBB.
 #'       Per-recruit quantities (SPR, EPR) always use the integrated numbers.}
-#'
 #'     \item{\code{ngtg}}{Number of growth-type groups for
-#'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR.}
-#'
-#'     \item{\code{maxsd}}{Range (in standard deviations) for GTG Linf
-#'       distribution. Default is 2, as in LBSPR. The groups cover
-#'       \code{Linf * (1 +/- maxsd * CVL)}; truncation narrows the actual Linf
-#'       spread (about 0.88-0.91 * CVL at 2, 0.99 * CVL at 3) and caps the
-#'       largest length the model can produce. \code{maxsd = 3, ngtg = 19}
-#'       makes CVL close to the actual spread.}
-#'
+#'       \code{pop_model = "gtg"}. Default is 13, as in LBSPR; with \code{maxsd = 3}
+#'       more groups (e.g. 19) give practically the same fit at higher cost.}
+#'     \item{\code{maxsd}}{Range (in standard deviations) of the GTG Linf
+#'       distribution. Default is 3 (LBSPR: 2). The groups cover
+#'       \code{Linf * (1 +/- maxsd * CVL)}: no fish in the model grows beyond
+#'       \code{Linf * (1 + maxsd * CVL)}, and observed fish above it get a
+#'       near-zero probability. Truncation also narrows the actual Linf spread
+#'       (0.99 * CVL at 3, about 0.88-0.91 * CVL at 2). With
+#'       \code{maxsd = 2}, a few large fish can cause steps in the likelihood
+#'       when Linf or CVL change (sensitivity runs, Monte Carlo). Use
+#'       \code{maxsd = 2} to reproduce LBSPR. Default changed from 2 in FLicc
+#'       1.0.11.}
 #'     \item{\code{tail_warning}}{Logical. If \code{TRUE}, warn when observed
 #'       fish lie in length bins at or above the largest GTG Linf, where the
-#'       model gives them near-zero probability. Default \code{FALSE}.}
-#'
+#'       model gives them near-zero probability. Default \code{TRUE} (from FLicc 1.0.11).}
 #'     \item{\code{Mpow}}{Optional length-dependent mortality scaling
 #'       exponent (GTG only). Default is 0.}
-#'
 #'     \item{\code{sigmaF}, default}{By default log F follows a random walk by gear
 #'       with sigmaF fixed at 0.3 (fast and stable). sigmaF is estimated only
 #'       when \code{prior_sigmaF} is given (penalised fixed effect with that
 #'       prior) or with \code{F_re = TRUE} (random effects). The random walk is
 #'       switched off with \code{prior_sigmaF = FALSE}.}
-#'
 #'     \item{\code{prior_sigmaF}}{Random walk on log F by gear and its
 #'       standard deviation sigmaF: \code{c(mean, sd, use)}, a normal prior on
 #'       log(sigmaF) with \code{use = 1} switching the random walk on. With
 #'       \code{sd = NA} there is no prior on sigmaF.}
-#'
 #'     \item{\code{F_re}}{Logical. If \code{TRUE}, log F by year and gear are
 #'       random effects (state-space random walk) integrated out by the Laplace
 #'       approximation, so sigmaF is estimated from the marginal likelihood and
@@ -1048,24 +1074,20 @@ fiticc_core <- function(lfd, stklen,
 #'       are fixed effects with a random-walk penalty, where sigmaF is mainly
 #'       set by its prior. With \code{F_re = TRUE} and no \code{prior_sigmaF}
 #'       supplied, a weak prior is used: \code{c(log(0.3), 0.5, 1)}.}
-#'
 #'     \item{\code{sigmaF}}{Optional fixed value of sigmaF (random-walk SD of
 #'       log F). Fits are then as fast as the penalised default. A practical
 #'       use is to estimate sigmaF once with \code{F_re = TRUE} on the full
 #'       data, then fix it for repeated fits (e.g. in an MSE); the yearly
 #'       estimates closely match the full random-effects fit.}
-#'
 #'     \item{\code{rob_eps}}{Robustness of the composition likelihood to
 #'       sparse or outlying bins. Predicted proportions become
 #'       \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
 #'       few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).}
-#'
 #'     \item{\code{Lplus}}{Optional plus-group length. Observed and predicted
 #'       counts in bins with lower bound \code{>= Lplus} are pooled into one
 #'       bin before the likelihood (tail compression). Reduces the influence
 #'       of the binning and sampling of the largest fish. Default \code{NULL}
 #'       (off). Predicted compositions in the report stay unpooled.}
-#'
 #'     \item{\code{tail_cut}}{Optional tail cut, an absolute length in the
 #'       units of the length bins (as \code{Lplus}), e.g. \code{50}. Length
 #'       bins with lower bound \code{>= tail_cut} are excluded from the
@@ -1079,13 +1101,19 @@ fiticc_core <- function(lfd, stklen,
 #'       iterations). \code{LBIspr()} and \code{LBImean()} apply the same cut by
 #'       default. Values <= 1.5 are read as a fraction of \eqn{L_\infty} (earlier
 #'       definition) with a warning. Default \code{NULL} (off).}
-#'
 #'     \item{\code{spr_ref}}{SPR target(s) in percent (default \code{40}).
 #'       The fit reports the corresponding Fspr (\code{fit$report$Fspr}) and
 #'       per-recruit numbers-at-length, computed in TMB after fitting at no
 #'       cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
 #'       reuse them for these targets.}
-#'
+#'     \item{\code{FM_min}, \code{FM_max}, \code{FMpen_sd}}{Bounds on
+#'       apical F/M (F at the most selected length over M at that length) by
+#'       year: outside [\code{FM_min}, \code{FM_max}] (defaults 0.05 and 4) a
+#'       steep one-sided penalty on log F/M applies; inside there is no
+#'       penalty. \code{FMpen_sd > 0} (default 0.2) switches the bounds on,
+#'       \code{0} off. The lower bound stops F sliding to 0 (SPR = 1) when no
+#'       gear is asymptotic; raise \code{FM_max} (e.g. 20) for heavily fished
+#'       stocks if F/M sits at 4.}
 #'     \item{\code{linf.sd, Mk.sd, CVL.sd}}{Optional penalties on life-history
 #'       parameters. Supplying one makes that parameter estimated (otherwise it
 #'       is fixed at its input value). For \code{pop_model = "gtg"}, the
@@ -1093,6 +1121,25 @@ fiticc_core <- function(lfd, stklen,
 #'       \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
 #'       M/K is \code{Mk * (Linf / L)^Mpow}.}
 #'   }
+#'
+#' @param years Optional vector of years to fit (default all years in \code{lfd}).
+#' @param iter Iteration of \code{lfd} and \code{stklen} to fit.
+#' @param compile,dll Compile the TMB template (\code{FALSE}, default, uses
+#'   the compiled package library \code{dll}).
+#' @param silent Logical; suppress TMB tracing output.
+#' @param sel_fixed Optional named list (by gear) of selectivity parameters
+#'   fixed at given values on the length scale, with the names used by
+#'   \code{sel_fun}: \code{SL50}, \code{SL95} (logistic); \code{mode},
+#'   \code{lsd}, \code{rsd} (dsnormal); \code{mode}, \code{sd} (normal);
+#'   \code{mode1}, \code{sd1}, \code{mode2}, \code{sd2}, \code{h}
+#'   (binormal); \code{mode1}, \code{sd1}, \code{mode2}, \code{lsd2},
+#'   \code{rsd2}, \code{h} (bidsnormal). E.g.
+#'   \code{list(TZGN = list(rsd = 12), TZLN = list(rsd2 = 1000))}. Unnamed
+#'   parameters are estimated. \code{selpars_flicc(fit)} gives values in the
+#'   same form.
+#' @param FLRreport Logical; return reported quantities as \code{FLQuants}.
+#' @param safe_fit,refit_GL For \code{pop_model = "gamma"}: refit with
+#'   \code{refit_GL} quadrature nodes if the gradient check fails.
 #' @param start Optional numeric vector of starting values for the estimated
 #'   TMB parameters. A common use is \code{start = fit$opt$par} to restart
 #'   from a previous fit and reduce residual gradients. Currently this is used
@@ -1189,7 +1236,7 @@ fiticc <- function(lfd, stklen,
                      pop_model = "gtg",
                      obs_model = "dm",
                      ngtg = 13,
-                     maxsd = 2,
+                     maxsd = 3,
                      Mpow = 0,
                      linf.sd = NULL,
                      Mk.sd = NULL,
@@ -1610,6 +1657,64 @@ apply_sel_fixed_flicc <- function(parameters, tmb_data, sel_fixed = NULL) {
         Sm_map[start + 1L] <- NA
       }
 
+    } else if (sel_type[g] == 4L) {
+      # binormal: c(log_mode1_rel, log_sd1_rel, log_dmode_rel, log_sd2_rel, log_h)
+      cur_m1 <- exp(parameters$Sm[start]) * Linf
+      cur_m2 <- cur_m1 + exp(parameters$Sm[start + 2L]) * Linf
+      if (!is.null(spec$mode1)) {
+        cur_m1 <- as.numeric(spec$mode1)
+        if (cur_m1 <= 0) stop("mode1 must be > 0")
+        parameters$Sm[start] <- log(cur_m1 / Linf)
+        Sm_map[start] <- NA
+      }
+      if (!is.null(spec$sd1)) {
+        if (spec$sd1 <= 0) stop("sd1 must be > 0")
+        parameters$Sm[start + 1L] <- log(as.numeric(spec$sd1) / Linf)
+        Sm_map[start + 1L] <- NA
+      }
+      if (!is.null(spec$mode2)) {
+        dm <- as.numeric(spec$mode2) - cur_m1
+        if (dm <= 0) stop("For binormal selectivity, mode2 must be > mode1")
+        parameters$Sm[start + 2L] <- log(dm / Linf)
+        Sm_map[start + 2L] <- NA
+      }
+      if (!is.null(spec$sd2)) {
+        if (spec$sd2 <= 0) stop("sd2 must be > 0")
+        parameters$Sm[start + 3L] <- log(as.numeric(spec$sd2) / Linf)
+        Sm_map[start + 3L] <- NA
+      }
+      if (!is.null(spec$h)) {
+        if (spec$h <= 0) stop("h must be > 0")
+        parameters$Sm[start + 4L] <- log(as.numeric(spec$h))
+        Sm_map[start + 4L] <- NA
+      }
+
+    } else if (sel_type[g] == 5L) {
+      # bidsnormal: c(log_mode1_rel, log_sd1_rel, log_dmode_rel, log_lsd2_rel, log_rsd2_rel, log_h)
+      cur_m1 <- exp(parameters$Sm[start]) * Linf
+      if (!is.null(spec$mode1)) {
+        cur_m1 <- as.numeric(spec$mode1)
+        if (cur_m1 <= 0) stop("mode1 must be > 0")
+        parameters$Sm[start] <- log(cur_m1 / Linf)
+        Sm_map[start] <- NA
+      }
+      fixpos <- function(val, off, nm, f = function(v) log(v / Linf)) {
+        if (is.null(val)) return(invisible())
+        if (val <= 0) stop(nm, " must be > 0")
+        parameters$Sm[start + off] <<- f(as.numeric(val))
+        Sm_map[start + off] <<- NA
+      }
+      fixpos(spec$sd1, 1L, "sd1")
+      if (!is.null(spec$mode2)) {
+        dm <- as.numeric(spec$mode2) - cur_m1
+        if (dm <= 0) stop("For bidsnormal selectivity, mode2 must be > mode1")
+        parameters$Sm[start + 2L] <- log(dm / Linf)
+        Sm_map[start + 2L] <- NA
+      }
+      fixpos(spec$lsd2, 3L, "lsd2")
+      fixpos(spec$rsd2, 4L, "rsd2")
+      fixpos(spec$h, 5L, "h", function(v) log(v))
+
     } else {
       stop("Unsupported selectivity type for gear ", g)
     }
@@ -1754,11 +1859,16 @@ flicc_convergence <- function(fit, grad_tol = 1e-2, eig_tol = 1e-8,optimizer.cod
       tier != "fail"
     ),
     interpretation = c(
-      "The optimizer found a numerical optimum.",
-      "The fit is close to a stationary point.",
-      "The model curvature is well behaved.",
-      "Uncertainty could be estimated for all parameters.",
-      "No flat or negative curvature directions were detected.",
+      if (identical(opt_code, 0L)) "The optimizer found a numerical optimum." else
+        "The optimizer stopped without reporting convergence.",
+      if (isTRUE(max_grad < grad_tol)) "The fit is close to a stationary point." else
+        "The gradient is not small: the fit may not be at an optimum.",
+      if (isTRUE(pdHess)) "The model curvature is well behaved." else
+        "The Hessian is not positive definite: a saddle point or a flat direction.",
+      if (isTRUE(n_nan_se == 0)) "Uncertainty could be estimated for all parameters." else
+        paste(n_nan_se, "parameter(s) without standard error: see fit$par[!is.finite(fit$par$se), ]."),
+      if (isTRUE(min_eig > eig_tol)) "No flat or negative curvature directions were detected." else
+        "Flat or negative curvature: some parameter(s) are not identified by the data.",
       "Expected further gain in log-likelihood (0.5 g'H^-1 g) is below 0.001; NA without Newton polishing.",
       "ok: converged; warning: usable, but check the gradient or decrement; fail: do not use."
     ),

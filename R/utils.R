@@ -489,6 +489,21 @@ selpars_flicc <- function(fit) {
         setNames(c(mode, sd), c("mode", "sd"))
       )
 
+    } else if (sel_type[g] == 4L) {
+      m1 <- exp(pars[1]) * Linf; s1 <- exp(pars[2]) * Linf
+      m2 <- m1 + exp(pars[3]) * Linf; s2 <- exp(pars[4]) * Linf; h <- exp(pars[5])
+      out[[g]] <- FLCore::FLPar(
+        setNames(c(m1, s1, m2, s2, h), c("mode1", "sd1", "mode2", "sd2", "h"))
+      )
+
+    } else if (sel_type[g] == 5L) {
+      m1 <- exp(pars[1]) * Linf; s1 <- exp(pars[2]) * Linf
+      m2 <- m1 + exp(pars[3]) * Linf; l2 <- exp(pars[4]) * Linf; r2 <- exp(pars[5]) * Linf
+      h <- exp(pars[6])
+      out[[g]] <- FLCore::FLPar(
+        setNames(c(m1, s1, m2, l2, r2, h), c("mode1", "sd1", "mode2", "lsd2", "rsd2", "h"))
+      )
+
     } else {
       stop("Unknown sel_type for gear ", gear_names[g])
     }
@@ -900,3 +915,158 @@ lfdess <- function(lfd, ess.g=100) {
   out
 }
 
+
+#' Combine length frequencies of several gears into one, raised by catch
+#'
+#' Pools the length compositions of several gears into one fleet composition,
+#' with each gear weighted by its catch. For each gear and year the
+#' composition is converted to proportions \eqn{p_g(L)}, raised to catch
+#' numbers \eqn{N_g(L) = C_g\,p_g(L)/\bar w_g} with the mean weight of a fish in
+#' the sample \eqn{\bar w_g = \sum_L p_g(L)\,W(L)} (\eqn{W(L) = aL^b} at the
+#' class mid-point), summed over gears and rescaled to an effective sample
+#' size of `ess.n` per year. With `catch_units = "numbers"` the catch is in
+#' numbers and \eqn{\bar w_g = 1}.
+#'
+#' The pooled composition assumes that each gear's sample represents its
+#' catch. It is useful for a quick single-fleet view (e.g. to look at two size
+#' modes) or for a one-fleet fit when catch shares by gear are uncertain;
+#' a multi-gear fit, which keeps the selectivity of each gear, is
+#' generally preferable.
+#'
+#' @param lfd `FLQuants` of length frequencies, one element per gear (same
+#'   length classes and years).
+#' @param catch_by_gear Catch by gear: a numeric vector (named by gear, or in
+#'   the order of `lfd`), constant over years, or `FLQuants` by gear with the
+#'   catch by year. Only the relative catches matter.
+#' @param lhpar `FLPar` with the length-weight parameters `a` and `b` (not
+#'   needed for `catch_units = "numbers"`).
+#' @param ess.n Effective sample size per year of the pooled composition;
+#'   `NULL` returns the raised catch numbers (relative).
+#' @param name Name of the pooled fleet.
+#' @param catch_units `"weight"` (default) or `"numbers"`.
+#' @return `FLQuants` with one element, `name`.
+#' @examples
+#' \dontrun{
+#' data(alfonsino)
+#' lfd_fleet <- combine_lfd(lfd, catch_by_gear = c(Trawl = 0.7, Gillnet = 0.3), lhpar = lhpar)
+#' plot_lfd(lfd_fleet)
+#' }
+#' @export
+combine_lfd <- function(lfd, catch_by_gear, lhpar = NULL, ess.n = 500, name = "fleet",
+                        catch_units = c("weight", "numbers")) {
+  catch_units <- match.arg(catch_units)
+  if (!inherits(lfd, "FLQuants")) stop("lfd must be an FLQuants (one element per gear).")
+  gears <- names(lfd)
+  if (is.null(gears)) gears <- names(lfd) <- paste0("gear", seq_along(lfd))
+  x1 <- lfd[[1]]
+  dn <- dimnames(x1)
+  yrs <- dn$year
+  L <- as.numeric(dn$len)
+  step <- if (length(L) > 1) L[2] - L[1] else 1
+  if (catch_units == "weight") {
+    if (is.null(lhpar)) stop("lhpar with a and b is needed for catch_units = \"weight\".")
+    W <- as.numeric(lhpar["a"]) * (L + step / 2)^as.numeric(lhpar["b"])
+  } else {
+    W <- rep(1, length(L))
+  }
+  # catch by gear and year
+  catch_g <- function(g, i) {
+    if (inherits(catch_by_gear, "FLQuants")) {
+      if (!g %in% names(catch_by_gear)) stop("No catch for gear ", g, " in catch_by_gear.")
+      cq <- catch_by_gear[[g]]
+      miss <- setdiff(yrs, dimnames(cq)$year)
+      if (length(miss)) stop("No catch for gear ", g, " in year(s) ", paste(miss, collapse = ", "))
+      return(as.numeric(apply(cq[, yrs]@.Data, 2, sum, na.rm = TRUE)))
+    }
+    cb <- as.numeric(catch_by_gear)
+    if (!is.null(names(catch_by_gear))) {
+      if (!all(gears %in% names(catch_by_gear)))
+        stop("catch_by_gear must be named by gear: ", paste(gears, collapse = ", "))
+      cb <- as.numeric(catch_by_gear[gears])
+    } else if (length(cb) != length(gears)) {
+      stop("catch_by_gear needs one value per gear (", length(gears), ").")
+    }
+    rep(cb[i], length(yrs))
+  }
+  N <- 0
+  for (i in seq_along(gears)) {
+    x <- lfd[[gears[i]]]
+    if (!identical(dimnames(x)[1:2], dn[1:2])) stop("All gears need the same length classes and years.")
+    a <- x@.Data
+    a[!is.finite(a)] <- 0
+    tot <- apply(a, 2:6, sum)
+    p <- sweep(a, 2:6, tot, "/"); p[!is.finite(p)] <- 0           # empty gear-years: 0
+    mw <- apply(sweep(p, 1, W, "*"), 2:6, sum)                       # mean weight of a sampled fish
+    C <- array(catch_g(gears[i], i), dim = dim(a)[-1])
+    raise <- C / mw; raise[!is.finite(raise)] <- 0
+    N <- N + sweep(p, 2:6, raise, "*")
+  }
+  if (!is.null(ess.n)) {
+    totN <- apply(N, 2:6, sum)
+    N <- sweep(N, 2:6, ess.n / totN, "*"); N[!is.finite(N)] <- 0
+  }
+  out <- x1
+  out@.Data[] <- N
+  res <- FLCore::FLQuants(stats::setNames(list(out), name))
+  res
+}
+
+
+#' Restrict length-frequency data to a length range
+#'
+#' Removes length classes below `Lmin` and/or at and above `Lmax` from every
+#' gear of an `FLQuants` of length frequencies, so that all gears keep the
+#' same length classes. Use it before [stocklen()] and [fiticc()].
+#'
+#' `Lmin` removes small fish that the equilibrium model should not describe,
+#' e.g. a pulse of recruits or a juvenile mode caught only in some seasons.
+#' The model then starts at `Lmin`: recruitment enters the first remaining
+#' length class, and fishing mortality below `Lmin` is not part of the model,
+#' so SPR and other per-recruit quantities refer to fish from `Lmin` onwards.
+#' `Lmax` removes implausibly large fish (recording errors); to keep large
+#' fish but reduce their influence, use `settings$Lplus` or
+#' `settings$tail_cut` in [fiticc()] instead.
+#'
+#' The same can be done with FLCore's `trim()` on each gear
+#' (`lapply(lfd, trim, len = 12:59)`) when the class labels are known.
+#'
+#' @param lfd An `FLQuants` of length frequencies (one element per gear,
+#'   `len` = lower bounds of the length classes).
+#' @param Lmin Smallest length class kept (lower bound, same units as `len`);
+#'   `NULL` keeps all.
+#' @param Lmax Length classes with lower bound `>= Lmax` are removed; `NULL`
+#'   keeps all.
+#' @param verbose Logical; print the number of fish removed by gear.
+#' @return An `FLQuants` with the retained length classes. The numbers removed
+#'   by gear (below `Lmin`, above `Lmax`) are in attribute `"removed"`.
+#' @examples
+#' \dontrun{
+#' lfd2 <- lfd_trim(lfd, Lmin = 12)             # drop the juvenile mode
+#' lfd2 <- lfd_trim(lfd, Lmin = 12, Lmax = 60)  # and a recording error
+#' attr(lfd2, "removed")
+#' }
+#' @export
+lfd_trim <- function(lfd, Lmin = NULL, Lmax = NULL, verbose = TRUE) {
+  if (!inherits(lfd, "FLQuants")) stop("lfd must be an FLQuants (one element per gear).")
+  lens <- lapply(lfd, function(x) as.numeric(dimnames(x)$len))
+  if (any(vapply(lens, anyNA, logical(1)))) stop("lfd must have numeric 'len' dimnames.")
+  if (!is.null(Lmin) && !is.null(Lmax) && Lmax <= Lmin) stop("Lmax must be larger than Lmin.")
+  removed <- do.call(rbind, lapply(names(lfd), function(g) {
+    L <- lens[[g]]; x <- lfd[[g]]
+    lo <- if (is.null(Lmin)) rep(FALSE, length(L)) else L < Lmin
+    hi <- if (is.null(Lmax)) rep(FALSE, length(L)) else L >= Lmax
+    data.frame(gear = g, total = sum(x, na.rm = TRUE),
+               below_Lmin = sum(x[lo, ], na.rm = TRUE), above_Lmax = sum(x[hi, ], na.rm = TRUE))
+  }))
+  out <- FLQuants(lapply(lfd, function(x) {
+    L <- as.numeric(dimnames(x)$len)
+    keep <- (if (is.null(Lmin)) TRUE else L >= Lmin) & (if (is.null(Lmax)) TRUE else L < Lmax)
+    if (sum(keep) < 2) stop("Fewer than two length classes left between Lmin and Lmax.")
+    x[keep, ]
+  }))
+  names(out) <- names(lfd)
+  removed$share <- round((removed$below_Lmin + removed$above_Lmax) / pmax(removed$total, 1), 3)
+  if (verbose) print(removed, row.names = FALSE)
+  attr(out, "removed") <- removed
+  out
+}

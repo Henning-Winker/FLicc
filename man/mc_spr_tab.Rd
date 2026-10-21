@@ -4,7 +4,7 @@
 \alias{mc_spr_tab}
 \title{Summarize Monte Carlo SPR uncertainty}
 \usage{
-mc_spr_tab(mc, dAIC_cut = 20, years = NULL)
+mc_spr_tab(mc, dAIC_cut = 20, years = NULL, weights = "aic")
 }
 \arguments{
 \item{mc}{An object returned by \code{mc_flicc()}.}
@@ -14,6 +14,9 @@ Default is \code{20}.}
 
 \item{years}{Optional vector of years to summarize. If \code{NULL}, all years
 in \code{mc$spr} are used.}
+
+\item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
+  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
 }
 \value{
 A data frame with columns \code{year}, \code{mle}, \code{mean_uw},

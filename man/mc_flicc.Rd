@@ -14,6 +14,8 @@ mc_flicc(
   parallel = FALSE,
   workers = NULL,
   n_restart = 0,
+  se = FALSE,
+  accept = "ok",
   ...
 )
 }
@@ -43,7 +45,15 @@ current \code{future} plan is used.}
 The default \code{0} is recommended for Monte Carlo refits because each
 run starts from the original optimum.}
 
-\item{...}{Additional arguments passed to internal fitting routines.}
+\item{se}{Logical; compute standard errors in each refit (default
+\code{FALSE}: the ensemble summarises point estimates, and skipping
+\code{sdreport} makes the refits much faster).}
+
+\item{accept}{Convergence tiers (see \code{fit$diagnostics$conv_tier}) that
+count as converged. Default \code{"ok"}; \code{c("ok", "warning")} also
+keeps refits with a small remaining gradient or Newton decrement.}
+
+\item{...}{Additional arguments passed to \code{fiticc()} in each refit.}
 }
 \value{
 An object of class \code{mcflicc}. The object contains propagated
@@ -59,6 +69,18 @@ length and length-at-age variation are drawn from user-defined distributions.
 The length-structured stock object is rebuilt and the FLicc model is refitted.
 }
 \details{
+Each refit uses the settings and fixed selectivity parameters
+(\code{sel_fixed}) of \code{fit}. A refit counts as successful
+(\code{mc$ok}) only if it ran without error and its convergence tier is in
+\code{accept}; for the other iterations \code{logLik} and all reported
+quantities are \code{NA}. \code{mc$conv} gives the tier of every refit
+("error" if it failed). Because the life-history inputs are drawn from their
+prior distributions, the unweighted ensemble of successful refits
+(\code{weights = "equal"} in the summary functions) is the propagation of
+that prior uncertainty; Akaike weights additionally condition on the fit to
+the length data and can collapse onto few draws with large samples.
+
+
 This function is intended to support uncertainty analysis and ensemble
 evaluation in length-based assessments. The resulting object can be used to
 examine parameter sensitivity, likelihood support, structural uncertainty,

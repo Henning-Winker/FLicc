@@ -30,7 +30,9 @@ A \code{ggplot} object.
 Produces faceted scatter plots for selected pairs of life-history parameters
 sampled during a FLicc Monte Carlo uncertainty run. Points are classified by
 delta AIC support. Fits with \code{dAIC <= dAIC_cut} are shown using a colour
-gradient, while less-supported fits are shown as open grey circles. The
+gradient, less-supported converged fits as open grey circles, and draws whose
+refit failed or did not converge (\code{mc$ok = FALSE}) as light grey
+crosses. The
 original fitted parameter combination stored in \code{mc$fit$lhpar} is shown
 as a blue star.
 }

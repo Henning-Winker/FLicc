@@ -181,7 +181,7 @@ lbb_flicc <- function(lfd, Linf = NULL, MK = NULL, Lc = NULL, Lstart = NULL, Lcu
   set0 <- list(pop_model = "gtg", ngtg = 1, CVL = 0.1, maxsd = 0,
                linf.sd = pr$Linf.sd / pr$Linf, Mk.sd = pr$MK.sd / pr$MK,
                tail_cut = pr$Linf, obs_model = "dm", FMpen_sd = 0,   # no F/M bounds (LBB has none)
-               pile = pile,
+               pile = pile, tail_warning = FALSE,   # one growth type: all fish above Linf
                dm_theta = if (is.null(ess)) "saturating" else "fixed")
   set <- utils::modifyList(set0, settings)
   gname <- if (inherits(lfd, "FLQuants") && length(lfd) == 1) names(lfd) else "pooled"

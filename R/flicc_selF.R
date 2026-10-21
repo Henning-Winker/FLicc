@@ -59,7 +59,7 @@ gear_state_flicc <- function(fit, nyears = 1) {
   rp <- fit$report
   td <- fit$tmb_data
   gears <- td$gear_names
-  type <- c("logistic", "dsnormal", "normal")[td$sel_type]
+  type <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[td$sel_type]
   k <- as.numeric(rp$lhpar["k"])
   yrs <- utils::tail(dimnames(rp$N)$year, nyears)
   pars <- lapply(gears, function(g) { p <- rp$selpars[[g]]; stats::setNames(as.list(as.numeric(p)), dimnames(p)[[1]]) })
@@ -72,13 +72,16 @@ shift_sel_flicc <- function(type, pars, loc) {
   if (type == "logistic") {
     w <- pars$SL95 - pars$SL50
     pars$SL50 <- loc; pars$SL95 <- loc + w
+  } else if (type %in% c("binormal", "bidsnormal")) {
+    d <- loc - pars$mode1
+    pars$mode1 <- loc; pars$mode2 <- pars$mode2 + d
   } else {
     pars$mode <- loc
   }
   pars
 }
 
-sel_loc_flicc <- function(type, pars) if (type == "logistic") pars$SL50 else pars$mode
+sel_loc_flicc <- function(type, pars) if (type == "logistic") pars$SL50 else if (type %in% c("binormal", "bidsnormal")) pars$mode1 else pars$mode
 
 #' Yield and spawning-potential surfaces over selectivity, F and F shares
 #'
