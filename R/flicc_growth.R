@@ -398,6 +398,9 @@ plot_growth_lfd <- function(x, phase = NULL, ages = NULL, band = TRUE, scale = 0
                sep = age[ok] <= asep)
   }))
   p <- ggplot2::ggplot()
+  # bands only where year classes are separable within the observed length range
+  Lmin_obs <- min(dd$L[dd$p > 0], na.rm = TRUE)
+  tr$sep <- tr$sep & tr$mu >= Lmin_obs
   if (band && any(tr$sep)) p <- p + ggplot2::geom_ribbon(data = tr[tr$sep, ], ggplot2::aes(year, ymin = lo, ymax = hi, group = cohort),
                                           fill = "#D6604D", alpha = 0.12)
   p <- p +

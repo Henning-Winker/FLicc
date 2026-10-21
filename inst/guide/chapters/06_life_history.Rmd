@@ -90,5 +90,24 @@ separable (shaded bands) only at lengths below those caught, and at the lengths
 caught the tracks run closer together than the width of a year class. The data neither support nor contradict the growth
 parameters here, and the t0 candidates are not informative. For fast-growing
 species with seasonal recruitment, sampled over a short period of the year, the
-modes are separate and the profile has a clear peak; simulated compositions
-with k = 0.25 recover the phase to within 0.02 years and pick the right k.
+modes are separate and the profile has a clear peak. Simulated compositions of
+such a species (k = 0.25, recruitment once a year, year-class strength varying
+at random) show what this looks like: the modes follow the tracks from year to
+year, and the phase is recovered (simulated: 0.35):
+
+```{r growth-sim, fig.height = 3.5}
+set.seed(3)
+L <- 0:60
+lfd_sim <- FLQuants(Sim = FLQuant(0, dimnames = list(len = L, year = 2001:2006)))
+for (y in 2001:2006) {
+  mu <- 50 * (1 - exp(-0.25 * (0:12 + 0.35)))                   # mean length at age
+  s  <- sqrt((0.08 * mu)^2 + 1)
+  w  <- exp(-0.4 * (0:12)) * exp(rnorm(13, 0, 0.5))             # year classes
+  p  <- sapply(seq_along(mu), function(j) pnorm(L + 1, mu[j], s[j]) - pnorm(L, mu[j], s[j])) %*% w
+  lfd_sim$Sim[, as.character(y)] <- rmultinom(1, 2000, p)
+}
+gph_sim <- growth_phase_flicc(FLPar(linf = 50, k = 0.25, M = 0.3, L50 = 30), lfd = lfd_sim,
+                              CVL = 0.08, sd0 = 1)
+gph_sim$best
+plot_growth_lfd(gph_sim)
+```
