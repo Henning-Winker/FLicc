@@ -1,0 +1,178 @@
+# Reference points and status
+
+## Fspr
+
+The fit stores Fspr for `settings$spr_ref` (default 40%), computed in TMB:
+
+```{r refpts}
+fspr_flicc(fit)                 # stored Fspr40
+fspr_flicc(fit, spr = 30)       # computed
+fcur_flicc(fit); sprcur_flicc(fit)
+```
+
+## Equilibrium curves and MSY proxies
+
+`eqstklen()` computes equilibrium per-recruit quantities over a range of F at the
+fitted selectivity (mean of the last `nyears`), and converts them with steepness
+`s` to equilibrium SSB, recruitment and yield under Beverton-Holt:
+$$
+\frac{R}{R_0} = \frac{4s\,\mathrm{SPR}(F) - (1-s)}{(5s-1)\,\mathrm{SPR}(F)}, \qquad
+Y(F) = \mathrm{YPR}(F)\, R(F), \qquad B(F) = \mathrm{SBPR}(F)\, R(F).
+$$
+`@refpts` lists the reference points derived from these curves (F and the
+equilibrium quantities at the SPR target and at maximum yield).
+
+```{r eqcurves, fig.height = 5}
+eqstk <- eqstklen(fit, s = 0.75)
+eqstk@refpts
+plot_eqcurves(eqstk)
+```
+
+The same quantities without steepness, as per-recruit curves:
+
+```{r prbrp}
+prbrp <- prbrp_flicc(fit)
+fmsy_flicc(prbrp, s = 0.75)
+fspr_flicc(fit, spr = 35)
+```
+
+## From SPR to relative spawning biomass
+
+With Beverton-Holt recruitment of steepness $s$,
+$$
+\frac{B}{B_0} = \frac{4s\,\mathrm{SPR} - (1 - s)}{5s - 1}, \qquad
+\frac{B}{B_{tgt}} = \frac{4s\,\mathrm{SPR} - (1-s)}{4s\,\mathrm{SPR}_{tgt} - (1-s)} ,
+$$
+so SPR overstates depletion when $s < 1$. `spr2brel()` and
+`flicc2FLStockR(s = )` apply the mapping (F is unchanged):
+
+```{r steepness, fig.height = 5}
+round(spr2brel(c(0.2, 0.3, 0.4), s = 0.75, sprref = 40), 3)
+plot_LBAdvice(FLStocks(SPR = flicc2FLStockR(fit, rel = TRUE),
+                       relB_s0.75 = flicc2FLStockR(fit, rel = TRUE, s = 0.75)), panel = 1)
+```
+
+## Stock status and advice plots
+
+`plot_spr()` shows the SPR trajectory with its interval, and `plot_lbfao()` the
+same against the FAO status bands (overfished below the SPR target, sustainable
+above):
+
+```{r status-plots, fig.height = 4}
+plot_spr(fit, ci = TRUE)
+plot_lbfao(fit)
+```
+
+`flicc2FLStockR()` converts the fit into an `FLStockR` object for advice plots:
+SPR (or $B/B_{tgt}$ with `s`) as the biomass indicator and F relative to Fspr,
+with reference points from the SPR target (`spr.btgt = 0.4`), `bpa` and `blim`:
+
+```{r advice, fig.height = 5}
+stk <- flicc2FLStockR(fit)
+stk@refpts
+plot_LBAdvice(stk)
+```
+
+With `rel = TRUE` the indicators are relative to the target (1 = at target), the
+usual form for advice:
+
+```{r advice-rel, fig.height = 4}
+stk_rel <- flicc2FLStockR(fit, rel = TRUE)
+plot_LBAdvice(stk_rel, panels = 1) + ylim(0, 1.5)
+```
+
+`flicc_stklen(fit)` returns the fitted `FLStockLen` (numbers, catch and F at
+length by year) for further FLR workflows.
+
+## Status over F, selectivity and gear shares: contour plots
+
+`contour_flicc()` computes yield per recruit and SPR over a grid, and
+`plot_contour_flicc()` draws one row per gear with yield on the left and
+spawning potential on the right. The grid can be laid out in three ways
+(`view`):
+
+| `view` | x-axis | y-axis | other gears |
+|---|---|---|---|
+| `"fleet"` (default) | total F, F shares between gears as now | the gear's `SL50` (logistic) or mode (dome) | F scaled with the total, selectivity as fitted |
+| `"share"` | total F | the gear's share of the total F (%) | the rest of the total F, in their current proportions |
+| `"gear"` | the gear's own F | the gear's `SL50` or mode | current F and selectivity |
+
+A change of selectivity shifts the gear's curve along the length axis, keeping
+its shape. Yield is shown as % of its maximum over the grid (viridis colours);
+SPR in % on a scale anchored on the reference points: red below SPR 20%,
+orange to pale yellow between 20% and 40%, blue above 40%. The black lines are
+SPR 40% (solid) and 20% (dashed), the point is the current state, and the dotted
+horizontal line is the length at 50% maturity (Lmat).
+
+The default view asks: if the whole fleet fished more or less, with the gears in
+their current proportions, and one gear changed its selectivity, what would
+yield and SPR be?
+
+```{r contour, fig.height = 8.5, fig.width = 9}
+cf <- contour_flicc(fit)
+cf$current
+plot_contour_flicc(cf)
+```
+
+The share view keeps all selectivities as fitted and asks how the split of F
+between gears matters. With two gears the two rows mirror each other, so one
+gear is enough. The subtitle gives the gear's current share of F and of the
+catch; the two differ because the gears catch fish of different sizes.
+
+```{r contour-share, fig.height = 4.4, fig.width = 9}
+cs <- contour_flicc(fit, view = "share", gear = "Gillnet")
+plot_contour_flicc(cs)
+```
+
+In the `"gear"` view only one gear's F changes; the other gears keep fishing at
+their current F, so at zero F of one gear the SPR reflects the other gear alone,
+and the catch split changes along the axis.
+
+Per-recruit results assume constant recruitment. With a steepness `s`, the same
+surfaces are converted under a Beverton-Holt relationship to **SSB%**
+(spawning biomass in % of unfished, $B/B_0$) and **Yield%** (equilibrium yield
+in % of its maximum over the grid), with
+$R/R_0 = \frac{4s\,SPR - (1-s)}{(5s-1)\,SPR}$ and
+$B/B_0 = \frac{4s\,SPR - (1-s)}{5s-1}$. The black lines are then SSB 40% and 20%:
+
+```{r contour-s, fig.height = 8.5, fig.width = 9}
+plot_contour_flicc(cf, s = 0.75)
+```
+
+```{r contour-numbers, include = FALSE}
+eng <- FLicc:::pr_engine_flicc(fit); 
+st <- FLicc:::gear_state_flicc(fit)
+sel_g <- function(g, loc = NULL) {
+  p <- st$pars[[g]]
+  if (!is.null(loc)) p <- FLicc:::shift_sel_flicc(st$type[[g]], p, loc)
+  sel_curve_flicc(st$Lmid, st$type[[g]], p)
+}
+pr_gn <- function(loc, Fg) eng(st$F[["Trawl"]] * sel_g("Trawl") + Fg * sel_g("Gillnet", loc))
+gn_loc <- st$pars[["Gillnet"]]$SL50
+gn_F <- st$F[["Gillnet"]]
+gn_now <- pr_gn(gn_loc, gn_F)
+gn_lmat <- pr_gn(cf$Lmat, gn_F)
+f40 <- tryCatch(uniroot(function(f) pr_gn(gn_loc, f)[["SPR"]] - 0.4, c(0, gn_F))$root,
+                error = function(e) NA)
+gn_cut <- if (is.na(f40)) "more than 100" else round(100 * (1 - f40 / gn_F))
+gn_ypr_change <- round(100 * (gn_lmat[["YPR"]] / gn_now[["YPR"]] - 1))
+```
+
+How to read them:
+
+- Moving left (less F) or up (larger fish first caught) raises SPR; the yield
+  isopleths show what that costs, or gains.
+- Here the gillnet catches at `SL50` = `r round(gn_loc, 1)` cm, below Lmat
+  (`r round(cf$Lmat, 1)` cm). With all F as now, raising the gillnet `SL50` to
+  Lmat gives an SPR of about `r round(100 * gn_lmat[["SPR"]])`% (now
+  `r round(100 * gn_now[["SPR"]])`%) for a change in YPR of
+  `r gn_ypr_change`%; reaching SPR 40% at the current `SL50` by the gillnet alone
+  needs its F cut by about `r gn_cut`%.
+- Without `s` the surfaces are per-recruit results; with `s` they include the
+  loss of recruitment at low spawning biomass, so yield falls off more steeply
+  at high F. Both are equilibrium results at the fitted life history, a guide to
+  direction and scale, not a forecast.
+
+`gear =` selects gears (rows), `n` the grid resolution, `Fmax` and `Lrange` the
+axes, `ref` the reference levels (target, limit), and `levels`, `ylevels` the
+grey isopleths of the two columns.

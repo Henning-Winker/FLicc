@@ -1,0 +1,360 @@
+# Reproducing LBSPR, LBB and fishblicc {#reproduce}
+
+Each of the three tools is a configuration of FLicc (table in section *FLicc: a
+framework for length-interval catch curves*). This section fits each tool's
+configuration to the tool's own example data, compares the results with the
+tool's published output, and adds FLicc's default for comparison.
+
+## LBSPR: the multi-year example {#repro-lbspr}
+
+LBSPR (Hordyk et al. 2015, 2016) fits the GTG model (13 growth-type groups, CV
+of Linf 0.1, groups over $\pm 2$ SD; FLicc's default since 1.0.11 is 13 groups over
+$\pm 3$ SD, so LBSPR's grid is set explicitly with `ngtg = 13, maxsd = 2`) with a multinomial likelihood to each year
+separately, with Linf, M/k and CVL fixed, and estimates SL50, SL95 and F/M
+(apical F over M) by year. The example is LBSPR's multi-year length-frequency
+file `LFreq_MultiYrHead.csv` (six years, 5-mm classes) with the life history of
+LBSPR's vignette: Linf = 100 mm, M/k = 1.5, L50 = 66 mm, L95 = 70 mm. It is
+included in FLicc as `data("lbspr_test")`, with LBSPR's estimates for these
+data:
+
+```{r lbspr-data}
+data("lbspr_test")   # lfd_lbspr, lhpar_lbspr, lbspr_est
+lfd_lbspr
+lhpar_lbspr          # k only scales F and M; F/M and SPR depend on M/k = 1.5
+stk_lbspr <- stocklen(lfd_lbspr, lhpar_lbspr, m_model = "constant")
+```
+
+Three fits: LBSPR's configuration (multinomial, LBSPR's growth-type groups,
+each year separately), the same likelihood and groups with all years fitted
+jointly (one selectivity, random walk on F), and FLicc's default
+(Dirichlet-multinomial with estimated precision, `maxsd = 3`, years
+jointly).
+For the separate years `Map()` fits one model per year:
+
+```{r lbspr-fits}
+set_lbspr <- list(CVL = 0.1, ngtg = 13, maxsd = 2, obs_model = "mn")
+yrs_lbspr <- dimnames(stk_lbspr)$year
+fits_lbspr_y <- Map(function(y) {
+  lfd_y <- FLQuants(lapply(lfd_lbspr, function(x) x[, y]))
+  fiticc(lfd_y, stocklen(lfd_y, lhpar_lbspr, m_model = "constant"), sel_fun = "logistic",
+         catch_by_gear = 1, settings = set_lbspr, verbose = FALSE)
+}, yrs_lbspr)
+fit_lbspr_j <- fiticc(lfd_lbspr, stk_lbspr, sel_fun = "logistic", catch_by_gear = 1,
+                      settings = set_lbspr)
+fit_lbspr_d <- fiticc(lfd_lbspr, stk_lbspr, sel_fun = "logistic", catch_by_gear = 1,
+                      settings = list(CVL = 0.1))
+```
+
+LBSPR's results for these data (`LBSPRfit()`) are in `lbspr_est`: the yearly
+point estimates, and the estimates smoothed over the years with a Kalman filter
+(`@Ests`, LBSPR's default output). The FLicc estimates are taken from the fits (selectivity
+from the parameters, F/M as apical F over M, SPR):
+
+```{r lbspr-compare}
+lbspr_out <- lbspr_est[, c("year", "SL50", "SL95", "FM", "SPR")]
+lbspr_smooth <- setNames(lbspr_est[, c("year", "SL50_smooth", "SL95_smooth", "FM_smooth", "SPR_smooth")],
+                         c("year", "SL50", "SL95", "FM", "SPR"))
+est_flicc <- function(f) {
+  sm <- exp(f$obj$env$parList(par = f$obj$env$last.par.best)$Sm) * 100   # relative to Linf
+  data.frame(year = as.numeric(f$tmb_data$year_names), SL50 = sm[1], SL95 = sm[1] + sm[2],
+             FM = as.numeric(f$report$Fap) / 0.3, SPR = as.numeric(f$report$spr))
+}
+lbspr_runs <- list("LBSPR, by year" = lbspr_out,
+                   "LBSPR, smoothed" = lbspr_smooth,
+                   "FLicc mn, by year" = do.call(rbind, lapply(fits_lbspr_y, est_flicc)),
+                   "FLicc mn, joint" = est_flicc(fit_lbspr_j),
+                   "FLicc default" = est_flicc(fit_lbspr_d))
+lbspr_tab <- do.call(rbind, Map(function(x, nm) cbind(run = nm, round(x, 3)), lbspr_runs, names(lbspr_runs)))
+rownames(lbspr_tab) <- NULL
+lbspr_tab
+```
+
+```{r lbspr-plot, fig.height = 3.5}
+lbspr_long <- do.call(rbind, lapply(c("SL50", "FM", "SPR"), function(v)
+  data.frame(lbspr_tab[, c("run", "year")], what = v, value = lbspr_tab[[v]])))
+lbspr_long$run <- factor(lbspr_long$run, levels = names(lbspr_runs))
+ggplot(lbspr_long, aes(year, value, colour = run)) +
+  geom_line() + geom_point() + facet_wrap(~what, scales = "free_y") +
+  scale_colour_manual(values = c("black", "grey55", "#E69F00", "#0072B2", "#009E73")) +
+  labs(x = "Year", y = NULL, colour = NULL) + theme_bw() + theme(legend.position = "bottom")
+plot_spr(fit_lbspr_d, ci = TRUE)
+```
+
+With LBSPR's configuration (`obs_model = "mn"`, `ngtg = 13`, `maxsd = 2`,
+each year separately) FLicc
+reproduces LBSPR's yearly estimates: SPR differs from LBSPR's by
+`r round(mean(abs(lbspr_runs[["FLicc mn, by year"]]$SPR - lbspr_out$SPR)), 3)` on
+average, F/M by
+`r round(mean(abs(lbspr_runs[["FLicc mn, by year"]]$FM - lbspr_out$FM)), 3)`.
+The yearly estimates vary (here SPR from `r min(lbspr_out$SPR)` to
+`r max(lbspr_out$SPR)` and SL50 from `r min(lbspr_out$SL50)` to
+`r max(lbspr_out$SL50)`), and LBSPR smooths them afterwards with a Kalman filter.
+FLicc's joint fit links the years inside the model instead: one selectivity for
+all years and a random walk on F, so the data of all years inform each year's F
+through the likelihood rather than by smoothing the point estimates
+afterwards; the figure compares it with LBSPR's smoothed series.
+
+At the same SL50, SL95 and F/M, FLicc's SPR is about 0.03 lower than LBSPR's in
+every year. The difference is in the spawning output per recruit, not in the
+fit, and has two sources in LBSPR's GTG model (`LBSPRsim_()`):
+
+1. **Selectivity in the survival recursion.** LBSPR computes the selectivity that
+   enters survival as `1/(1 + exp(-log(19) * (LBins - (SL50 + By/2)) / (SL95 - SL50)))`
+   at the class lower bounds `LBins` (`By` = class width), i.e. at one class below
+   the class midpoint, while the predicted catch uses selectivity at the
+   midpoints. Fish are therefore fished as if they were one class (here 5 mm)
+   smaller, which lowers F at length in the survival and raises SPR. The fit, and
+   so SL50 and F/M, is driven by the catch and is not affected.
+
+   > **Note — possible error in LBSPR (`LBSPRsim_.r`, LBSPR 0.1.9):**
+   > line 168 evaluates survival selectivity at `LBins - (SL50 + 0.5*By)`, a full
+   > class below the midpoint; the M/K line next to it (line 171) uses the
+   > midpoint `LBins + 0.5*By`, and the predicted catch (line 218) uses selectivity
+   > at the midpoints `LMids`. The model thus applies two selectivity curves one
+   > class apart, one to the catch and one to the mortality. The intended
+   > expression was probably `(LBins + 0.5*By) - SL50`. As a consequence LBSPR's
+   > SPR is biased upwards by an amount that grows with the class width: for the
+   > 2010 estimates (SL50 = 49.1, SL95 = 62.9, F/M = 0.56) LBSPR's equations give
+   > SPR = 0.406, 0.413, 0.437 and 0.483 for 1, 2, 5 and 10-mm classes, against
+   > 0.399--0.404 with selectivity at the midpoints. SL50, SL95 and F/M are not
+   > affected. LBSPR's pseudo-age model (`Control = list(modtype = "absel")`) uses midpoints
+   > throughout.
+2. **Maturity at the same relative size.** LBSPR scales the maturity ogive with
+   each group's Linf ($L_{50,g} = L_{50}\,L_{\infty,g}/L_\infty$), whereas FLicc
+   uses one maturity-at-length ogive for all groups. Here this changes SPR by
+   only about 0.005, in the opposite direction.
+
+Neither enters the likelihood, so `spr_gtg_flicc()` can recompute the SPR of a
+GTG fit afterwards: `mat = "relative"` uses LBSPR's maturity at relative size,
+and `sel_lag = 1` applies F at length one class late, as in LBSPR's survival
+recursion. Both inputs are fixed, so the ratio `adj = spr_gtg / spr` is a
+correction factor: it scales FLicc's SPR and its interval and leaves the
+uncertainty (the SE of log SPR) as it is. With `mat = "length"` and
+`sel_lag = 0` it returns FLicc's own SPR (`adj = 1`):
+
+```{r lbspr-sprgtg}
+spr_y <- function(f) {
+  data.frame(year = as.numeric(f$tmb_data$year_names),
+             FLicc = spr_gtg_flicc(f, mat = "length")$spr,
+             mat_rel = spr_gtg_flicc(f)$spr_gtg,
+             mat_rel_lag = spr_gtg_flicc(f, sel_lag = 1)$spr_gtg)
+}
+spr_cmp <- do.call(rbind, lapply(fits_lbspr_y, spr_y))
+cbind(round(spr_cmp, 3), LBSPR = round(lbspr_out$SPR, 3))
+spr_gtg_flicc(fit_lbspr_d, sel_lag = 1)   # joint default fit, LBSPR-type SPR with interval
+```
+
+With both LBSPR conventions the yearly FLicc SPR differs from LBSPR's by
+`r round(mean(abs(spr_cmp$mat_rel_lag - lbspr_out$SPR)), 3)` on average, against
+`r round(mean(abs(spr_cmp$FLicc - lbspr_out$SPR)), 3)` for FLicc's own SPR. FLicc
+keeps its own SPR as the default, because it applies the fitted selectivity
+consistently to the catch and the survival. The default growth-type groups
+(`maxsd = 3`) also differ from LBSPR's: they reach 1.3 instead of 1.2 Linf, so
+a few large fish no longer get a near-zero probability, and CVL is the realised
+spread of Linf rather than about 0.9 of it (section *maxsd and ngtg*). The default likelihood estimates how
+much weight the compositions carry and widens the intervals accordingly.
+
+## LBB: the Illex example {#repro-lbb}
+
+### LBB as a special case of the GTG model
+
+LBB (Froese et al. 2018) describes the numbers surviving to length class $j$
+(lower bound $L_j$) with one growth type,
+$$
+N_j = N_{j-1}\left(\frac{L_\infty - L_j}{L_\infty - L_{j-1}}\right)^{M/K + (F/K)\,S_j},
+$$
+where $S_j$ is a logistic selectivity with length at 50% selection $L_c$ and
+slope $\alpha$ (relative to $L_\infty$). This is FLicc's GTG recursion with a
+single growth-type group (`pop_model = "gtg"`, `ngtg = 1`). Each year is fitted
+separately, with a prior on Linf (CV at most 1%, from an `nls()` fit to the
+aggregated frequencies, or a user value), on M/K (1.5, SD 0.15) and, in LBB,
+also on $L_c$ and $\alpha$; the likelihood is a Dirichlet on the relative
+frequencies with a concentration of $10^4$.
+
+The expected catch in a length class can be computed in two ways:
+
+- **with the pile-up correction** (Hordyk et al. 2019; FLicc's model and LBB
+  with `Pile = 1`): the numbers in the class are the survivors integrated over
+  the time spent in it, $C_j \propto S_j\,(N_j - N_{j+1})/(M/K + (F/K) S_j)$.
+  Fish grow more slowly towards Linf, so they accumulate in the large classes;
+- **without it** (LBB `Pile = 0`, the setting of LBB's example stocks): the
+  catch is proportional to the survivorship at the class bound,
+  $C_j \propto S_j N_j$.
+
+`lbb_flicc()` sets FLicc up as LBB: one growth type, one gear (gears pooled),
+Linf and M/K priors from `lbb_priors_flicc()` (LBB's guess step) or user values,
+lengths at or above the Linf prior excluded, and each year fitted separately
+(`by_year = TRUE`) or jointly with a random walk on F (`by_year = FALSE`). The
+options `pile` (LBB's `Pile`) and `ess` (data weighting; `ess = 20000` with a
+fixed Dirichlet-multinomial precision corresponds to LBB's concentration of
+$10^4$) allow LBB's settings to be matched. Selectivity is estimated without
+priors. `lbbref_flicc()` gives LBB's quantities by year (Linf, Lc, M/K, F/K,
+F/M, Z/K, Lopt, Lc_opt, B/B0 from LBB's Beverton-Holt equations) next to
+FLicc's EPR and SPR, and `plot_lbb()` LBB's summary figure.
+
+### The Illex fit
+
+The example uses LBB's own example stock *Illex coindetii* (Adriatic) with the
+settings of LBB's `Example_ID.csv`: the years 1996, 1999, 2001, 2002, 2009,
+2014 and 2016, Linf set to 23 cm, Lm50 16 cm and `Pile = 0`. The data are read
+from the LBB repository (lengths in mm, converted to cm) and raised to 1000 per
+year:
+
+```{r lbb-data}
+url <- "https://raw.githubusercontent.com/SISTA16/LBB/master/Example_Dat.csv"
+lbb_dat <- tryCatch(read.csv(url), error = function(e) NULL)
+have_lbb <- !is.null(lbb_dat)
+if (have_lbb) {
+  d <- subset(lbb_dat, Stock == "Ille_coi_AD" & !is.na(CatchNo))
+  d <- aggregate(CatchNo ~ Year + Length, data = d, FUN = sum)
+  d$data <- d$CatchNo / ave(d$CatchNo, d$Year, FUN = sum) * 1000
+  lfd_illex <- FLQuantLen(lfd_long_to_wide(data.frame(len = d$Length / 10, year = d$Year,
+                                                      data = d$data, qname = "Illex")),
+                          unit = "cm", midL = FALSE)
+}
+yrs_illex <- c(1996, 1999, 2001, 2002, 2009, 2014, 2016)
+```
+
+Three fits: LBB's settings (`pile = 0`, LBB's data weighting), the same with
+the pile-up correction, and FLicc's joint fit of all years with the
+pile-up correction and the estimated Dirichlet-multinomial precision:
+
+```{r lbb-fits, eval = have_lbb}
+fit_lbb0 <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      pile = 0, ess = 20000)
+fit_lbb1 <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      pile = 1, ess = 20000)
+fit_lbbj <- lbb_flicc(lfd_illex, Linf = 23, Lm50 = 16, years = yrs_illex,
+                      by_year = FALSE)
+fit_lbb0
+```
+
+LBB's own results for this stock (`LBB_33a.R`, MCMC medians) are entered as a
+table and compared by year:
+
+```{r lbb-compare, eval = have_lbb, fig.height = 4.5}
+lbb_out <- data.frame(year = yrs_illex,
+                      ZK  = c(2.32, 3.12, 2.57, 3.72, 3.15, 5.24, 6.85),
+                      FM  = c(0.265, 0.878, 0.732, 1.467, 0.910, 2.713, 3.570),
+                      BB0 = c(0.699, 0.267, 0.293, 0.138, 0.294, 0.065, 0.044))
+runs <- list("LBB (JAGS)" = lbb_out, "FLicc, Pile = 0" = fit_lbb0$table,
+             "FLicc, Pile = 1" = fit_lbb1$table, "FLicc, Pile = 1, joint" = fit_lbbj$table)
+cmp <- do.call(rbind, Map(function(x, nm) data.frame(run = nm, year = x$year, ZK = x$ZK,
+                                                     FM = x$FM, BB0 = x$BB0), runs, names(runs)))
+cmp$run <- factor(cmp$run, levels = names(runs))
+long <- rbind(data.frame(cmp[, 1:2], what = "Z/K", value = cmp$ZK),
+              data.frame(cmp[, 1:2], what = "F/M", value = cmp$FM),
+              data.frame(cmp[, 1:2], what = "B/B0", value = cmp$BB0))
+ggplot(long, aes(year, value, colour = run)) +
+  geom_line() + geom_point() +
+  facet_wrap(~what, scales = "free_y") +
+  scale_colour_manual(values = c("black", "#E69F00", "#0072B2", "#009E73")) +
+  labs(x = "Year", y = NULL, colour = NULL) +
+  theme_bw() + theme(legend.position = "bottom")
+dif <- function(x) round(mean(x$ZK - lbb_out$ZK), 2)
+```
+
+The same comparison with `plot_epr()` and `plot_spr()`: LBB's B/B0 next to
+FLicc's exploitable potential ratio (EPR, the same quantity from the FLicc
+engine), with LBB's reference points (B/B0 at F = M and Lc = Lc_opt, a proxy for
+Bmsy/B0, and half of it), and FLicc's SPR, which LBB does not report:
+
+```{r lbb-epr-spr, eval = have_lbb, fig.height = 3.5}
+yr_flq <- function(tab, col) FLQuant(matrix(tab[[col]], nrow = 1), dimnames = list(year = tab$year))
+bfm <- attr(fit_lbb1$table, "BFM1B0")
+plot_epr(FLQuants("LBB (JAGS)" = yr_flq(lbb_out, "BB0"),
+                  "FLicc, Pile = 0" = yr_flq(fit_lbb0$table, "EPR"),
+                  "FLicc, Pile = 1" = yr_flq(fit_lbb1$table, "EPR"),
+                  "FLicc, Pile = 1, joint" = yr_flq(fit_lbbj$table, "EPR")),
+         ref_levels = c(bfm, bfm / 2), title = "B/B0 (LBB) and EPR (FLicc)")
+plot_spr(FLQuants("FLicc, Pile = 0" = yr_flq(fit_lbb0$table, "SPR"),
+                  "FLicc, Pile = 1" = yr_flq(fit_lbb1$table, "SPR"),
+                  "FLicc, Pile = 1, joint" = yr_flq(fit_lbbj$table, "SPR")))
+```
+
+With LBB's settings (`pile = 0`) FLicc reproduces LBB: Z/K differs from LBB's
+by `r if (have_lbb) dif(fit_lbb0$table) else NA` on average over the years, and
+F/M and B/B0 follow LBB's estimates year by year. The remaining differences are
+small: LBB's priors on $\alpha$ and F/K shape how Z/K is split into M/K and F/K
+(LBB's M/K moves between 1.4 and 1.8 across years, FLicc's stays near the prior
+of 1.5), and MCMC medians differ slightly from maximum likelihood estimates.
+
+With the pile-up correction, Z/K is higher by
+`r if (have_lbb) dif(fit_lbb1$table) else NA` on average, so F/M is higher and
+B/B0 lower. Survivorship declines as about $(L_\infty - L)^{Z/K}$, while the
+numbers in a class decline as about $(L_\infty - L)^{Z/K - 1}$, so the model
+without the correction needs a Z/K about one unit lower to describe the same
+frequencies. The joint fit of all years (`by_year = FALSE`) shares selectivity
+and links F between years, which smooths the year-to-year changes in the
+separate fits.
+
+```{r lbb-plot, eval = have_lbb, fig.height = 7}
+plot_lbb(fit_lbb1)
+```
+
+### Points to consider with LBB
+
+- **Pile-up correction.** Hordyk et al. (2019) pointed out that the numbers in a
+  length class are the survivors integrated over the class, and that without
+  the correction F is underestimated. Froese et al. (2019) argued that the
+  correction matters most for continuous recruitment and sampling, and added it
+  as an option to LBB. In LBB's B/B0, computed from the Beverton-Holt equations,
+  the integration is included; with `Pile = 0` Z/K is therefore estimated with
+  a different model from the one used for B/B0. FLicc uses the integrated
+  numbers for estimation and status (`pile = 1`, default); `pile = 0` is
+  available to reproduce LBB.
+- **Priors.** LBB's priors on $L_c$ and in particular on $\alpha$ (SD 2.5%,
+  centred on a value derived from each year's ascending limb) fix much of the
+  selectivity shape; together with the M/K prior they determine the split of
+  Z/K into M/K and F/K, which the data alone barely inform. In FLicc these
+  constraints are optional settings (priors, `sel_fixed`).
+- **Separate years.** Fitting each year separately lets selectivity and Linf
+  change between years, which absorbs recruitment pulses as apparent changes in
+  selectivity. The joint fit (`by_year = FALSE`) estimates one selectivity and
+  links F between years.
+- **Weighting.** LBB's Dirichlet concentration of $10^4$ gives the data a weight
+  close to $10^4$ fish per year whatever the sample size; FLicc's default
+  estimates the precision from the data.
+
+Within these choices, LBB's estimates can be reproduced in FLicc, and each
+assumption can be switched separately to see its effect.
+
+## fishblicc: the Bombay duck example {#repro-fishblicc}
+
+FLicc includes the Bombay duck example of fishblicc (three gears) to check
+consistency with fishblicc. Natural mortality decreases with length
+(`m_model = "inverse"`, $M(L) = M\, L_{ref} / L$ with $L_{ref} = 21.9$), and
+Linf, M/k and CVL are estimated with priors as in fishblicc. fishblicc
+compares the relative catch of each gear in numbers of fish (Medley 2025), so
+the catch shares are given in numbers here (`catch_units = "numbers"`):
+
+```{r fishblicc-data}
+data("fishblicc_example")
+lhpar_fishblicc <- rbind(lhpar_fishblicc,
+                         FLPar(M = lhpar_fishblicc["k"] * lhpar_fishblicc["Mk"]))
+stklen_fishblicc <- stocklen(lfd_fishblicc, lhpar_fishblicc,
+                             m_model = "inverse", reflen = 21.9)
+```
+
+```{r fishblicc-fit}
+fit_fishblicc <- fiticc(lfd_fishblicc, stklen_fishblicc,
+                        sel_fun = c("dsnormal", "dsnormal", "dsnormal"),
+                        catch_by_gear = c(0.1802070, 0.2101353, 0.6096577),
+                        settings = list(pop_model = "gamma", obs_model = "nb",
+                                        CVL = 0.14, CVL.sd = 0.1,
+                                        linf.sd = 2 / 40, Mk.sd = 0.1,
+                                        catch_units = "numbers"))
+flicc_convergence(fit_fishblicc)
+sprcur_flicc(fit_fishblicc)
+```
+
+```{r fishblicc-plots, fig.height = 4.5}
+plot_sel(fit_fishblicc)
+plot_len(fit_fishblicc, by_gear = TRUE)
+```
+
+```{r fishblicc-eq, fig.height = 5}
+eqstk_fishblicc <- eqstklen(fit_fishblicc, s = 0.7)
+eqstk_fishblicc@refpts
+plot_eqcurves(eqstk_fishblicc)
+```

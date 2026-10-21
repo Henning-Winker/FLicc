@@ -1,0 +1,199 @@
+# Part II: Technical options {.unnumbered .part}
+
+# Effective sample size and observation models
+
+## How the sample size enters the likelihood
+
+For gear $g$ in year $y$, with observed counts $y_{g,y,l}$, total
+$n_{g,y} = \sum_l y_{g,y,l}$ and predicted proportions $\pi_{g,y,l}$:
+
+- **Multinomial** (`obs_model = "mn"`): $-\log L = -\sum_l y_{g,y,l} \log \pi_{g,y,l}$.
+  The weight of a composition is proportional to $n_{g,y}$.
+- **Negative binomial** (`"nb"`): counts with mean $n_{g,y}\pi_{g,y,l}$ and
+  overdispersion $\phi$ (estimated), variance $\mu + \mu^2/\phi$.
+- **Dirichlet-multinomial** (`"dm"`): the compositions are drawn from a Dirichlet
+  with mean $\pi_{g,y}$ and precision $\alpha_0$; in FLicc $\alpha_0 = n_{g,y}$.
+  The variance of the proportions is inflated by
+  $(n + \alpha_0)/(1 + \alpha_0) \approx 2$, so a DM fit at sample size $n$ carries
+  about the information of a multinomial with $n/2$. Its log-gamma form also
+  penalises single-bin misfits less than the multinomial, which makes it more
+  robust with messy real data.
+
+`lfdess(lfd, ess.g)` rescales each gear-year to the given effective sample size
+(ESS), keeping the proportions; empty gear-years stay empty.
+
+## Why very large sample sizes do harm
+
+Measured fish are not independent: fish from one haul or trip share its length
+structure. Raw counts (often thousands) therefore overstate the information by
+an order of magnitude. With an overstated sample size:
+
+- the likelihood is dominated by small structural misfits (growth model, binning,
+  selectivity shape) rather than the signal, so estimates and their standard
+  errors are overconfident;
+- log-likelihood differences between alternative assumptions become huge, so
+  AIC weights across an ensemble collapse onto a few draws and likelihood profiles
+  become jagged or multimodal;
+- any discrete effect (a fish entering or leaving the range of the largest growth
+  group) is multiplied by $n$.
+
+## Choosing the effective sample size
+
+With the default likelihood (Dirichlet-multinomial with estimated precision,
+next section) the data choose their own weight: give it the **raw counts or an
+ESS of at least 500** per gear-year, not a reduced ESS. FLicc prints a message
+when the median sample size is below 500.
+
+The choice of ESS matters for the likelihoods with a weight set by the input,
+the multinomial (as LBSPR) and the Dirichlet-multinomial with fixed precision
+(`dm_theta = "fixed"`, as LBB). For these, ESS of about 150-200 per gear-year
+has given the most stable assessments and ensemble profiles, and 1000 or more
+behaved poorly in Monte-Carlo profiling:
+
+- Base ESS on the number of independent sampling units (trips, hauls, vessels)
+  where known, e.g. a few fish-equivalents per unit; otherwise start at 150-200
+  per gear-year and test 100 and 300.
+- Use the same ESS for gears of similar sampling quality; reduce it for gears
+  with few trips.
+- The fixed Dirichlet-multinomial halves the nominal ESS.
+- Never fit raw counts of several thousand fish per year without rescaling.
+
+The demonstration below shows why the input matters for these likelihoods: it
+fits the alfonsino data at five effective sample sizes (`ess_values`), once with
+the multinomial and once with the fixed Dirichlet-multinomial, and once more with
+the raw counts. `lfdess()` rescales the compositions to the
+given ESS; `Map()` runs one fit per value. For each fit the table shows the
+last-year SPR (`sprcur_flicc()`), its standard error on the log scale (from
+`spr_ci_flicc()`) and the largest absolute gradient at the optimum.
+
+```{r ess-demo}
+sel_fun <- c("dsnormal", "logistic")
+cbg <- c(0.95, 0.05)
+stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+ess_values <- c(50, 100, 200, 500, 1000)
+
+# multinomial: one fit per ESS
+fits_mn <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "mn"))
+}, ess_values)
+names(fits_mn) <- paste0("mn_", ess_values)
+
+# Dirichlet-multinomial with fixed precision: one fit per ESS
+fits_dm <- Map(function(ess) {
+  fiticc(lfdess(lfd, ess.g = ess), stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "fixed"))
+}, ess_values)
+names(fits_dm) <- paste0("dm_", ess_values)
+
+# raw counts (no rescaling)
+fit_raw_mn <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "mn"))
+fit_raw_dm <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "fixed"))
+raw_n <- round(mean(quantSums(lfd[["Trawl"]])))   # fish per year, trawl
+
+fits_mn <- c(fits_mn, raw = list(fit_raw_mn))
+fits_dm <- c(fits_dm, raw = list(fit_raw_dm))
+
+# standard error of log SPR in the last year
+se_logspr <- function(fit) tail(spr_ci_flicc(fit)$se_log, 1)
+ess_table <- data.frame(
+  ESS        = c(ess_values, paste0("raw (~", raw_n, ")")),
+  SPR_mn     = round(sapply(fits_mn, sprcur_flicc), 3),
+  SPR_dm     = round(sapply(fits_dm, sprcur_flicc), 3),
+  se_mn      = round(sapply(fits_mn, se_logspr), 3),
+  se_dm      = round(sapply(fits_dm, se_logspr), 3),
+  maxgrad_dm = signif(sapply(fits_dm, function(fit) fit$max_gradient), 2),
+  row.names  = NULL)
+ess_table
+```
+
+Three things change with the effective sample size:
+
+- **Precision**: the standard error of log SPR shrinks roughly with $1/\sqrt{n}$;
+  with large ESS the intervals reflect the sampling of individual fish, not of
+  the fishery.
+- **Convergence**: the maximum gradient grows at large ESS (here up to
+  `r ess_table$maxgrad_dm[5]` at ESS 1000 with `dm`), a sign that the
+  likelihood surface becomes sharp and ragged.
+- **The estimate itself, for `dm`**: with the multinomial the last-year SPR changes
+  little (`r paste(range(ess_table$SPR_mn), collapse = " to ")`),
+  but with the Dirichlet-multinomial it ranges from
+  `r ess_table$SPR_dm[1]` at ESS 50 to `r ess_table$SPR_dm[5]` at ESS 1000.
+  At low ESS the compositions carry little weight against the random walk and
+  the catch-share constraint; estimates stabilise from about ESS 150-200 upward.
+
+The alfonsino example has about `r raw_n` fish per gear-year, so its raw counts are
+moderate; with the thousands of fish per year common in market sampling the
+effects above are much stronger, also for the AIC weights of a Monte-Carlo
+ensemble.
+
+SPR with 95% intervals for the Dirichlet-multinomial at ESS 50, 200 and 1000 and
+for the raw counts:
+
+```{r ess-plot, fig.height = 4}
+plot_spr(fits_dm[c("dm_50", "dm_200", "dm_1000", "raw")], ci = TRUE)
+```
+
+## Letting the data choose their weight: estimated Dirichlet-multinomial precision
+
+With `dm_theta = "fixed"` the Dirichlet precision is
+$\alpha_0 = n$, so the effective sample size the likelihood uses is
+$$
+n_{eff} = \frac{n\,(1 + \alpha_0)}{n + \alpha_0} = \frac{1 + n}{2} \approx \frac{n}{2},
+$$
+proportional to the input ESS, as shown above. FLicc can instead estimate the
+precision by gear (Thorson et al. 2017):
+
+| `dm_theta` | $\alpha_0$ | $n_{eff}$ | as the input ESS grows |
+|---|---|---|---|
+| `"fixed"` | $n$ | $\approx n/2$ | grows without limit |
+| `"linear"` | $\theta n$, $\theta$ estimated | $(1 + \theta n)/(1 + \theta)$ | grows, at a rate set by $\theta$ |
+| `"saturating"` (default) | $\beta$, estimated | $n(1 + \beta)/(n + \beta)$ | levels off at $\beta + 1$ |
+
+With `"saturating"`, once the input sample size is well above $\beta$ the
+effective sample size no longer depends on it: the data estimate how much each
+composition can count. The input matters only if it is *below* what the data
+support. Then there is no overdispersion to estimate, $\beta$ runs towards
+infinity, and the model becomes a multinomial at the input sample size; a weak
+prior (`dm_prior_sd = 1`, centred close to a multinomial) keeps it finite, and
+FLicc reports the precision as being at its bound. For
+this reason, **with an estimated precision use the raw counts or an ESS of at
+least 500**, so that the data, not the input, set the weight.
+
+The fits below use the saturating Dirichlet-multinomial at ESS 500 and 1000 and
+on the raw counts; `neff_flicc()` reports the estimated effective sample size by
+gear and year.
+
+```{r dm-sat}
+dm_inputs <- list(ESS_500 = lfdess(lfd, ess.g = 500), ESS_1000 = lfdess(lfd, ess.g = 1000), raw = lfd)
+fits_dms <- Map(function(d) {
+  fiticc(d, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+}, dm_inputs)
+
+neff_gear <- function(fit, g) { ne <- neff_flicc(fit); round(mean(ne$neff[ne$gear == g])) }
+dm_table <- data.frame(
+  input        = names(fits_dms),
+  SPR_last     = round(sapply(fits_dms, sprcur_flicc), 3),
+  se_log       = round(sapply(fits_dms, se_logspr), 3),
+  neff_Trawl   = sapply(fits_dms, neff_gear, g = "Trawl"),
+  neff_Gillnet = sapply(fits_dms, neff_gear, g = "Gillnet"),
+  row.names = NULL)
+dm_table
+plot_spr(c(fixed_ESS_200 = list(fits_dm$dm_200), fits_dms), ci = TRUE)
+```
+
+The last-year SPR is `r paste(unique(range(dm_table$SPR_last)), collapse = " to ")`
+whatever the input, against `r paste(range(ess_table$SPR_dm), collapse = " to ")`
+for the fixed precision over ESS 50 to 1000. The compositions support an
+effective sample size of about `r dm_table$neff_Trawl[3]` (trawl) and
+`r dm_table$neff_Gillnet[3]` (gillnet) fish per year; the fixed precision at
+ESS 200 used about 100.
+
+The estimated precision describes the noise *within* compositions. Year classes
+that shift whole compositions between years are a different kind of misfit, which
+the residual diagnostics (section *Residual diagnostics*) show and the precision
+does not absorb.

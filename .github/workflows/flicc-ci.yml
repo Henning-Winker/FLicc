@@ -8,6 +8,11 @@ on:
   push:
     branches: ['dev-**', 'ci-**']
   workflow_dispatch:
+    inputs:
+      render:
+        description: 'Render the full user guide'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -22,6 +27,10 @@ jobs:
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       BRANCH: ${{ github.ref_name }}
+      # full user guide only with [render] in the commit message or a manual run with render = true;
+      # otherwise only the changed guide chapters are rendered (inst/guide/preview.Rmd)
+      RENDER_GUIDE: ${{ contains(github.event.head_commit.message, '[render]') || github.event.inputs.render == 'true' }}
+      BEFORE: ${{ github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,16 +79,37 @@ jobs:
         if: always()
         run: |
           cd new
-          files=$(git diff --name-only origin/main...HEAD -- '*.Rmd' | grep -v '^ci/' || true)
+          changed=$(git diff --name-only origin/main...HEAD -- '*.Rmd' | grep -v '^ci/' || true)
           cd ..
-          for f in $files; do
-            [ -f "new/$f" ] || continue
-            if R_LIBS="$PWD/lib_new:$R_LIBS_USER" Rscript -e "rmarkdown::render('new/$f', output_dir = 'out/html')" > "out/render_$(basename $f .Rmd).log" 2>&1; then
+          render() {   # render <rmd> [params expression]
+            f=$1; p=${2:-NULL}; name=$(basename $f .Rmd)
+            if R_LIBS="$PWD/lib_new:$R_LIBS_USER" Rscript -e "rmarkdown::render('new/$f', output_dir = 'out/html', params = $p)" > "out/render_$name.log" 2>&1; then
               echo "render:$f=0" >> out/status.txt
             else
               echo "render:$f=1" >> out/status.txt
             fi
+          }
+          # other Rmd files (vignettes etc.) as before
+          for f in $(echo "$changed" | grep -v '^inst/guide/' || true); do
+            [ -f "new/$f" ] && render "$f"
           done
+          guide_changed=$(echo "$changed" | grep '^inst/guide/' || true)
+          if [ "$RENDER_GUIDE" = "true" ]; then
+            render inst/guide/FLicc_user_guide.Rmd
+          elif [ -n "$guide_changed" ]; then
+            # preview the chapters changed by this push (all chapters changed since main for a new branch)
+            cd new
+            if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BEFORE" 2>/dev/null; then
+              pushed=$(git diff --name-only "$BEFORE" HEAD -- 'inst/guide/chapters/*.Rmd' || true)
+            else
+              pushed=$(echo "$guide_changed" | grep '^inst/guide/chapters/' || true)
+            fi
+            cd ..
+            chapters=$(echo "$pushed" | grep '^inst/guide/chapters/' | xargs -r -n1 basename | sed 's/\.Rmd$//' | paste -sd, -)
+            if [ -n "$chapters" ]; then
+              render inst/guide/preview.Rmd "list(chapters = '$chapters')"
+            fi
+          fi
 
       - name: Summary
         if: always()

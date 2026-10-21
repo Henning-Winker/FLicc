@@ -1,0 +1,24 @@
+# Part III: Management {.unnumbered .part}
+
+# Use in an MSE
+
+`flicc.sa()` wraps `fiticc()` as the estimation step of an `mse` management
+procedure, with `lbi.hcr()`, `rfb.flicc.hcr()` and `flicc.is()` for the
+harvest control rule and implementation:
+
+```{r mse, eval = FALSE}
+est <- mseCtrl(method = flicc.sa, args = list(
+  lhpar = lhpar, sel_fun = sel_fun, ess.g = NULL,   # raw counts
+  settings = list(obs_model = "dm", dm_theta = "saturating", CVL = 0.1,
+                  sigmaF = 0.3,      # fixed (or the F_re estimate from the real data)
+                  tail_cut = 47,     # absolute length, the same in every iteration
+                  spr_ref = 40),
+  spr = 40))
+```
+
+- `se = FALSE` is used inside `flicc.sa()`; fixed sigmaF avoids its estimation in
+  every year and iteration.
+- The tail cut and sigmaF both trade responsiveness against stability; tune them
+  together with the smoothing of the harvest control rule.
+- Expect the equilibrium model to be pessimistic during a rebuild and optimistic
+  while F increases.

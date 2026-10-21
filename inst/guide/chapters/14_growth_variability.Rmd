@@ -1,0 +1,156 @@
+# Growth variability and life-history priors
+
+## CVL
+
+`CVL` is the coefficient of variation of Linf among growth-type groups. It sets how
+far individual growth spreads the length composition, mostly in the tail: the
+fastest-growing groups determine how many fish occur near and beyond Linf. It is
+fixed at its input value unless `CVL.sd` is given; typical values are 0.07-0.15.
+
+The sensitivity below refits the model for three CVL values (`cvl_values`),
+without and with a tail cut at 47 cm; `Map()` runs one fit per value.
+
+```{r cvl-sens, fig.height = 4}
+cvl_values <- c(0.07, 0.10, 0.13)
+
+fits_cvl <- Map(function(cvl) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm", dm_theta = "saturating"), se = FALSE)
+}, cvl_values)
+names(fits_cvl) <- paste0("CVL_", cvl_values)
+
+fits_cvl_cut <- Map(function(cvl) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = cvl, obs_model = "dm", dm_theta = "saturating", tail_cut = 47), se = FALSE)
+}, cvl_values)
+names(fits_cvl_cut) <- paste0("CVL_", cvl_values, "_cut47")
+
+cvl_table <- data.frame(CVL       = cvl_values,
+                        SPR_no_cut = round(sapply(fits_cvl, sprcur_flicc), 3),
+                        SPR_cut47  = round(sapply(fits_cvl_cut, sprcur_flicc), 3),
+                        row.names = NULL)
+cvl_table
+plot_spr(c(fits_cvl, fits_cvl_cut))
+```
+
+Status is sensitive to CVL because CVL shapes the tail: here SPR ranges
+`r min(cvl_table$SPR_no_cut)`-`r max(cvl_table$SPR_no_cut)` over CVL 0.07-0.13
+without a cut and `r min(cvl_table$SPR_cut47)`-`r max(cvl_table$SPR_cut47)` with a
+cut at 47 cm.
+
+## maxsd and ngtg
+
+The growth groups are placed at $z_h$ on `seq(-maxsd, maxsd, length = ngtg)` with
+normal weights. Truncating the normal at `maxsd` reduces the realised CV of the
+groups below CVL and caps the largest group at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$:
+
+The realised spread can be computed directly from the group positions `z` and
+their normal weights `w`; the factor multiplies CVL:
+
+```{r maxsd-cv}
+z <- seq(-2, 2, length.out = 13)          # maxsd = 2, ngtg = 13 (LBSPR)
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))                        # realised CV factor
+
+z <- seq(-3, 3, length.out = 13)          # maxsd = 3, ngtg = 13 (default)
+w <- dnorm(z) / sum(dnorm(z))
+sqrt(sum(w * z^2))
+
+55.7 * (1 + c(2, 3) * 0.1)                # largest group Linf for maxsd 2 and 3
+```
+
+With the LBSPR default (`maxsd = 2`, 13 groups) the realised CV is about 0.9 x
+CVL; `maxsd = 3` gives almost exactly CVL and allows larger fish. The number of
+groups matters little beyond about 13, and computing time grows with it.
+
+The fits below compare LBSPR's grid with the default and a finer grid
+(`maxsd_values` with matching `ngtg_values`), without and with the tail cut; `Map()` takes the two vectors in
+parallel.
+
+```{r maxsd-sens}
+maxsd_values <- c(2, 3, 3)
+ngtg_values  <- c(13, 13, 19)
+
+fits_maxsd <- Map(function(maxsd, ngtg) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", maxsd = maxsd, ngtg = ngtg), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+fits_maxsd_cut <- Map(function(maxsd, ngtg) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", maxsd = maxsd, ngtg = ngtg,
+                         tail_cut = 47), se = FALSE)
+}, maxsd_values, ngtg_values)
+
+data.frame(maxsd      = maxsd_values,
+           ngtg       = ngtg_values,
+           SPR_no_cut = round(sapply(fits_maxsd, sprcur_flicc), 3),
+           SPR_cut47  = round(sapply(fits_maxsd_cut, sprcur_flicc), 3))
+```
+
+The default is `maxsd = 3, ngtg = 13` (from FLicc 1.0.11; before: LBSPR's
+`maxsd = 2, ngtg = 13`); 19 groups give the same result at about 25% more
+computing time. With `maxsd = 2` the largest group is
+$1.2 L_\infty$ at CVL = 0.1, and fish above it get a near-zero probability:
+each such fish costs about the same in the likelihood. In sensitivity runs
+and Monte Carlo draws with a lower Linf or CVL, this gives steps in the AIC
+and failed refits. `maxsd = 3` extends the groups to $1.3 L_\infty$, and CVL
+is then close to the realised spread, which matters when CVL is taken from
+external growth studies (with `maxsd = 2`, a CVL input of 0.1 corresponds to
+a realised spread of about 0.09). At the input life history the two settings
+usually give similar results. Use `maxsd = 2` to reproduce LBSPR.
+
+## Estimating Linf, M/k and CVL with priors
+
+By default growth and natural mortality are fixed. `linf.sd`, `Mk.sd` and
+`CVL.sd` estimate them with normal priors on the log scale around the inputs:
+$$
+\log L_\infty \sim N(\log L_\infty^{in}, \texttt{linf.sd}^2), \quad
+\log (M/k) \sim N(\log (M/k)^{in}, \texttt{Mk.sd}^2), \quad
+\log \mathrm{CVL} \sim N(\log \mathrm{CVL}^{in}, \texttt{CVL.sd}^2),
+$$
+so each sd is approximately a CV (e.g. `linf.sd = 0.05`: about ±10% at 95%).
+
+The fit below estimates all three with priors. The estimates are on the log
+scale: $L_\infty$ = `exp(log_Linf)`, $M/k$ = `exp(log_Mk)` and CVL =
+`1 / sqrt(exp(log_Galpha))`; the column `se` is approximately the posterior CV
+(for `log_Galpha` divide by 2).
+
+```{r priors, fig.height = 4}
+fit_pri <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating",
+                                  linf.sd = 0.05, Mk.sd = 0.1, CVL.sd = 0.25))
+
+est <- fit_pri$par[fit_pri$par$par %in% c("log_Linf", "log_Mk", "log_Galpha"), ]
+est
+exp(est$mpd[est$par == "log_Linf"])            # Linf (input 55.7)
+exp(est$mpd[est$par == "log_Mk"])              # M/k  (input 0.162 / 0.08 = 2.03)
+1 / sqrt(exp(est$mpd[est$par == "log_Galpha"])) # CVL  (input 0.1)
+
+plot_spr(list(fixed = fit, priors = fit_pri), ci = TRUE)
+```
+
+```{r priors-numbers, include = FALSE}
+pp <- function(nm, col = "mpd") est[[col]][est$par == nm][1]
+```
+
+Here the length data pull Linf up to about `r round(exp(pp("log_Linf")), 1)`
+(posterior CV `r round(pp("log_Linf", "se"), 3)` against a prior CV of 0.05), and
+because a larger Linf means the fish in the catch are relatively younger, SPR
+drops markedly. The posterior CVs of M/k and CVL stay close to their prior CVs:
+the data say little about them. A shift of this size in Linf is a finding to
+check against growth studies, not a result to accept; run the assessment with
+Linf fixed at the alternative values as a sensitivity.
+
+Notes:
+
+- **k** is not estimated separately: the length model depends on M/k (and Z/k), so
+  uncertainty in k and M is expressed through `Mk.sd`. k still sets the time scale
+  of the annual F estimates (F is estimated as F/k).
+- Length data carry limited information on Linf and CVL, and both are confounded
+  with dome-shaped selectivity and the tail; a posterior CV close to the prior CV
+  means the data are uninformative. Large moves away from the input (several prior
+  SDs) indicate a conflict between the data and the life history, to be
+  investigated rather than accepted.
+- For ensembles, drawing the life-history parameters and keeping them fixed in
+  each fit (`mc_flicc()`) is usually better behaved than estimating them.

@@ -1,0 +1,110 @@
+<!-- needs: 12_sample_size -->
+# Model equations and comparison of models
+
+## Fishing mortality and total mortality
+
+$F_{g,y}(L) = F_{g,y} S_g(L)$, $Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Gear shares of F
+are informed by `catch_by_gear` through a soft constraint on the predicted
+catch shares (`catch.sd`, default 0.05), in weight by default:
+$$
+\log\frac{\hat C^w_{g,y}}{\hat C^w_{G,y}} \sim N\!\left(\log\frac{c_{g,y}}{c_{G,y}},\ \texttt{catch.sd}^2\right),
+\qquad \hat C^w_{g,y} = \sum_L C_{g,y}(L)\, W(L),
+$$
+where $c_{g,y}$ is `catch_by_gear` and $G$ the last gear. The predicted shares
+are in `fit$report$catch_share`. With `settings$catch_units = "numbers"` the
+shares are compared in numbers, $\hat C_{g,y} = \sum_L C_{g,y}(L)$, as in
+fishblicc (Medley 2025); use this when the catch split is known in numbers.
+
+## Expected catch and length composition
+
+FLicc separates the **population model** (expected numbers at length under
+growth, M, F and selectivity) from the **observation model** (the likelihood
+that links the observed counts to the expected composition), so either can be
+changed without the other. With $N_i$ the expected number of fish entering
+length bin $i$, the expected catch of gear $g$ in bin $i$ is
+$$
+C_{i,g} = \frac{F_{i,g}}{Z_i}\left(N_i - N_{i+1}\right), \qquad Z_i = M_i + \sum_g F_{i,g},
+$$
+and the expected composition of gear $g$ is $\pi_{i,g} = C_{i,g} / \sum_i C_{i,g}$.
+
+## Population model
+
+`pop_model = "gtg"` (default, as LBSPR): growth-type groups
+$L_{\infty,h} = L_\infty(1 + \mathrm{CVL}\, z_h)$, $z_h$ on
+`seq(-maxsd, maxsd, length = ngtg)` (13 groups, `maxsd = 2`), weights
+$\omega_h \propto \phi(z_h)$. Within a group, survival across bin $i$ follows from
+the time needed to grow through it under von Bertalanffy growth:
+$$
+N_{i+1,h} = N_{i,h}\left(\frac{L_{\infty,h} - L_{i+1}}{L_{\infty,h} - L_i}\right)^{Z_i/k},
+\qquad N_i = \sum_h \omega_h N_{i,h}.
+$$
+
+`pop_model = "gamma"` follows fishblicc: Linf is gamma-distributed among
+individuals, and the numbers at length integrate survival over that distribution,
+$$
+N_i = \int f(L_\infty)\, S_i(L_\infty)\, dL_\infty ,
+$$
+evaluated by Gauss-Laguerre quadrature (slower). Both are equilibrium models:
+each year is explained by the equilibrium at that year's F (section *Lag under
+changing F* on the consequences).
+
+## Observation model
+
+For gear $g$ in year $y$, with counts $\mathbf y_{g,y}$ and total $n_{g,y}$:
+
+- `obs_model = "mn"` (default): $\mathbf y_{g,y} \sim \text{Multinomial}(n_{g,y}, \boldsymbol\pi_{g,y})$.
+- `"nb"`: $y_{i,g,y} \sim \text{NB}(\mu, \phi)$ with $\mu = n_{g,y}\pi_{i,g,y}$ and
+  $\text{Var} = \mu + \mu^2/\phi$; $\phi$ is estimated.
+- `"dm"`: $\mathbf y_{g,y} \sim \text{Dirichlet-multinomial}(n_{g,y}, \alpha_0 \boldsymbol\pi_{g,y})$
+  with $\alpha_0 = n_{g,y}$ (`dm_theta = "fixed"`) or estimated (`"linear"`,
+  `"saturating"`).
+
+How the sample size enters each of them is explained in section *Effective
+sample size and observation models*; the models are compared on the same data
+below.
+
+## Comparison of models
+
+The population model (`gtg` or `gamma`) and the observation model (`mn`, `dm`,
+`nb`) can be combined freely. The four fits below differ only in these two
+settings; `Map()` runs one fit per list of settings.
+
+```{r model-compare, fig.height = 4}
+model_settings <- list(
+  gtg_mn   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "mn"),
+  gtg_dm   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "dm", dm_theta = "saturating"),
+  gtg_nb   = list(CVL = 0.1, pop_model = "gtg",   obs_model = "nb"),
+  gamma_nb = list(CVL = 0.1, pop_model = "gamma", obs_model = "nb"))   # as fishblicc
+
+fits_model <- Map(function(set) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+}, model_settings)
+
+data.frame(model    = names(fits_model),
+           SPR_last = round(sapply(fits_model, sprcur_flicc), 3),
+           se_log   = round(sapply(fits_model, se_logspr), 3),
+           row.names = NULL)
+plot_spr(fits_model, ci = TRUE)
+```
+
+The gamma model integrates over Linf numerically and is slower:
+
+```{r model-time}
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = model_settings$gtg_nb))
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = model_settings$gamma_nb))
+```
+
+Log-likelihoods and AIC are not comparable between observation models (they are
+likelihoods of different things); compare the estimates, their precision and the
+fit to the compositions (`plot_len`). Differences between `gtg` and `gamma` show
+the sensitivity to the approximation of growth variability, differences between
+`mn`, `dm` and `nb` the weight and robustness given to the compositions.
+
+| Purpose | `pop_model` | `obs_model` | Comment |
+|---|---|---|---|
+| Routine assessment, MSE | `"gtg"` | `"dm"` | fast; robust with real data |
+| LBSPR-style | `"gtg"` | `"mn"` | fastest; sensitive to the ESS; LBSPR fits each year separately (`by_year = TRUE`) with Linf, M/k and CVL fixed |
+| LBB | `"gtg"`, `ngtg = 1` | `"dm"`, fixed precision | `lbb_flicc()`; [Reproducing LBB](#repro-lbb) |
+| fishblicc replication | `"gamma"` | `"nb"` | slower; closest to fishblicc |

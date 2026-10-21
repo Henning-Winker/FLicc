@@ -1,0 +1,60 @@
+---
+title: "FLicc user guide: chapter preview"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    math_method: mathml
+params:
+  chapters: "08_fitting"
+---
+
+<!--
+Renders single chapters of the user guide, for a quick check while editing:
+
+  rmarkdown::render("inst/guide/preview.Rmd",
+                    params = list(chapters = "07_selectivity, 10_single_year"))
+
+The data, life history and reference fit come from the chapters 03_quick_start
+and 04_workflow, which are run silently first, together with any chapter named
+in a "<!- - needs: ... - ->" line at the top of a previewed chapter.
+-->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.align = "center",
+                      fig.width = 7, fig.height = 4.5, message = FALSE, warning = FALSE)
+```
+
+```{r preview-setup, include = FALSE}
+chapter_file <- function(x) file.path("chapters", paste0(sub("\\.Rmd$", "", x), ".Rmd"))
+needs_of <- function(x) {
+  l <- readLines(chapter_file(x), n = 3, warn = FALSE)
+  m <- regmatches(l, regexpr("needs:[^>]*", l))
+  if (!length(m)) return(character())
+  trimws(strsplit(sub("-+$", "", sub("needs:", "", m)), ",")[[1]])
+}
+show <- trimws(strsplit(params$chapters, ",")[[1]])
+show <- sub("\\.Rmd$", "", show)
+deps <- character()
+repeat {
+  add <- setdiff(unlist(lapply(c(show, deps), needs_of)), c(show, deps))
+  if (!length(add)) break
+  deps <- c(deps, add)
+}
+base <- c("03_quick_start", "04_workflow")
+hidden <- setdiff(unique(c(base, sort(deps))), show)
+# run the code of the hidden chapters silently (no output)
+for (f in hidden) {
+  tmp <- tempfile(fileext = ".R")
+  knitr::purl(chapter_file(f), output = tmp, quiet = TRUE, documentation = 0)
+  source(tmp, local = knitr::knit_global())
+}
+show_files <- chapter_file(show)
+```
+
+*Preview of `r paste(show, collapse = ", ")`; run silently before:
+`r paste(hidden, collapse = ", ")`.*
+
+```{r preview, child = show_files}
+```

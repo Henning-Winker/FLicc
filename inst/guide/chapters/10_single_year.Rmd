@@ -1,0 +1,199 @@
+# Sensitivity runs and ensembles: a single year
+
+Many assessments have length data for one year only. FLicc then fits that
+year (`years =`), and the uncertainty about the assumptions comes from
+**sensitivity runs**: the same data refitted with one assumption changed at a
+time. `fits_summary()` gives one table for a list of fits, and
+`ensemble_flicc()` combines them into one estimate of SPR.
+
+The reference fit and the sensitivity runs for the last year of the alfonsino
+data: the gillnet with a dome (right-hand SD fixed at 0.85, 0.7 and 0.55 x
+Linf), CVL 0.08 and 0.12, and Linf +/- 10%. `lapply()` runs one fit per value.
+
+**Observation model for a single year: the multinomial.** The fits use
+`obs_model = "mn"`. The Dirichlet-multinomial with estimated precision
+(`dm_theta = "saturating"`, the default) estimates how much more variable the
+compositions are than a multinomial sample of the same size, from the misfit
+that remains after the fit. With one year that is one composition per gear: the
+selectivity and F of each gear are fitted to that same composition, little
+misfit is left over, and nothing shows overdispersion. The precision then runs
+to its upper bound (FLicc reports this), the likelihood is flat in it, and the
+convergence check fails (Hessian not positive definite). Over many years the
+variation between years informs the precision; for one year it is not
+estimable. For a single year, use
+
+- `obs_model = "mn"` with a moderate effective sample size (`lfdess()`, about
+  150-200 per gear, or in proportion to the number of samples, e.g. landings);
+  raw counts of thousands of fish give intervals that are too narrow; or
+- `obs_model = "dm"` with `dm_theta = "fixed"` (no precision to estimate;
+  effective sample size about half the input); or
+- with several gears in the same year, the estimated precision may work with
+  `dm_shared = TRUE` (one precision for all gears), as there are then several
+  compositions per precision parameter.
+
+```{r one-year-fits}
+yr <- 2024
+set_ref <- list(CVL = 0.1, obs_model = "mn", FM_max = 4)
+
+fit1 <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+               settings = set_ref, years = yr)
+
+rsd <- c(dome_0.85 = 47, dome_0.7 = 39, dome_0.55 = 31)       # x Linf = 55.7
+dome_runs <- lapply(rsd, function(r)
+  fiticc(lfd, stklen, sel_fun = c("dsnormal", "dsnormal"), catch_by_gear = cbg,
+         settings = set_ref, years = yr, sel_fixed = list(Gillnet = list(rsd = r))))
+
+cvl <- c(CVL_0.08 = 0.08, CVL_0.12 = 0.12)
+cvl_runs <- lapply(cvl, function(cv)
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = modifyList(set_ref, list(CVL = cv)), years = yr))
+
+linf <- c(Linf_50 = 50.1, Linf_61 = 61.3)
+linf_runs <- lapply(linf, function(li) {
+  lh <- lhpar; lh["linf"] <- li
+  fiticc(lfd, stocklen(lfd, lh, m_model = "constant"), sel_fun = sel_fun,
+         catch_by_gear = cbg, settings = set_ref, years = yr)
+})
+
+runs1 <- c(list(reference = fit1), dome_runs, cvl_runs, linf_runs)
+tab1 <- fits_summary(runs1)
+tab1
+```
+
+**Residuals of a single year.** With one year, the residuals by length are the
+residual plot (a bubble plot collapses to one column). Pearson and OSA
+residuals of the reference fit:
+
+```{r resid-singleyr, fig.height = 3.5}
+plot_resid_len(fit1, type = "pearson")
+plot_resid_len(fit1, type = "osa")
+```
+
+A run of residuals of one sign over several bins, in both types, means the
+model cannot follow the composition at those lengths. With a single year it is
+not possible to tell a year class from a selectivity misfit: both leave the
+same pattern in one composition. The multi-year fit can separate them (section
+*Residual diagnostics*). Residuals of a fit to one year also tend to be smaller
+than 1 in sd, because the parameters are estimated from the same few data.
+
+
+
+`fits_summary()` gives, for each run, the convergence (`conv`), SPR with its
+confidence interval, F/M, apical F, Fspr40, current F relative to Fspr40, and
+AIC with dAIC relative to the first run. Use only runs with `conv = "ok"`: a
+run that fails is not a result (a typical failure: F slides to the lower bound
+of F/M and SPR to almost 1, i.e. the composition is explained without fishing).
+`r if (any(tab1$conv != "ok")) paste0("Here ", paste(tab1$run[tab1$conv != "ok"], collapse = ", "), " did not converge and is left out of the ensembles.") else "Here all runs converged."` AIC is
+comparable between the runs because all use the same data and likelihood; a
+change of data (e.g. a tail cut, another ESS) breaks this.
+
+Two ensembles of the converged runs: equal weights, and Akaike weights:
+
+```{r one-year-ensemble, fig.height = 4}
+ok1 <- runs1[tab1$conv == "ok"]
+
+ens_eq  <- ensemble_flicc(ok1, weights = "equal")
+ens_aic <- ensemble_flicc(ok1, weights = "aic")
+ens_eq$members
+ens_aic$members
+rbind(equal = ens_eq$table, aic = ens_aic$table)[, c("year", "spr", "lwr", "upr", "sd_within", "sd_between")]
+plot_ensemble_flicc(ens_eq)
+plot_ensemble_flicc(ens_aic)
+```
+
+With one year, `plot_ensemble_flicc()` shows each member and the ensemble as a
+point with its interval. The two weightings answer different questions:
+
+- **Equal weights** treat the runs as assumptions the data cannot decide
+  between (a dome, Linf, CVL): the ensemble interval adds the spread between
+  the runs (`sd_between`) to the uncertainty within each fit (`sd_within`).
+  This is the usual choice for structural uncertainty.
+- **Akaike weights** let the data decide. Here the AIC differences are small
+  (at most `r round(max(ens_aic$members$dAIC), 1)`), so the weights spread over
+  the runs and favour the domes. With large samples (many fish, or an ESS of
+  500 per gear) AIC differences of 10 or more are common, and the best run then
+  takes almost all the weight: the ensemble becomes a model selection. Use it
+  as a check, and only for runs with the same data and likelihood. Linf in
+  particular is informed mainly by the few largest fish, so AIC weights over
+  Linf follow the tail of the composition rather than growth studies.
+
+The same functions work for several years and for the dome levels of
+`dome_sens_flicc()` (section *Dome sensitivity*).
+
+**One fleet with two size modes.** When catch shares by gear are uncertain,
+or for a quick single-fleet assessment, the gears can be pooled with
+`combine_lfd()` (section *Exploring selectivity shapes*) and fitted as one
+fleet. Its selectivity then has to describe both modes. The runs: logistic,
+`"binormal"`, `"bidsnormal"`, and `"bidsnormal"` with a flat second mode
+(`rsd2 = 1000` fixed). The pooled composition is rescaled to an ESS of 500 and
+shows no overdispersion beyond it, so the Dirichlet-multinomial precision is
+fixed (`dm_theta = "fixed"`); estimated, it runs to its upper bound and the
+fits fail the convergence check:
+
+```{r one-fleet-fits}
+
+fit2gear <-fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+
+lfd_fleet <- combine_lfd(lfd, catch_by_gear = c(0.95,0.05) ,
+                         lhpar = lhpar, ess.n = 500)
+
+
+stk_fleet <- stocklen(lfd_fleet, lhpar, m_model = "constant")
+
+
+
+
+fleet_fun <- c(logistic = "logistic", binormal = "binormal",
+               bidsnormal = "bidsnormal", bidsnormal_flat = "bidsnormal")
+fleet_fix <- list(NULL, NULL, NULL, list(fleet = list(rsd2 = 1000)))
+
+set_fleet <- modifyList(set_ref, list(dm_theta = "fixed"))
+
+fleet_runs <- Map(function(fun, fix) {
+  fiticc(lfd_fleet, stk_fleet, sel_fun = fun, catch_by_gear = 1,
+         settings = set_fleet, sel_fixed = fix)
+}, fleet_fun, fleet_fix)
+
+tab_fleet <- fits_summary(c(list(ref2gear=fit2gear),fleet_runs))
+tab_fleet
+plot_compare_sel(fleet_runs)
+```
+
+```{r one-fleet-len, fig.height = 3.5}
+ok_fleet   <- tab_fleet$conv == "ok"
+best_fleet <- if (any(ok_fleet)) tab_fleet$run[ok_fleet][which.min(tab_fleet$AIC[ok_fleet])] else
+  tab_fleet$run[which.min(tab_fleet$AIC)]
+best_fleet
+plot_len(fleet_runs[[best_fleet]])
+```
+
+```{r one-fleet-pars}
+selpars_flicc(fleet_runs$bidsnormal)
+selpars_flicc(fleet_runs$bidsnormal_flat)
+```
+
+AIC compares the fleet runs with each other (same pooled data), not with the
+two-gear runs. A logistic curve cannot follow two modes: it reads the decline
+after the first mode as fishing mortality. The free `"bidsnormal"` shows the
+risk of six parameters on one year of data: its right limb runs to a very large
+SD (`rsd2` of
+`r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal)[[1]]["rsd2"]))` cm), a flat
+direction of the likelihood, and the fit fails. With `rsd2 = 1000` fixed
+(`bidsnormal_flat`) the same shape converges: a first mode at about
+`r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal_flat)[[1]]["mode1"]))` cm and,
+from about `r round(as.numeric(selpars_flicc(fleet_runs$bidsnormal_flat)[[1]]["mode2"]))` cm,
+a plateau at the relative height `h`: the larger fish are retained at a
+constant, lower level. A near-zero `lsd2` (a step up to the plateau instead of a
+second mode) is typical when the data show no separate second mode; check
+`selpars_flicc()` and `plot_compare_sel()` before using a two-mode fit.
+`"binormal"` converges, but its SPR interval is wide.
+
+SPR of the pooled runs spans
+`r round(min(tab_fleet$SPR), 3)` to `r round(max(tab_fleet$SPR), 3)`, against
+`r round(tab1$SPR[1], 3)` for the two-gear reference: with one fleet, the
+selectivity curve and F share the information in one composition, and the
+shape chosen for the large-fish mode decides how much of the decline is
+attributed to fishing. The two-gear fit is preferable where the catch shares
+are known: it keeps the selectivity of each gear, while pooling assumes that
+each gear's sample represents its catch.

@@ -1,0 +1,73 @@
+# FLicc: a framework for length-interval catch curves
+
+FLicc fits **length-interval catch curves (ICC)**: equilibrium models that
+explain the length composition of the catch by growth, natural mortality,
+fishing mortality and selectivity, integrated over length intervals (bins).
+It brings the two main lines of length-based per-recruit assessment into one
+framework, built on FLR (Kell et al. 2007) and fitted with TMB (Kristensen et
+al. 2016):
+
+- **fishblicc** (Medley 2025), whose
+  formulation FLicc follows most closely: steady-state length-interval
+  survival with individual Linf gamma-distributed around the von Bertalanffy
+  mean, constant mortality within each length interval, several gears with
+  their own selectivity (logistic, normal and double-sided normal), and a
+  negative-binomial likelihood. FLicc's `pop_model = "gamma"` with
+  `obs_model = "nb"` reproduces this setup ([Reproducing fishblicc](#repro-fishblicc));
+  FLicc fits it by maximum likelihood in TMB instead of Bayesian estimation in
+  Stan.
+- **LBSPR** (Hordyk et al. 2015, 2016), whose growth-type-group (GTG)
+  formulation is FLicc's default population model (`pop_model = "gtg"`): Linf
+  varies between growth-type groups, each with its own survival through the
+  length classes, and status is expressed as the spawning potential ratio.
+- **LBB** (Froese et al. 2018), the length-based Bayesian biomass estimator,
+  which is nested in the GTG model: one growth type, one gear, each year
+  fitted separately, with priors on Linf and M/K. `lbb_flicc()` sets FLicc up
+  as LBB, and LBB's status measure B/B0 (exploited biomass relative to
+  unfished) is available for any FLicc fit as the exploitable potential ratio
+  (EPR; [Reproducing LBB](#repro-lbb)).
+
+Each of these tools is a configuration of FLicc:
+
+| Tool | FLicc configuration |
+|---|---|
+| [LBSPR](#repro-lbspr) | `pop_model = "gtg"` (`ngtg = 13`, `maxsd = 2`, CVL 0.1), `obs_model = "mn"`, Linf, M/k and CVL fixed, `by_year = TRUE` |
+| [LBB](#repro-lbb) | `lbb_flicc()`: `pop_model = "gtg"` with `ngtg = 1`, `obs_model = "dm"` (fixed precision; `ess = 20000` matches LBB's Dirichlet), priors on Linf and M/k, `by_year = TRUE`, `pile = 0` or `1` |
+| [fishblicc](#repro-fishblicc) | `pop_model = "gamma"`, `obs_model = "nb"`, several gears, catch shares in numbers |
+| FLicc default | `pop_model = "gtg"`, `obs_model = "dm"` with the precision estimated (`dm_theta = "saturating"`), all years jointly with a random walk on F |
+
+Each configuration is reproduced on the tool's own example data, and compared
+with FLicc's default, in section [Reproducing LBSPR, LBB and
+fishblicc](#reproduce).
+
+On this common basis FLicc adds what a routine assessment and management
+procedure needs: several years fitted jointly with shared selectivity and a
+random walk on F, alternative observation models (multinomial,
+Dirichlet-multinomial with estimated precision, negative binomial), treatment
+of the tail of the composition, reference points with steepness, length-based
+indicators, residual diagnostics, and use as the estimation model of an MSE in
+FLR.
+
+The names of the models and options in FLicc credit these sources: fishblicc
+for the length-interval catch-curve formulation, multi-gear selectivity and the
+gamma growth model; LBSPR for the GTG model and the SPR-based use of length
+data in data-limited fisheries; LBB for the single-growth-type special case,
+its priors and the B/B0 status measure.
+
+## About this guide
+
+The guide is in three parts. **Part I** goes through an assessment from the
+data to stock status: length-frequency data (including missing data), life
+history, selectivity, fitting and diagnostics, reference points and status, and
+length-based indicators, with explicit **checks** at each step (what to look
+at, what is a red flag, what to do about it). **Part II** documents the
+technical options for users who need them: effective sample size and
+observation models, fishing mortality over time, growth variability and
+life-history priors, the tail of the composition, the model equations and a
+comparison of models, and the reproduction of LBSPR, LBB and fishblicc. **Part III** covers
+use in management-strategy evaluation and summarises the checks and
+recommendations. The examples use the built-in splendid alfonsino data.
+Recommendations marked *simulation* come from tests with an alfonsino-like
+operating model (fixed-CV length-at-age, annual recruitment, Beverton-Holt
+h = 0.75, two gears, two-stage length sampling). Monte-Carlo ensembles over
+life-history uncertainty (`mc_flicc()`) will be documented separately.

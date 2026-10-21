@@ -1,0 +1,32 @@
+# Workflow and defaults
+
+1. **Data**: length frequencies by gear as `FLQuants` (Quick start); check sample sizes, gaps and the tail.
+2. **Life history**: `FLPar` and `stocklen()`; check Linf against the largest fish.
+3. **Selectivity**: choose the shape per gear; dome sensitivity.
+4. **Fit**: `fiticc()`; check convergence, residuals, selectivity and retrospective consistency.
+5. **Status**: SPR, Fspr, steepness-corrected biomass, length-based indicators.
+6. **Uncertainty**: sensitivity runs (selectivity dome, CVL, Linf, tail cut), `fits_summary()` and `ensemble_flicc()`.
+7. **Management**: `flicc.sa()` and harvest control rules in an MSE.
+
+A plain `fiticc()` call uses the GTG population model, a Dirichlet-multinomial
+likelihood with the precision estimated from the data, fixed growth (Linf, CVL)
+and natural mortality, and a random walk on log F with its standard deviation
+fixed at `sigmaF = 0.3`. Give it the raw counts or an effective sample size of at
+least 500 per gear and year. Every other option is a deliberate change.
+
+## The reference fit
+
+The rest of the guide uses one reference fit of the alfonsino data: the raw
+counts, a double-sided normal (dome) selectivity for the trawl and a logistic
+one for the gillnet, catch shares of 95% and 5% by weight, CVL = 0.1, and the
+default Dirichlet-multinomial likelihood with the precision estimated from the
+data (`dm_theta = "saturating"`, section *Effective sample size and observation
+models*; given explicitly below for clarity).
+
+```{r reference-fit}
+sel_fun <- c("dsnormal", "logistic")
+cbg <- c(0.95, 0.05)
+fit <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+              settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+sprcur_flicc(fit)
+```

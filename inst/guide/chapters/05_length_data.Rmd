@@ -1,0 +1,112 @@
+# Part I: Assessment basics {.unnumbered .part}
+
+# Length-frequency data
+
+## Structure
+
+```{r data}
+data("alfonsino")
+lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), unit = "cm", midL = FALSE)
+names(lfd)
+range(as.numeric(dimnames(lfd[[1]])$len)); range(as.numeric(dimnames(lfd[[1]])$year))
+```
+
+`FLQuantLen()` takes a wide table (`lfd_long_to_wide()` converts a long one) with
+columns for length, year, gear and counts; `midL = FALSE` means lengths are lower
+bin boundaries. Bins must be equally spaced and identical across gears and years
+(`complete_lfd_bins()` fills gaps with zeros).
+
+## Check 1: sample size by year and gear
+
+```{r check-n, fig.height = 5}
+plot_lfdn(lfd)
+```
+
+| | |
+|---|---|
+| **Why** | The information in a composition depends on how many independent samples (trips, hauls, landings) it comes from, not only on the number of fish. |
+| **Look for** | Gear-years with very few fish or few occupied bins (labels), years where one gear is missing, strong changes in the gear mix between years. |
+| **Red flags** | Gear-years with < 50 fish or < 10 occupied bins; a gear present only in some years; combined sample size dominated by one gear in some years and another in others. |
+| **Action** | Set effective sample sizes per gear (section *Effective sample size and observation models*); consider dropping or pooling very poor gear-years; check that `catch_by_gear` reflects the catch, not the sampling, split. |
+
+## Check 2: consistency of the compositions
+
+```{r check-lfd, fig.height = 5}
+plot_lfd(lfd, type = "relmax")
+```
+
+| | |
+|---|---|
+| **Look for** | Stable shapes and modes between adjacent years; similar left limbs within a gear (selectivity is assumed constant over time). |
+| **Red flags** | Abrupt shifts in the mode or left limb (change of gear, mesh, market sorting or sampling programme); bimodal compositions from mixing gears or areas; truncation at the right (size limits, sorting). |
+| **Action** | Split gears or periods with different selectivity; restrict `years`; investigate sampling before modelling around it. |
+
+## Check 3: the largest fish
+
+```{r check-tail}
+linf_in <- 55.7
+sapply(lfd, function(x) {
+  L <- as.numeric(dimnames(x)$len); n <- apply(x@.Data, 1, sum)
+  c(max_length = max(L[n > 0]), pct_ge_0.9Linf = round(100 * sum(n[L >= 0.9 * linf_in]) / sum(n), 1),
+    pct_ge_Linf = round(100 * sum(n[L >= linf_in]) / sum(n), 2))
+})
+```
+
+| | |
+|---|---|
+| **Why** | The tail is the part of the composition most sensitive to Linf, CVL, dome-shaped selectivity and the GTG discretisation. |
+| **Red flags** | More than about 1% of fish at or above the input Linf; a long thin tail far beyond Linf (misidentified species, measurement errors, other stocks). |
+| **Action** | Re-examine Linf; use a tail cut (section *Tail of the length composition*) or `rob_eps`; `fiticc()` warns about fish beyond the largest growth group (`tail_warning`, default `TRUE`). |
+
+## Check 4: empirical catch curves
+
+A log-linear catch curve on the length-converted ages gives a quick, model-free
+view of total mortality by year and of its trend:
+
+```{r check-zlcc, fig.height = 5}
+lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859,
+               a = 0.004721956 / 1000, b = 3.146168)
+plot_zlcc(lfd$Trawl, lhpar)
+plot_zlcc(lfd$Gillnet, lhpar)
+```
+
+
+| | |
+|---|---|
+| **Look for** | Roughly linear descending limbs; a stable or smoothly changing slope (Z). |
+| **Red flags** | Strongly curved descending limbs (dome-shaped selectivity, recruitment pulses), slopes jumping between years (sampling noise or changing selectivity). |
+| **Action** | Consider `dsnormal` selectivity or a tail cut; expect noisy annual F and keep the random walk. |
+
+## Missing data
+
+FLicc handles missing gear-years directly: a gear-year without samples (all zero
+counts) contributes nothing to the composition likelihood, and its F is
+informed by the random walk on F from neighbouring years (section *Fishing
+mortality over time*) and by the catch-share constraint. The example removes
+the gillnet samples of 2016 and 2017 and the trawl samples of 2020 and refits
+the reference model.
+
+```{r missing}
+lfd_miss <- lfd
+lfd_miss[["Gillnet"]][, c("2016", "2017","2022")] <- 0
+lfd_miss[["Trawl"]][, c("2020","2022")] <- 0
+fit_miss <- fiticc(lfd_miss, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+flicc_convergence(fit_miss)
+```
+
+```{r missing-plot, fig.height = 4}
+plot_lfdn(lfd_miss)
+plot_spr(list(complete = fit, gaps = fit_miss), ci = TRUE)
+```
+
+Guidelines:
+
+| Situation | Handling |
+|---|---|
+| a gear missing in some years | keep the zeros; the random walk bridges them (intervals widen) |
+| all gears missing in a year | leave the year in (F interpolated) or restrict `years` |
+| long gaps or a gear only at the start or end | consider fitting the gear's period separately; selectivity is assumed constant |
+| no random walk (`prior_sigmaF = FALSE`) | **avoid with gaps**: F of a gear-year without data is not identified |
+| `by_year = TRUE` | fits only years with data; selectivity per year |
+| catch by gear missing | use the average split; it only enters through the catch-share constraint |
