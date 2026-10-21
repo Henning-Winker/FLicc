@@ -9,8 +9,7 @@ fiticc_core(
   stklen,
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
-  settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05, prior_sigmaF = c(log(0.5), 0.3,
-    1)),
+  settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
   years = NULL,
   iter = 1,
   compile = FALSE,
@@ -34,10 +33,11 @@ length-frequency distributions by gear.}
 containing stock and life-history information.}
 
 \item{sel_fun}{Character vector giving the selectivity function for each
-gear. Supported options include \code{"logistic"}, \code{"normal"}, and
-\code{"dsnormal"}.}
+gear. Supported options include \code{"logistic"}, \code{"normal"},
+\code{"dsnormal"}, \code{"binormal"} and \code{"bidsnormal"}.}
 
-\item{catch_by_gear}{Relative catch by gear, in weight (e.g. landings in tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
+\item{catch_by_gear}{Relative catch by gear, in weight (e.g. landings in
+tonnes) unless \code{settings$catch_units = "numbers"}. Can be supplied as a numeric
 vector or as an \code{FLQuants} object.}
 
 \item{settings}{A named list of model settings. Recognized elements are
@@ -65,8 +65,6 @@ free parameter vector after applying any TMB parameter mapping.}
 
 \item{FLRreport}{Logical; if \code{TRUE}, convert reported outputs using
 \code{as_FLQuants()}.}
-
-\item{se}{Logical. If \code{FALSE}, \code{TMB::sdreport()} is skipped.}
 
 \item{newton}{Maximum number of Newton polishing steps (0 = none).}
 }

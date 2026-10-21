@@ -69,7 +69,8 @@ varies by iteration and cycle.}
 one of "constant", "inverse", "Lorenzen", "Gislason".}
 
 \item{settings}{List of fiticc() model settings (pop_model, obs_model,
-ngtg, ...); see ?fiticc.}
+ngtg, tail_cut, ...); see ?fiticc. A \code{tail_cut} (absolute length) is
+applied in the likelihood and, by default, in LBIspr() and LBImean().}
 
 \item{spr, thresh}{Target SPR (\%) for LBIspr() and Ztgt, and the cumulative
 threshold defining LBIspr()'s Lref.}

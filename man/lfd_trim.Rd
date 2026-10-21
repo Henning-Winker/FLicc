@@ -13,7 +13,7 @@ lfd_trim(lfd, Lmin = NULL, Lmax = NULL, verbose = TRUE)
 \item{Lmin}{Smallest length class kept (lower bound, same units as \code{len});
 \code{NULL} keeps all.}
 
-\item{Lmax}{Length classes with lower bound \code{>= Lmax} are removed; \code{NULL}
+\item{Lmax}{Length classes with lower bound \verb{>= Lmax} are removed; \code{NULL}
 keeps all.}
 
 \item{verbose}{Logical; print the number of fish removed by gear.}

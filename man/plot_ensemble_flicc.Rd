@@ -7,14 +7,22 @@
 plot_ensemble_flicc(x, what = c("spr", "brel"), members = TRUE, ref = NULL)
 }
 \arguments{
-\item{x}{Output of \code{ensemble_flicc()}.}
-\item{what}{\code{"spr"} or \code{"brel"} (needs \code{s} in \code{ensemble_flicc()}).}
-\item{members}{Logical; draw the member fits (line width proportional to weight).}
-\item{ref}{Reference lines (default SPR 0.4, 0.2, 0.1 in green, orange, red, as \code{plot_spr()}; for brel 1, 0.5, 0.25 of the target).}
+\item{x}{Output of \code{\link[=ensemble_flicc]{ensemble_flicc()}}.}
+
+\item{what}{\code{"spr"} or \code{"brel"}.}
+
+\item{members}{Logical; draw the member fits.}
+
+\item{ref}{Reference lines (default SPR 0.4, 0.2, 0.1 in green, orange,
+red, as \code{\link[=plot_spr]{plot_spr()}}; for brel 1, 0.5, 0.25 of the target).}
 }
-\value{A \code{ggplot} object.}
+\value{
+A \code{ggplot} object.
+}
 \description{
-Ensemble median and interval of SPR (or B/Btgt) by year, with the member fits as thin lines.
+SPR by year: the ensemble median and interval (ribbon) with the member fits
+as thin lines (line width proportional to the weight). With \code{what = "brel"}
+(needs \code{s} in \code{\link[=ensemble_flicc]{ensemble_flicc()}}) spawning biomass relative to the target.
 With fewer than four years the plot shows error bars instead: each member's
 estimate and interval (labelled with its weight) and the ensemble median and
 interval, one panel per year.

@@ -12,7 +12,8 @@ LBImean(
   spr = 40,
   lc = "sel50",
   nyears = 1,
-  scale_sel = TRUE
+  scale_sel = TRUE,
+  tail_cut = NULL
 )
 }
 \arguments{
@@ -35,6 +36,12 @@ reaches 0.5, which excludes poorly selected small fish as in the ICES
 or a numeric value (single, or named by gear).}
 
 \item{nyears, scale_sel}{Passed to \code{\link[=nf_flicc]{nf_flicc()}} / \code{\link[=fspr_flicc]{fspr_flicc()}}.}
+
+\item{tail_cut}{Upper length limit, as in \code{\link[=LBIspr]{LBIspr()}}: \code{NULL} (default)
+applies the fit's own tail cut (\code{settings$tail_cut}), \code{FALSE} uses all
+bins, a number is an absolute length. Together with \code{lc},
+both the observed and the reference mean length use the bins
+\verb{Lc <= L < Lcut}.}
 }
 \value{
 \emph{FLIndices} of \emph{FLIndexBiomass}, one per gear, with

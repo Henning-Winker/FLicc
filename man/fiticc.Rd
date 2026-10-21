@@ -173,7 +173,7 @@ cost to the optimisation; \code{fspr_flicc()} and \code{LBIspr()}
 reuse them for these targets.}
 \item{\code{FM_min}, \code{FM_max}, \code{FMpen_sd}}{Bounds on
 apical F/M (F at the most selected length over M at that length) by
-year: outside [\code{FM_min}, \code{FM_max}] (defaults 0.05 and 4) a
+year: outside \link{\code{FM_min}, \code{FM_max}} (defaults 0.05 and 4) a
 steep one-sided penalty on log F/M applies; inside there is no
 penalty. \code{FMpen_sd > 0} (default 0.2) switches the bounds on,
 \code{0} off. The lower bound stops F sliding to 0 (SPR = 1) when no
@@ -191,7 +191,7 @@ M/K is \code{Mk * (Linf / L)^Mpow}.}
 
 \item{iter}{Iteration of \code{lfd} and \code{stklen} to fit.}
 
-\item{compile,dll}{Compile the TMB template (\code{FALSE}, default, uses
+\item{compile, dll}{Compile the TMB template (\code{FALSE}, default, uses
 the compiled package library \code{dll}).}
 
 \item{silent}{Logical; suppress TMB tracing output.}
@@ -219,7 +219,7 @@ same form.}
 
 \item{FLRreport}{Logical; return reported quantities as \code{FLQuants}.}
 
-\item{safe_fit,refit_GL}{For \code{pop_model = "gamma"}: refit with
+\item{safe_fit, refit_GL}{For \code{pop_model = "gamma"}: refit with
 \code{refit_GL} quadrature nodes if the gradient check fails.}
 
 \item{n_restart}{Integer. Number of automatic optimizer restarts from the
@@ -289,17 +289,17 @@ Effective sample size is taken directly from the observed LFD
 overdispersion.
 \item \code{"dm"} (default): Dirichlet-multinomial likelihood for
 overdispersed compositions, with the precision estimated
-(\code{dm_theta = "saturating"}); use raw counts or an effective sample size
-of at least 500.
+(\code{dm_theta = "saturating"}) so that the data set their own
+weight; use raw counts or an effective sample size of at least 500.
 }
 }
 
 The default model (\code{pop_model = "gtg"}, \code{obs_model = "dm"} with
 estimated precision, all years jointly with a random walk on F) is FLicc's
 recommended configuration. LBSPR corresponds to \code{obs_model = "mn"} with
-Linf, M/k and CVL fixed and each year fitted separately (\code{by_year = TRUE});
-LBB to \code{lbb_flicc()}; fishblicc to \code{pop_model = "gamma"},
-\code{obs_model = "nb"}.
+Linf, M/k and CVL fixed and each year fitted separately
+(\code{by_year = TRUE}); LBB to \code{lbb_flicc()}; fishblicc to
+\code{pop_model = "gamma"}, \code{obs_model = "nb"}.
 }
 \examples{
 \dontrun{

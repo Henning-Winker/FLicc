@@ -2,19 +2,16 @@
 % Please edit documentation in R/flicc_resid.R
 \name{plot_resid_qq}
 \alias{plot_resid_qq}
-\title{QQ plot of residuals by gear}
+\title{QQ plot of OSA residuals by gear}
 \usage{
 plot_resid_qq(x)
 }
 \arguments{
-\item{x}{Output of \code{resid_flicc()} or a fitted FLicc object (OSA residuals are computed).}
+\item{x}{Output of \code{\link[=resid_flicc]{resid_flicc()}} with \code{type = "osa"}, or a fitted FLicc object.}
 }
-\value{A \code{ggplot} object.}
+\value{
+A \code{ggplot} object.
+}
 \description{
-Normal QQ plot of the residuals by gear; use OSA residuals, which are N(0,1) under a correct model.
-}
-\examples{
-\dontrun{
-plot_resid_qq(fit)
-}
+QQ plot of OSA residuals by gear
 }

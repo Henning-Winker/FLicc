@@ -8,15 +8,45 @@ resid_flicc(fit, type = c("pearson", "osa"), seed = 1)
 }
 \arguments{
 \item{fit}{A fitted FLicc object.}
+
 \item{type}{\code{"pearson"} or \code{"osa"}.}
+
 \item{seed}{Random seed for the randomization of the OSA residuals.}
 }
-\value{A data frame with gear, year, len, lmid, obs, exp (n p), n and resid.}
+\value{
+A data frame with gear, year, len (lower bound of the bin), lmid,
+obs, exp (expected count n p), n (sample size of the composition) and
+resid.
+}
 \description{
-Residuals of the observed length compositions by gear, year and bin, consistent with the likelihood (effective sample size, observation model, tail cut, plus group). \code{"pearson"}: (o - n p)/sqrt(V) with the variance of the observation model (multinomial n p (1-p); Dirichlet-multinomial the same times (n + alpha0)/(1 + alpha0), alpha0 = n; negative binomial mu + mu^2/phi). \code{"osa"}: one-step-ahead randomized quantile (PIT) residuals from the decomposition into conditional binomials (multinomial) or beta-binomials (Dirichlet-multinomial), independent N(0,1) under a correct model (Trijoulet et al. 2023, Fisheries Research 257: 106487); the last bin of each composition has no residual; counts are rounded to integers for this step.
+Computes residuals of the observed length compositions by gear, year and
+length bin, consistent with the likelihood of the fit (effective sample
+size, observation model, tail cut and plus group).
+}
+\details{
+\itemize{
+\item \code{type = "pearson"}: \eqn{(o - n p) / \sqrt{V}}, with the variance of the
+observation model: \eqn{V = n p (1 - p)} (multinomial), the same multiplied
+by \eqn{(n + \alpha_0)/(1 + \alpha_0)} with the precision \eqn{\alpha_0}
+of the fit (Dirichlet-multinomial; \eqn{\alpha_0 = n} unless \code{dm_theta} is
+estimated), or \eqn{\mu + \mu^2/\phi} with \eqn{\mu = n p}
+(negative binomial). Pearson residuals of a composition are correlated
+(they sum to about zero) and are not normal for small expected counts;
+they are best read in bubble plots.
+\item \code{type = "osa"}: one-step-ahead (randomized quantile, PIT) residuals. The
+composition is decomposed along increasing length into conditional
+binomials (multinomial) or beta-binomials (Dirichlet-multinomial); each
+observed count gives \eqn{u = F(o-1) + v [F(o) - F(o-1)]}, \eqn{v \sim U(0,1)},
+and \eqn{r = \Phi^{-1}(u)}. Under a correct model the residuals are
+independent standard normal (Trijoulet et al. 2023, Fisheries Research
+257: 106487). The last bin of each composition is determined by the others
+and has no residual. Counts are rounded to integers for this step. For the
+negative binomial (independent bins) the PIT residual of each bin is used.
+}
 }
 \examples{
 \dontrun{
 r <- resid_flicc(fit, type = "osa")
+qqnorm(r$resid); qqline(r$resid)
 }
 }

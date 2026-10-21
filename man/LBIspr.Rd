@@ -4,7 +4,15 @@
 \alias{LBIspr}
 \title{Gear-specific length-based indicator relative to Fspr reference}
 \usage{
-LBIspr(fit, gear = NULL, spr = 40, thresh = 0.75, nyears = 1, scale_sel = TRUE)
+LBIspr(
+  fit,
+  gear = NULL,
+  spr = 40,
+  thresh = 0.75,
+  nyears = 1,
+  scale_sel = TRUE,
+  tail_cut = NULL
+)
 }
 \arguments{
 \item{fit}{fitted flicc_tmb_fit object}
@@ -18,9 +26,18 @@ LBIspr(fit, gear = NULL, spr = 40, thresh = 0.75, nyears = 1, scale_sel = TRUE)
 \item{nyears}{number of terminal years to average}
 
 \item{scale_sel}{logical; passed to nf_flicc}
+
+\item{tail_cut}{Length bins used for the reference and observed
+proportions: \code{NULL} (default) applies the fit's own tail cut
+(\code{settings$tail_cut} in \code{\link[=fiticc]{fiticc()}}), so the indicator uses the same
+bins as the likelihood; \code{FALSE} uses all bins; a number is an absolute
+length (bins with lower bound \verb{>= tail_cut} are excluded), as in
+\code{\link[=fiticc]{fiticc()}}.}
 }
 \value{
-\emph{FLIndices} with \emph{FLIndexBiomass}
+\emph{FLIndices} with \emph{FLIndexBiomass}. Attributes \code{"Lref"} (threshold
+length by gear), \code{"LFDref"} and \code{"Lcut"} (first excluded length, \code{NA}
+if no cut).
 }
 \description{
 Computes a gear-specific length-based indicator by comparing the observed

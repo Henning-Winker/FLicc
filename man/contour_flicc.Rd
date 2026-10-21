@@ -4,34 +4,65 @@
 \alias{contour_flicc}
 \title{Yield and spawning-potential surfaces over selectivity, F and F shares}
 \usage{
-contour_flicc(fit, gear = NULL, view = c("fleet", "gear", "share"), n = 40,
-  Fmax = NULL, Lrange = NULL, nyears = 1)
+contour_flicc(
+  fit,
+  gear = NULL,
+  view = c("fleet", "gear", "share"),
+  n = 40,
+  Fmax = NULL,
+  Lrange = NULL,
+  nyears = 1
+)
 }
 \arguments{
-\item{fit}{A fitted FLicc object (from \code{fiticc()}, with \code{FLRreport = TRUE}).}
+\item{fit}{A fitted FLicc object (from \code{\link[=fiticc]{fiticc()}}, with \code{FLRreport = TRUE}).}
+
 \item{gear}{Gear names (or indices) to compute; default all gears.}
+
 \item{view}{\code{"gear"}, \code{"fleet"} or \code{"share"} (see Details).}
+
 \item{n}{Grid size in each dimension.}
-\item{Fmax}{Upper limit of the F axis; default \code{2 * max(current F, F at SPR 20\%)} along the view's F direction. A single value or one per gear.}
-\item{Lrange}{Range of the selectivity location; default from the first length bin to Linf (not used for \code{view = "share"}).}
+
+\item{Fmax}{Upper limit of the F axis; default \verb{2 * max(current F, F at SPR 20\%)} along the view's F direction. A single value or one per gear.}
+
+\item{Lrange}{Range of the selectivity location; default from the first
+length bin to Linf (not used for \code{view = "share"}).}
+
 \item{nyears}{Number of terminal years for current F, M, weight and maturity.}
 }
-\value{A list of class \code{"flicc_contour"} with \code{surface} (gear, type, F = x-axis value, loc = y-axis value, SPR, YPR, YPRrel), \code{current} (the current state per gear on the same axes, with its current F share \code{Fshare} and catch share \code{Cshare}), \code{view}, \code{Lmat} and \code{linf}.}
+\value{
+A list of class \code{"flicc_contour"} with \code{surface} (data frame: gear,
+type, F = x-axis value, loc = y-axis value, SPR, YPR, YPRrel), \code{current}
+(one row per gear: the current state on the same axes, with the gear's
+current F share \code{Fshare} and catch share \code{Cshare}), \code{view}, \code{Lmat} and
+\code{linf}.
+}
 \description{
-Computes equilibrium yield per recruit (YPR) and SPR over a grid for each gear.
+Computes equilibrium yield per recruit (YPR) and SPR over a grid for each
+gear, in one of three views:
 }
 \details{
 \itemize{
-\item \code{view = "gear"} (default): the gear's apical F (x) against its selectivity location (y; \code{SL50} for logistic, the mode for dome-shaped selectivity, the curve shifted along the length axis with its shape kept). The other gears stay at their current F and selectivity, so the catch split changes along the F axis.
-\item \code{view = "fleet"}: total F (x; sum of the apical F of all gears) with the gears' F shares fixed at their current values, against the gear's selectivity location (y).
-\item \code{view = "share"}: total F (x) against the gear's share of the total F (y, 0-100\%); the rest of the total F is split among the other gears in their current proportions. All selectivities are as fitted.
+\item \code{view = "gear"} (default): the gear's apical F (x) against its selectivity
+location (y; \code{SL50} for logistic, the mode for dome-shaped selectivity,
+the curve shifted along the length axis with its shape kept). The other
+gears stay at their current F and selectivity, so the catch split changes
+along the F axis.
+\item \code{view = "fleet"}: total F (x; sum of the apical F of all gears) with the
+gears' F shares fixed at their current values, against the gear's
+selectivity location (y). The other gears keep their selectivity.
+\item \code{view = "share"}: total F (x) against the gear's share of the total F (y,
+0-100\%); the rest of the total F is split among the other gears in their
+current proportions. All selectivities are as fitted.
 }
-Life history, growth-type groups and natural mortality are those of the fit.
+
+Life history, growth-type groups and natural mortality are those of the fit;
+current values are means of the last \code{nyears}.
 }
 \examples{
 \dontrun{
-plot_contour_flicc(contour_flicc(fit))
-plot_contour_flicc(contour_flicc(fit, view = "fleet"))
-plot_contour_flicc(contour_flicc(fit, view = "share"))
+plot_contour_flicc(contour_flicc(fit))                     # one gear changes
+plot_contour_flicc(contour_flicc(fit, view = "fleet"))     # total F, shares fixed
+plot_contour_flicc(contour_flicc(fit, view = "share"))     # total F x F share
 }
 }

@@ -16,7 +16,7 @@ Default is \code{20}.}
 in \code{mc$spr} are used.}
 
 \item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
-  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
+(unweighted ensemble of the retained refits); see \code{\link[=mc_aic_weights]{mc_aic_weights()}}.}
 }
 \value{
 A data frame with columns \code{year}, \code{mle}, \code{mean_uw},

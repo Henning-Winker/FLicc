@@ -45,10 +45,10 @@ than two percent of the yearly maximum density. Default is \code{0.01}.}
 from \code{mc$fit$spr}.}
 
 \item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
-  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
+(unweighted ensemble of the retained refits); see \code{\link[=mc_aic_weights]{mc_aic_weights()}}.}
 
 \item{ref}{SPR reference lines (default 0.4, 0.2, 0.1 in green, orange,
-red, as \code{plot_spr()}); \code{NULL} for none.}
+red, as \code{\link[=plot_spr]{plot_spr()}}); \code{NULL} for none.}
 }
 \value{
 A \code{ggplot} object.

@@ -22,27 +22,7 @@ lbi.hcr(
   n2 = 3,
   output = "catch",
   spr_trigger = 0.1,
-  ...
-)
-
-lbi.hcr(
-  stk,
-  ind,
-  args,
-  tracking,
-  gear = "SPR",
-  b1 = 0.1,
-  b2 = 0.3,
-  b3 = 0.5,
-  b4 = 0.75,
-  dlow = -0.2,
-  dopt = 0,
-  dhi = 0.15,
-  nyrs = 1,
-  n1 = 2,
-  n2 = 3,
-  output = "catch",
-  spr_trigger = 0.1,
+  trend = c("fit", "track"),
   ...
 )
 }
@@ -62,20 +42,16 @@ applied to. NOT "fbar" -- this rule has no F to set.}
 flicc.is() applies its \code{dtaclow}/\code{dtacupp}/\code{Cmax} limits. Default 0.1;
 0 disables the limits.}
 
+\item{trend}{Source of the trend ratio r: \code{"fit"} (default) uses the last
+\code{n1} over the preceding \code{n2} years of the current fit's series;
+\code{"track"} uses the terminal-year values recorded by previous cycles
+(\code{index.hcr} in tracking) plus the current one, which avoids the
+end-of-window noise of refitted assessments. With \code{"track"}, \code{n1} and
+\code{n2} count management cycles, and r = 1 until enough cycles exist.}
+
 \item{...}{Passed through, unused (dispatch compatibility).}
 }
 \description{
-Ports hcr_sprlbi()'s own combined logic -- a recent-trend ratio on a
-length indicator (r_rule()'s "recent n1 years vs prior n2 years" ratio),
-combined with an SPR-based status check (spr_rule()), applied only when
-both point the same direction -- onto flicc.sa()'s own \code{ind} output
-(FLQuants: one element per gear plus "SPR"), returning a \emph{relative}
-multiplicative adjustment to the previous catch/TAC rather than an
-absolute output level. Broadly the shape used by trend-driven empirical
-MPs (e.g. CCSBT's own Bali Procedure): NOT a reproduction of any
-particular stock's tuned gain/trigger constants -- b1-b4/dlow/dhi below
-are spr_rule()'s own defaults and need calibrating against this OM.
-
 Ports hcr_sprlbi()'s own combined logic -- a recent-trend ratio on a
 length indicator (r_rule()'s "recent n1 years vs prior n2 years" ratio),
 combined with an SPR-based status check (spr_rule()), applied only when
@@ -90,10 +66,7 @@ are spr_rule()'s own defaults and need calibrating against this OM.
 \examples{
 \dontrun{
 hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
-hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
-}
-\dontrun{
-hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBIspr.Gillnet"))
+hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "SPR", trend = "track"))
 hcr <- mseCtrl(method = lbi.hcr, args = list(gear = "LBImean.Trawl"))
 }
 }

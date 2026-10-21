@@ -4,22 +4,45 @@
 \alias{plot_resid_bubble}
 \title{Bubble plot of length-composition residuals}
 \usage{
-plot_resid_bubble(x, type = c("pearson", "osa"), cohorts = FALSE, cohort_by = 2, fit = NULL, max_size = 6)
+plot_resid_bubble(
+  x,
+  type = c("pearson", "osa"),
+  cohorts = FALSE,
+  cohort_by = 2,
+  fit = NULL,
+  max_size = 6
+)
 }
 \arguments{
-\item{x}{Output of \code{resid_flicc()} or a fitted FLicc object.}
+\item{x}{Output of \code{\link[=resid_flicc]{resid_flicc()}} or a fitted FLicc object.}
+
 \item{type}{Residual type when \code{x} is a fit.}
-\item{cohorts}{Logical; draw von Bertalanffy cohort tracks (t0 = 0).}
+
+\item{cohorts}{Logical; draw cohort tracks.}
+
 \item{cohort_by}{Years between the cohort tracks.}
-\item{fit}{The fit, needed for cohort tracks when \code{x} is a residual data frame.}
+
+\item{fit}{The fit, needed for the cohort tracks when \code{x} is a residual
+data frame.}
+
 \item{max_size}{Maximum bubble size.}
 }
-\value{A \code{ggplot} object.}
+\value{
+A \code{ggplot} object.
+}
 \description{
-Residuals by length and year, one panel per gear; bubble area proportional to the absolute residual, colour for the sign. Runs of same-signed residuals along cohort tracks indicate year-class strength, which an equilibrium model cannot follow; vertical bands at fixed lengths point to selectivity; misfit of the largest fish in all years to Linf, CVL or doming.
+Residuals by length (y) and year (x), one panel per gear; bubble area is
+proportional to the absolute residual, colour shows the sign. Optional cohort
+tracks (von Bertalanffy growth curves of a few year classes, with
+\eqn{t_0 = 0}) help to recognise cohorts growing through the compositions:
+runs of same-signed residuals along the tracks indicate year-class strength,
+which an equilibrium model cannot follow. Vertical bands at fixed lengths in
+all years point instead to selectivity, misfit in the largest fish in all
+years to Linf, CVL or doming.
 }
 \examples{
 \dontrun{
+plot_resid_bubble(fit)
 plot_resid_bubble(fit, type = "osa", cohorts = TRUE)
 }
 }

@@ -7,6 +7,11 @@
 plot_lbfao(
   fit,
   spr.tgt = 40,
+  ci = TRUE,
+  level = 0.95,
+  ci_style = c("auto", "ribbon", "errorbar"),
+  ci_colour = "black",
+  ci_alpha = 0.25,
   title = "FAO Status",
   line_colour = "black",
   point_colour = "black",
@@ -29,6 +34,17 @@ plot_lbfao(
 \item{spr.tgt}{Numeric SPR target in percent. Default is \code{40}, so the
 plotted quantity is \code{SPR / 0.4}.}
 
+\item{ci}{Logical; draw confidence intervals. Default \code{TRUE}.}
+
+\item{level}{Confidence level of the intervals. Default \code{0.95}.}
+
+\item{ci_style}{\code{"auto"} (default: error bars for fewer than four
+years, otherwise a band), \code{"ribbon"} or \code{"errorbar"}.}
+
+\item{ci_colour}{Colour of the interval band or error bars.}
+
+\item{ci_alpha}{Transparency of the interval band.}
+
 \item{title}{Optional plot title. Defaults to \code{"FAO Status"}.}
 
 \item{line_colour}{Colour of the time-series line.}
@@ -42,7 +58,8 @@ plotted quantity is \code{SPR / 0.4}.}
 \item{side_alpha}{Transparency of the side status bar.}
 
 \item{ymax}{Optional upper y-axis limit. If \code{NULL}, this is set to the
-maximum of the scaled SPR series and \code{1.5}.}
+maximum of the scaled SPR series, the upper confidence limits and
+\code{1.5}. Intervals above \code{ymax} are cut at the top of the panel.}
 
 \item{overfished_col}{Fill colour for the overfished zone.}
 
@@ -66,7 +83,8 @@ A \code{ggplot} object.
 \description{
 Plots annual spawning potential ratio relative to a target SPR level,
 \code{SPR / SPRtarget}, from a fitted \code{flicc_tmb_fit} object using
-\code{ggplot2}. The background is shaded using FAO-style stock status bands.
+\code{ggplot2}, with confidence intervals. The background is shaded using
+FAO-style stock status bands.
 }
 \details{
 By default, the status zones are:
@@ -78,4 +96,21 @@ By default, the status zones are:
 
 The two upper zones are shown with the same blue fill and separated by a
 white dashed line, following the intended FAO/SOSI visual style.
+
+The confidence intervals are those of \code{\link{spr_ci_flicc}}: from the
+standard errors of log SPR (\code{TMB::sdreport()}), back-transformed and
+divided by the target. With fewer than four years they are drawn as error
+bars, otherwise as a shaded band (\code{ci_style = "auto"}). Fits without
+standard errors (\code{se = FALSE}) are plotted without intervals, with a
+warning.
+}
+\examples{
+\dontrun{
+plot_lbfao(fit)                          # with 95\% intervals
+plot_lbfao(fit, ci_style = "errorbar")   # error bars in every year
+plot_lbfao(fit, ci = FALSE)              # point estimates only
+}
+}
+\seealso{
+\code{\link{spr_ci_flicc}}, \code{\link{plot_spr}}
 }

@@ -9,9 +9,16 @@ neff_flicc(fit)
 \arguments{
 \item{fit}{A fitted FLicc object.}
 }
-\value{A data frame with gear, year, n, alpha0 and neff.}
+\value{
+A data frame with gear, year, n, alpha0 and neff.
+}
 \description{
-For each gear and year: the input sample size n (after \code{lfdess()}, within the retained bins), the Dirichlet-multinomial precision alpha0 and the effective sample size n_eff = n (1 + alpha0)/(n + alpha0). With \code{dm_theta = "fixed"} (alpha0 = n) n_eff is about n/2; with \code{"saturating"} it levels off at beta + 1. For the multinomial n_eff = n.
+For each gear and year: the input sample size \eqn{n} (after \code{lfdess()},
+within the retained bins), the Dirichlet-multinomial precision
+\eqn{\alpha_0} and the effective sample size it implies,
+\eqn{n_{eff} = n(1 + \alpha_0)/(n + \alpha_0)}. With \code{dm_theta = "fixed"}
+(\eqn{\alpha_0 = n}) \eqn{n_{eff} \approx n/2}; with \code{"saturating"} it
+levels off at \eqn{\beta + 1}. For the multinomial \eqn{n_{eff} = n}.
 }
 \examples{
 \dontrun{

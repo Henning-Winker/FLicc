@@ -13,6 +13,7 @@ flicc.is(
   dtaclow = NA,
   dtacupp = NA,
   Cmax = NA,
+  Cmin = NA,
   initac = NULL,
   catch_area = NULL
 )
@@ -25,6 +26,13 @@ flicc.is(
 \item{dtaclow, dtacupp}{Lower/upper multipliers on the previous TAC.}
 
 \item{Cmax}{Maximum TAC.}
+
+\item{Cmin}{Optional floor for the TAC that the multiplier is applied to:
+\eqn{TAC_y = \max(TAC_{y-1}, C_{min}) \times mult}. Prevents a
+multiplicative rule from getting stuck near zero after a crash, since
+multipliers near 1 cannot rebuild a near-zero TAC. Cuts below \code{Cmin}
+still apply for one cycle. Default \code{NA} (off); e.g. a small fraction of
+the historical mean catch.}
 
 \item{initac}{Previous TAC for the first cycle (ay == iy).}
 

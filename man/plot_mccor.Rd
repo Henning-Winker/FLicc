@@ -16,7 +16,7 @@ plot_mccor(
 
 \item{pairs}{A list of character vectors of length two defining parameter
 pairs to plot. Defaults to \code{list(c("linf", "k"), c("M", "k"),
-  c("linf", "L50"), c("linf", "CVL"))}.}
+c("linf", "L50"), c("linf", "CVL"))}.}
 
 \item{dAIC_cut}{Delta AIC threshold used to define the retained plausible
 ensemble. Default is \code{20}.}

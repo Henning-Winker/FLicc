@@ -12,24 +12,25 @@ spr_gtg_flicc(fit, mat = c("relative", "length"), sel_lag = 0, level = 0.95)
 \item{mat}{\code{"relative"} (default; LBSPR) or \code{"length"} (FLicc's ogive).}
 
 \item{sel_lag}{Integer; number of length classes by which F at length in the
-  survival recursion lags the fitted selectivity. \code{0} (default) is FLicc's
-  model. \code{1} mimics LBSPR, whose GTG model (\code{LBSPRsim_()}) evaluates
-  selectivity in the survival recursion one class below the class midpoint
-  used for the predicted catch; with \code{mat = "relative", sel_lag = 1} the
-  result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.
+survival recursion lags the fitted selectivity. \code{0} (default) is FLicc's
+model. \code{1} mimics LBSPR, whose GTG model (\code{LBSPRsim_()}) evaluates
+selectivity in the survival recursion one class below the class midpoint
+used for the predicted catch; with \verb{mat = "relative", sel_lag = 1} the
+result approximates LBSPR's reported SPR for the same SL50, SL95 and F/M.
 (fit with LBSPR's growth-type groups: \code{ngtg = 13, maxsd = 2}).}
 
 \item{level}{Confidence level of the interval.}
 }
 \value{
 A \code{data.frame} by year with \code{spr} (FLicc), \code{spr_gtg} (recomputed
-  with \code{mat}), the factor \code{adj = spr_gtg / spr}, and \code{lwr}, \code{upr}: FLicc's
-  SPR interval multiplied by \code{adj} (\code{NA} without standard errors).
+with \code{mat}), the factor \code{adj = spr_gtg / spr}, and \code{lwr}, \code{upr}: FLicc's
+SPR interval multiplied by \code{adj} (\code{NA} without standard errors).
 }
 \description{
 Recomputes the spawning potential ratio of a GTG fit with the maturity
 ogive scaled to each group's asymptotic length, as in LBSPR's GTG model
-(Hordyk et al. 2016): \eqn{L_{50,g} = L_{50} L_{\infty,g} / L_\infty} and likewise for
+(Hordyk et al. 2016; \code{LBSPRsim_()}: "maturity at same relative size"):
+\eqn{L_{50,g} = L_{50} L_{\infty,g} / L_\infty} and likewise for
 \eqn{L_{95}}, so fast-growing groups mature at larger lengths and
 slow-growing groups at smaller ones. FLicc's own SPR uses one
 maturity-at-length ogive for all groups (\code{stocklen()}).
@@ -53,8 +54,8 @@ spr_gtg_flicc(fit, sel_lag = 1)     # as LBSPR's reported SPR
 }
 \references{
 Hordyk, A.R., Ono, K., Prince, J.D. and Walters, C.J. (2016). A
-  simple length-structured model based on life history ratios and
-  incorporating size-dependent selectivity: application to spawning
-  potential ratios for data-poor stocks. Canadian Journal of Fisheries and
-  Aquatic Sciences 73(12): 1787-1799.
+simple length-structured model based on life history ratios and
+incorporating size-dependent selectivity: application to spawning
+potential ratios for data-poor stocks. Canadian Journal of Fisheries and
+Aquatic Sciences 73(12): 1787-1799.
 }

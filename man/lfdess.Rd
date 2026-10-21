@@ -7,16 +7,17 @@
 lfdess(lfd, ess.g = 100)
 }
 \arguments{
-\item{lfd}{An \code{FLQuant} of length frequencies with at least dimensions
-\code{len}, \code{year}, \code{unit}, and \code{iter}.}
+\item{lfd}{An \code{FLQuants} of length frequencies, one element per gear
+(len x year x ... x iter).}
 
-\item{ess.g}{Numeric scalar or vector of effective sample sizes by gear. If a
-scalar is supplied, it is recycled across gears. If a vector is supplied,
-its length must match the number of gears in the \code{unit} dimension.}
+\item{ess.g}{Numeric scalar or vector of effective sample sizes by gear. A
+scalar is used for every gear; a vector is matched to the gears by name
+if named, otherwise by position, and must have one value per gear.}
 }
 \value{
-An \code{FLQuant} with the same dimensions as \code{lfd}, but scaled
-so that totals over \code{len} equal the requested ESS for each gear.
+An \code{FLQuants} with the same structure as \code{lfd}, scaled
+so that each year/iteration total over \code{len} equals the gear's ESS.
+Gear-years with no observations stay zero (instead of 0/0 = NaN).
 }
 \description{
 Rescales an \code{FLQuant} of length frequencies so that, within each

@@ -9,7 +9,7 @@ rfb.flicc.hcr(
   ind,
   args,
   tracking,
-  index = "LBIspr.Gillnet",
+  index = "SPR",
   f = NULL,
   n1 = 2,
   n2 = 3,
@@ -18,13 +18,14 @@ rfb.flicc.hcr(
   nspr = 1,
   m = 0.95,
   output = "catch",
+  trend = c("fit", "track"),
   ...
 )
 }
 \arguments{
 \item{stk, ind, args, tracking}{Standard mp() arguments; \code{ind} from flicc.sa().}
 
-\item{index}{Element of \code{ind} for the trend r.}
+\item{index}{Element of \code{ind} for the trend r; default \code{"SPR"}.}
 
 \item{f}{Level component, taken in the latest year: \code{NULL} (f = 1, rb
 rule); \code{"LBImean"} or \code{"LBImean.<gear>"} (Lmean / L_F=M, the ICES-type
@@ -44,11 +45,17 @@ reference.}
 
 \item{output}{"catch" (default) or "effort".}
 
+\item{trend}{Source of r: \code{"fit"} (default, last \code{n1} over preceding
+\code{n2} years of the current fit's series) or \code{"track"} (terminal-year
+values recorded by previous cycles as \code{index.hcr}, plus the current
+one; avoids end-of-window noise of refitted assessments; r = 1 until
+enough cycles exist).}
+
 \item{...}{Unused.}
 }
 \value{
 List with \code{ctrl} (fwdControl holding the TAC multiplier) and
-\code{tracking} (r.hcr, f.hcr, b.hcr, mult.hcr, decision.hcr).
+\code{tracking} (r.hcr, index.hcr, f.hcr, b.hcr, mult.hcr, decision.hcr).
 }
 \description{
 ICES category-3 style rule adapted to the indicators returned by
@@ -60,10 +67,11 @@ returned as a TAC multiplier for \code{\link[=flicc.is]{flicc.is()}}.
 \describe{
 \item{r}{Trend ratio of the \code{index} series: mean of the last \code{n1}
 years over the mean of the preceding \code{n2} years (ICES 2-over-3).
-\code{index} is any element of \code{ind}, e.g. \code{"LBIspr.Gillnet"} (default),
-\code{"LBImean.Trawl"}, a pooled \code{"LBIspr"}/\code{"LBImean"} (if flicc.sa() was
-run with \code{pool}), or \code{"SPR"}. A trend cancels a
-constant scale bias, so it is the component least sensitive to
+\code{index} is any element of \code{ind}: \code{"SPR"} (default), a gear
+indicator such as \code{"LBIspr.Gillnet"} or \code{"LBImean.Trawl"}, or a
+pooled \code{"LBIspr"}/\code{"LBImean"} (if flicc.sa() was run with \code{pool}).
+With \code{"SPR"}, r and the safeguard b come from the same fitted series.
+A trend cancels a constant scale bias, so it is the component least sensitive to
 misspecified M, Linf or selectivity.}
 \item{f}{Fishing-pressure component. \code{NULL} (default) sets f = 1 (an
 rb rule). Otherwise an element of \code{ind} whose \emph{level} is used, e.g.
@@ -85,7 +93,7 @@ the safeguard is not active, as in the ICES rfb rule.
 ctrl <- mpCtrl(list(
   est  = mseCtrl(method = flicc.sa, args = est_args),
   hcr  = mseCtrl(method = rfb.flicc.hcr,
-                 args = list(index = "LBIspr.Gillnet", spr_trigger = 0.25)),
+                 args = list(index = "SPR", spr_trigger = 0.25)),
   isys = mseCtrl(method = flicc.is,
                  args = list(initac = initac, dtacupp = 1.2, dtaclow = 0.7))
 ))

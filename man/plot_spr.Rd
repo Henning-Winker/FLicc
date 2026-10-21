@@ -48,7 +48,7 @@ maximum of the data, the reference levels, and \code{0.6}.}
 
 \item{ci}{Logical. If \code{TRUE}, add confidence intervals for SPR from the
 standard errors of log SPR (\code{TMB::sdreport()}), back-transformed:
-\code{exp(log(SPR) +/- z * SE)}. Needs fitted objects with standard errors
+\verb{exp(log(SPR) +/- z * SE)}. Needs fitted objects with standard errors
 (not \code{se = FALSE}); ignored with a warning otherwise. With
 \code{settings$F_re = TRUE} the intervals include the uncertainty of the
 random walk on F.}
@@ -81,6 +81,8 @@ The function expects the fitted object to contain:
 
 fit <- fiticc(lfd_alfonsino,stklen_alfonsino,sel_fun=c("dsnormal","logistic"),catch_by_gear = c(0.7,0.3))
 plot_spr(fit)
+plot_spr(fit, ci = TRUE)                       # 95\% error bars
+plot_spr(list(a = fit, b = fit2), ci = TRUE, ci_type = "ribbon")
 plot_spr(fit, reflines = FALSE)
 plot_spr(fit, ref_levels = c(0.7, 0.4, 0.2))
 }

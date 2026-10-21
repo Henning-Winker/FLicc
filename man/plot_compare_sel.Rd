@@ -4,7 +4,13 @@
 \alias{plot_compare_sel}
 \title{Compare estimated selectivity across FLicc fits}
 \usage{
-plot_compare_sel(fits, gear = NULL, colours = NULL, linewidth = 0.8, ncol = NULL)
+plot_compare_sel(
+  fits,
+  gear = NULL,
+  colours = NULL,
+  linewidth = 0.8,
+  ncol = NULL
+)
 }
 \arguments{
 \item{fits}{A named list of fitted FLicc objects (from \code{\link[=fiticc]{fiticc()}}). Unnamed
@@ -16,7 +22,7 @@ fits are labelled \code{fit1}, \code{fit2}, ...}
 
 \item{linewidth}{Line width.}
 
-\item{ncol}{Number of panel columns.}
+\item{ncol}{Number of panel columns (default: one row per gear pair).}
 }
 \value{
 A \code{ggplot} object.

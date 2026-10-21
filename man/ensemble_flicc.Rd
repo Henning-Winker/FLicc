@@ -7,21 +7,64 @@
 ensemble_flicc(fits, weights = "equal", level = 0.95, s = NULL, spr_tgt = NULL)
 }
 \arguments{
-\item{fits}{A named list of fitted FLicc objects covering the same years. Fits without standard errors enter with their point estimates only.}
-\item{weights}{\code{"equal"} (default), \code{"aic"} (Akaike weights; only for fits with the same data and likelihood) or a numeric vector, one per fit.}
+\item{fits}{A named list of fitted FLicc objects (from \code{\link[=fiticc]{fiticc()}}), fitted
+to the same years. Fits without standard errors (\code{se = FALSE}, or not
+computable because the Hessian is not positive definite) enter with their
+point estimate only.}
+
+\item{weights}{\code{"equal"}, \code{"aic"} or a numeric vector, one per fit.}
+
 \item{level}{Interval level.}
-\item{s}{Optional Beverton-Holt steepness; adds B/Btgt quantiles.}
-\item{spr_tgt}{SPR target (proportion) for B/Btgt; default from the first fit's \code{spr_ref} or 0.4.}
+
+\item{s}{Optional Beverton-Holt steepness for B/Btgt.}
+
+\item{spr_tgt}{SPR target (proportion) for B/Btgt; default from the first
+fit's \code{spr_ref} or 0.4.}
 }
-\value{A list of class \code{"flicc_ensemble"} with \code{table} (year, spr = mixture median, lwr, upr, mean_log, sd_within, sd_between, sd_total, Fap_mean, Fap_min, Fap_max and, with \code{s}, brel, brel_lwr, brel_upr), \code{members} (name, weight, AIC, dAIC, last-year SPR and se) and \code{fits}.}
+\value{
+A list of class \code{"flicc_ensemble"} with \code{table} (year, spr = mixture
+median, lwr, upr, mean_log, sd_within, sd_between, sd_total, Fap_mean,
+Fap_min, Fap_max and, with \code{s}, brel, brel_lwr, brel_upr), \code{members}
+(name, weight, AIC, dAIC, last-year SPR and its se; dAIC is \code{NA} when the
+fits' data or likelihood differ, as AIC is then not comparable) and \code{fits}.
+}
 \description{
-Integrates a list of fitted FLicc models (e.g. the dome levels of \code{dome_sens_flicc()}) into one estimate of SPR by year. For each year the ensemble is the mixture of the members' normal distributions of log SPR, sum_i w_i N(mu_i, se_i^2), with total variance sum_i w_i se_i^2 + sum_i w_i (mu_i - mean)^2 (within + between fits); median and interval are mixture quantiles. Equal weights suit structural assumptions the data cannot distinguish; Akaike weights are only valid when all fits use the same data and likelihood (the function checks this) and tend to collapse onto one fit with large effective sample sizes. Apical F has no standard error in the fits; its weighted mean and range over the members are given.
+Integrates a list of fitted FLicc models (e.g. the dome levels of
+\code{\link[=dome_sens_flicc]{dome_sens_flicc()}}, alternative Linf or tail settings) into one estimate of
+SPR by year with an interval that includes both the uncertainty within each
+fit and the differences between fits. For each year, the ensemble is the
+mixture of the members' normal distributions of log SPR (estimate and
+standard error from \code{sdreport}, as in \code{\link[=spr_ci_flicc]{spr_ci_flicc()}}):
+\deqn{p(\log SPR) = \sum_i w_i\, N(\mu_i, se_i^2),}
+with total variance \eqn{\sum_i w_i se_i^2 + \sum_i w_i (\mu_i - \bar\mu)^2}
+(within + between fits). The median and interval are quantiles of the
+mixture, so a skewed or bimodal ensemble is represented as it is.
+}
+\details{
+Weights:
+\itemize{
+\item \code{"equal"} (default): all fits count the same. Appropriate for structural
+assumptions the data cannot distinguish (e.g. slight doming).
+\item \code{"aic"}: Akaike weights \eqn{\exp(-\Delta AIC/2)}. Only valid when all
+fits use the same data and likelihood (same observations, observation
+model, tail cut, plus group and robust mixing); otherwise the function
+stops. Akaike weights tend to collapse onto one fit when the effective
+sample size is large.
+\item a numeric vector: user weights (normalised to sum 1).
+}
+
+With steepness \code{s}, the quantiles are also given for spawning biomass
+relative to the SPR target under Beverton-Holt recruitment,
+\eqn{B/B_{tgt} = (4s\,SPR - (1-s)) / (4s\,SPR_{tgt} - (1-s))}, a monotone
+transform of SPR. Apical F has no standard error in the fits; the ensemble
+reports its weighted mean and the range over the members.
 }
 \examples{
 \dontrun{
 ds <- dome_sens_flicc(fit, gear = "Gillnet")
-ens <- ensemble_flicc(ds$fits[-1])
+ens <- ensemble_flicc(ds$fits[-1])          # the dome levels, equal weights
 ens$members
 plot_ensemble_flicc(ens)
+ensemble_flicc(list(Linf_lo = f1, Linf = f2, Linf_hi = f3), s = 0.75)
 }
 }

@@ -48,6 +48,15 @@ but should still be interpreted together with the gradient check.
 The Hessian positive-definiteness check first looks for \code{fit$rep$pdHess},
 then for \code{fit$sdrep$pdHess}. The eigenvalue check recomputes a numerical
 Hessian using \code{stats::optimHess()}.
+
+The Newton decrement \eqn{\frac12 g'H^{-1}g} (from the Newton polishing in
+\code{\link[=fiticc]{fiticc()}}) is the expected further improvement in log-likelihood and does
+not depend on the scale of the objective or of the parameters, unlike the
+gradient. With a positive definite Hessian and a decrement available, the
+overall tier is "ok" when the decrement is below 0.001 and "warning" when it
+is up to 0.1, whatever the gradient; without a decrement (\code{newton = 0}) the
+gradient is compared with \code{grad_tol} instead. The tier is "fail" when the
+Hessian is not positive definite or the decrement is above 0.1.
 }
 \examples{
 \dontrun{

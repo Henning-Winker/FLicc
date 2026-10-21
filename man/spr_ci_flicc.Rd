@@ -17,5 +17,5 @@ if the fit has no standard errors.
 }
 \description{
 Intervals for SPR by year from the standard errors of log SPR reported by
-\code{TMB::sdreport()}: \code{exp(log(SPR) +/- z * SE)}.
+\code{TMB::sdreport()}: \verb{exp(log(SPR) +/- z * SE)}.
 }

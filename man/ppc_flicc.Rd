@@ -8,16 +8,42 @@ ppc_flicc(fit, nsim = 500, par_draws = FALSE, seed = 1)
 }
 \arguments{
 \item{fit}{A fitted FLicc object.}
+
 \item{nsim}{Number of simulated data sets.}
-\item{par_draws}{Logical; draw the parameters from their normal approximation (needs \code{se = TRUE}).}
+
+\item{par_draws}{Logical; draw parameters from their normal approximation.}
+
 \item{seed}{Random seed.}
 }
-\value{A list with \code{table} (gear, year, stat, obs, lo, med, hi, ppp, outside), \code{coverage} (share of observed values outside the 95\% interval by gear and statistic) and \code{plot}.}
+\value{
+A list with \code{table} (gear, year, stat, obs, lo, med, hi, ppp =
+predictive p-value \eqn{P(sim \ge obs)}, outside), \code{coverage} (share of
+observed values outside the 95\% interval by gear and statistic) and
+\code{plot}.
+}
 \description{
-Simulates compositions from the fitted observation model at the expected compositions and sample sizes (optionally with parameters drawn from their normal approximation) and compares observed mean length (Lmean), 95th percentile (L95), proportion at or above the length at maturity (Pmat) and largest length (Lmax) with their predictive distribution by gear and year. Far more than 5\% outside the 95\% interval means the observation model or effective sample size understate the variability; runs on one side point to systematic misfit.
+Simulates length compositions from the fitted observation model
+(multinomial, Dirichlet-multinomial with the fitted precision, or negative
+binomial) at the fitted expected compositions and sample sizes, and compares
+summary statistics of the observed compositions with their predictive
+distribution by gear and year. With \code{par_draws = TRUE} the parameters are
+first drawn from their approximate normal distribution (estimates and
+covariance from \code{sdreport}), so the predictive distribution also includes
+estimation uncertainty; otherwise the estimates are used (plug-in).
+}
+\details{
+Statistics: \code{Lmean} (mean length), \code{L95} (95th percentile of length),
+\code{Pmat} (proportion of fish at or above the length at 50\% maturity) and
+\code{Lmax} (lower bound of the largest bin with fish). If far more than 5\% of
+the observed values fall outside the central 95\% predictive interval, the
+observation model or the effective sample size understate the variability
+of the data; runs of years outside the interval on the same side point to
+systematic misfit (e.g. cohorts).
 }
 \examples{
 \dontrun{
-pc <- ppc_flicc(fit, nsim = 500); pc$coverage; pc$plot
+pc <- ppc_flicc(fit, nsim = 500)
+pc$coverage
+pc$plot
 }
 }

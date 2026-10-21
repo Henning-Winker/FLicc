@@ -25,7 +25,7 @@ If \code{NULL}, all iterations are weighted by their relative AIC support.}
 \code{c(0.025, 0.5, 0.975)}.}
 
 \item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
-  (unweighted ensemble of the retained refits); see \code{mc_aic_weights()}.}
+(unweighted ensemble of the retained refits); see \code{\link[=mc_aic_weights]{mc_aic_weights()}}.}
 }
 \value{
 A data frame with year, weighted mean, lower quantile, median, upper

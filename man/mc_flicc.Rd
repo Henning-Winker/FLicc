@@ -57,8 +57,9 @@ keeps refits with a small remaining gradient or Newton decrement.}
 }
 \value{
 An object of class \code{mcflicc}. The object contains propagated
-FLR quantities, Monte Carlo life-history draws, fitted parameter values,
-selectivity parameters, log-likelihoods, convergence flags, and the
+FLR quantities, Monte Carlo life-history draws (\code{draws}, all
+iterations), fitted parameter values, selectivity parameters,
+log-likelihoods, convergence flags (\code{ok}, \code{conv}), and the
 original fitted report stored in \code{mc$fit}.
 }
 \description{
@@ -69,18 +70,6 @@ length and length-at-age variation are drawn from user-defined distributions.
 The length-structured stock object is rebuilt and the FLicc model is refitted.
 }
 \details{
-Each refit uses the settings and fixed selectivity parameters
-(\code{sel_fixed}) of \code{fit}. A refit counts as successful
-(\code{mc$ok}) only if it ran without error and its convergence tier is in
-\code{accept}; for the other iterations \code{logLik} and all reported
-quantities are \code{NA}. \code{mc$conv} gives the tier of every refit
-("error" if it failed). Because the life-history inputs are drawn from their
-prior distributions, the unweighted ensemble of successful refits
-(\code{weights = "equal"} in the summary functions) is the propagation of
-that prior uncertainty; Akaike weights additionally condition on the fit to
-the length data and can collapse onto few draws with large samples.
-
-
 This function is intended to support uncertainty analysis and ensemble
 evaluation in length-based assessments. The resulting object can be used to
 examine parameter sensitivity, likelihood support, structural uncertainty,
@@ -98,6 +87,21 @@ Likelihood values stored in \code{mc$logLik} can be used to compute
 parameters. A practical ensemble filter is to retain simulations with
 \eqn{\Delta AIC \le 20} as a broad plausible set for structural uncertainty,
 while using \eqn{\Delta AIC \le 10} as a more strongly supported subset.
+
+Each refit uses the settings and fixed selectivity parameters
+(\code{sel_fixed}) of \code{fit}. A refit counts as successful
+(\code{mc$ok}) only if it ran without error and its convergence tier is in
+\code{accept}; for the other iterations \code{logLik} and all reported
+quantities are \code{NA}, so they cannot enter summaries as copies of the
+reference fit. \code{mc$conv} gives the tier of every refit ("error" if it
+failed).
+
+Because the life-history inputs are drawn from their prior distributions,
+the unweighted ensemble of successful refits (\code{weights = "equal"} in
+the summary functions) is the propagation of that prior uncertainty. Akaike
+weights additionally condition on how well each draw fits the length data;
+with large samples they can collapse onto few draws (check the effective
+number of draws, \code{n_eff}, in \code{mc_spr_tab()}).
 }
 \examples{
 \dontrun{

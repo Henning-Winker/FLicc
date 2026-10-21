@@ -9,12 +9,28 @@ lmean_resid_flicc(fit)
 \arguments{
 \item{fit}{A fitted FLicc object.}
 }
-\value{A list with \code{table} (gear, year, obs, exp, se, z), \code{runs} (gear, p_value, pass, sd_z) and \code{plot}.}
+\value{
+A list with \code{table} (gear, year, obs, exp, se, z) and \code{runs}
+(gear, p-value, pass), and a \code{ggplot} in \code{plot}.
+}
 \description{
-Observed against expected mean length of each composition (Francis 2011, TA1.8), standardized with the standard error implied by the observation model, and a one-sided runs test on the residuals with limits of three standard deviations, as in ss3diags and JABBA (green: passed, red: failed). Runs of years with longer or shorter fish than expected indicate strong year classes or changes the equilibrium model does not follow.
+For each gear and year, compares the observed mean length of the
+composition with its expected value under the fit (Francis 2011, TA1.8).
+The standard error of the expected mean length follows from the
+observation model: \eqn{\sqrt{\mathrm{Var}(L)/n}} for the multinomial,
+multiplied by \eqn{\sqrt{(n+\alpha_0)/(1+\alpha_0)}} for the
+Dirichlet-multinomial. The standardized residuals are tested for
+randomness with a one-sided runs test (too few runs = systematic
+patterns), and limits of three times their standard deviation are drawn,
+as in the runs tests of \code{ss3diags} and JABBA: a green background means the
+test is passed (p >= 0.05), red that it fails. Runs of years with longer or
+shorter fish than expected are the clearest sign of strong year classes or
+changes that the equilibrium model does not follow.
 }
 \examples{
 \dontrun{
-lm <- lmean_resid_flicc(fit); lm$runs; lm$plot
+lm <- lmean_resid_flicc(fit)
+lm$runs
+lm$plot
 }
 }

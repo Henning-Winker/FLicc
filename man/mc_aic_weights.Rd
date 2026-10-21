@@ -13,13 +13,13 @@ mc_aic_weights(mc, dAIC_cut = NULL, weights = c("aic", "equal"))
 \code{dAIC > dAIC_cut} receive zero weight before weights are normalized.}
 
 \item{weights}{\code{"aic"} (Akaike weights, default) or \code{"equal"}
-  (each retained refit counts the same: propagation of the prior uncertainty in
-  the life-history inputs). Failed or non-converged refits (\code{mc$ok = FALSE})
-  always get weight zero.}
+(each retained refit counts the same: propagation of the prior
+uncertainty in the life-history inputs). Failed or non-converged refits
+(\code{mc$ok = FALSE}) always get weight zero.}
 }
 \value{
 A data frame with iteration number, log-likelihood, delta AIC,
-normalized Akaike weight and retained/filtered flag.
+normalized weight and retained/filtered flag.
 }
 \description{
 Computes delta AIC values and Akaike weights for Monte Carlo refits stored in
