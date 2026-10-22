@@ -1,0 +1,264 @@
+# Empirical length-based indicators (no model fit needed)
+
+# weighted quantile of lengths (class mid-points, counts), linear within classes
+lbi_quantile <- function(lo, hi, n, p) {
+  cs <- cumsum(n) / sum(n)
+  vapply(p, function(pp) {
+    i <- which(cs >= pp)[1]
+    c0 <- if (i > 1) cs[i - 1] else 0
+    lo[i] + (hi[i] - lo[i]) * (pp - c0) / max(cs[i] - c0, 1e-12)
+  }, numeric(1))
+}
+
+# indicators of one composition
+lbi_one <- function(lo, hi, n, linf, L50, Lopt, k, wt) {
+  mid <- (lo + hi) / 2
+  N <- sum(n)
+  if (!(N > 0)) return(NULL)
+  # Lc: first class with at least half the modal abundance (WKLIFE)
+  ic <- which(n >= 0.5 * max(n))[1]
+  Lc <- mid[ic]
+  sel <- seq_along(n) >= ic
+  Lmean <- sum(mid[sel] * n[sel]) / sum(n[sel])
+  Lbar <- sum(mid * n) / N
+  q <- lbi_quantile(lo, hi, n, c(0.25, 0.95))
+  # mean length of the largest 5% of fish
+  ord <- rev(seq_along(n)); cum <- 0; s <- 0; target <- 0.05 * N
+  for (i in ord) {
+    if (!(n[i] > 0)) next
+    take <- min(n[i], target - cum)
+    if (take <= 0) break
+    s <- s + take * mid[i]; cum <- cum + take
+  }
+  Lmax5 <- s / cum
+  LmaxY <- mid[which.max(n * wt)]
+  LFM <- 0.75 * Lc + 0.25 * linf
+  Pmat <- sum(n[mid >= L50]) / N
+  Popt <- sum(n[mid >= 0.9 * Lopt & mid <= 1.1 * Lopt]) / N
+  Pmega <- sum(n[mid > 1.1 * Lopt]) / N
+  # Beverton-Holt total mortality from the mean length above the lower bound of the Lc class
+  Zk <- (linf - Lmean) / (Lmean - lo[ic])
+  data.frame(n = N, Lc = Lc, L25 = q[1], Lbar = Lbar, Lmean = Lmean, LmaxY = LmaxY,
+             L95 = q[2], Lmax5 = Lmax5, LFM = LFM, Lopt = Lopt, L50 = L50, Linf = linf,
+             Pmat = Pmat, Popt = Popt, Pmega = Pmega, Pobj = Pmat + Popt + Pmega,
+             Z_k = Zk, Z = if (is.finite(k)) k * Zk else NA_real_)
+}
+
+# indicator ratios, reference levels and properties (ICES WKLIFE; Kell et al. 2022)
+lbi_table_def <- function() {
+  data.frame(
+    indicator = c("Lc/L50", "L25/L50", "Lmax5/Linf", "L95/Linf", "Pmega", "LmaxY/Lopt", "Lmean/Lopt", "Lmean/LFM"),
+    num = c("Lc", "L25", "Lmax5", "L95", "Pmega", "LmaxY", "Lmean", "Lmean"),
+    den = c("L50", "L50", "Linf", "Linf", NA, "Lopt", "Lopt", "LFM"),
+    ref = c(1, 1, 0.8, 0.8, 0.3, 0.9, 0.9, 1),
+    property = c("Conservation (immatures)", "Conservation (immatures)",
+                 "Conservation (large fish)", "Conservation (large fish)", "Conservation (large fish)",
+                 "Optimal yield", "Optimal yield", "MSY proxy"),
+    stringsAsFactors = FALSE)
+}
+
+#' Empirical length-based indicators by gear and year
+#'
+#' Computes the length-based indicators (LBIs) used in data-limited assessments
+#' directly from the length frequencies of each gear and year, without fitting a
+#' model: the ICES WKLIFE indicators (ICES 2015, 2018) and those of Froese
+#' (2004), with the reference levels used by ICES and evaluated by Kell et al.
+#' (2022), and a Beverton-Holt estimate of total mortality from the mean length.
+#'
+#' Indicators (lengths are class mid-points):
+#' * `Lc`: first length class with at least half the modal abundance;
+#'   `L25`, `L95`: 25th and 95th percentiles; `Lbar`: mean length;
+#'   `Lmean`: mean length of fish from `Lc`; `LmaxY`: class with the largest catch
+#'   biomass; `Lmax5`: mean length of the largest 5% of the fish.
+#' * `Pmat`: proportion mature (\eqn{\ge} L50); `Popt`: proportion within
+#'   \eqn{\pm}10% of Lopt; `Pmega`: proportion above 1.1 Lopt; `Pobj = Pmat +
+#'   Popt + Pmega` (Cope and Punt 2009).
+#' * Reference lengths: `LFM = 0.75 Lc + 0.25 Linf` (length at F = M), `Lopt`
+#'   (length of maximum cohort biomass: `2/3 Linf`, or `Linf 3 / (3 + M/k)` with
+#'   `Lopt = "mk"`).
+#' * `Z_k`, `Z`: Beverton-Holt mortality, \eqn{Z/k = (L_\infty - \bar L)/(\bar L - L')},
+#'   with \eqn{\bar L} the mean length above \eqn{L'}, the lower bound of the Lc class
+#'   (assumes equilibrium and knife-edge selection at \eqn{L'}).
+#'
+#' Ratios and reference levels (`$ratios`, with `pass` = meets the reference
+#' level):
+#'
+#' | Ratio | Reference | Property |
+#' |---|---|---|
+#' | Lc/L50, L25/L50 | > 1 | conservation of immatures |
+#' | Lmax5/Linf, L95/Linf | > 0.8 | conservation of large fish |
+#' | Pmega | > 0.3 | conservation of large fish |
+#' | LmaxY/Lopt, Lmean/Lopt | > 0.9 | optimal yield |
+#' | Lmean/LFM | \eqn{\ge} 1 | MSY proxy |
+#'
+#' The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
+#' best; those of the left limb (Lc, L25) are sensitive to recruitment
+#' variability (Kell et al. 2022). Indicators follow trends better than they
+#' classify status, and the reference levels depend on the assumed life history.
+#' With `ref_years`, each indicator is also given relative to its mean over a
+#' reference period when the stock is believed to have been in a good state
+#' (`$relative`), which avoids proxies based on uncertain parameters (Kell and
+#' Sharma 2025).
+#'
+#' @param x `FLQuants` of length frequencies (one element per gear; lengths as
+#'   lower class bounds), or a fitted FLicc object (its data and life history,
+#'   with the fitted Linf).
+#' @param lhpar `FLPar` with `linf` and `L50` (and `k`, `M` for `Z` and `Lopt =
+#'   "mk"`; `a`, `b` for `LmaxY`). Taken from the fit if `x` is a fit.
+#' @param gear,years Optional selection.
+#' @param catch_by_gear Optional relative catch by gear (weight): adds the gears
+#'   pooled into one composition raised by catch ([combine_lfd()]) as gear
+#'   `"pooled"`.
+#' @param ref_years Optional reference years for indicators relative to a
+#'   historical reference period.
+#' @param Lopt `"wklife"` (2/3 Linf, default) or `"mk"` (Linf 3/(3 + M/k)).
+#' @return A list of class `"flicc_lbi"`: `values` (one row per gear and year),
+#'   `ratios` (long format: gear, year, indicator, value, ref, pass, property),
+#'   `relative` (with `ref_years`), and the inputs.
+#' @references
+#' Cope, J.M. and Punt, A.E. (2009). Length-based reference points for
+#' data-limited situations. Marine and Coastal Fisheries 1: 169-186.
+#'
+#' Froese, R. (2004). Keep it simple: three indicators to deal with
+#' overfishing. Fish and Fisheries 5: 86-91.
+#'
+#' ICES (2015). Report of the Fifth Workshop on the Development of Quantitative
+#' Assessment Methodologies based on Life-history Traits (WKLIFE V).
+#'
+#' Kell, L.T., Minto, C. and Gerritsen, H.D. (2022). Evaluation of the skill of
+#' length-based indicators to identify stock status and trends. ICES Journal of
+#' Marine Science 79: 1202-1216.
+#'
+#' Kell, L.T. and Sharma, R. (2025). An evaluation of the robustness of
+#' length-based stock assessment approaches for sustainable fisheries
+#' management in data and capacity limited situations. Sustainability 17: 4791.
+#' @examples
+#' \dontrun{
+#' lbi <- lbi_flicc(lfd, lhpar)
+#' lbi$values
+#' plot_lbi(lbi)                    # traffic light
+#' plot_lbi(lbi, type = "trend")
+#' lbi_flicc(lfd, lhpar, catch_by_gear = c(Trawl = 0.7, Gillnet = 0.3), ref_years = 2013:2015)
+#' }
+#' @export
+lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear = NULL,
+                      ref_years = NULL, Lopt = c("wklife", "mk")) {
+  Lopt <- match.arg(Lopt)
+  if (is.list(x) && !is.null(x$tmb_data) && !is.null(x$report)) {
+    lfd <- x$report$obslen
+    if (is.null(lhpar)) lhpar <- x$report$lhpar
+  } else lfd <- x
+  if (!inherits(lfd, "FLQuants")) stop("x must be FLQuants of length frequencies or a fitted FLicc object.")
+  if (is.null(lhpar)) stop("lhpar (FLPar with linf and L50) is needed.")
+  getp <- function(nm) if (nm %in% dimnames(lhpar)[[1]]) as.numeric(lhpar[nm]) else NA_real_
+  linf <- getp("linf"); L50 <- getp("L50"); k <- getp("k")
+  Mk <- getp("Mk"); if (!is.finite(Mk)) Mk <- getp("M") / k
+  if (!is.finite(linf)) stop("lhpar needs linf.")
+  if (!is.finite(L50)) { L50 <- 2 / 3 * linf; message("lbi_flicc: no L50 in lhpar; using 2/3 Linf.") }
+  Lo <- if (Lopt == "mk") {
+    if (!is.finite(Mk)) stop('Lopt = "mk" needs M and k (or Mk) in lhpar.')
+    linf * 3 / (3 + Mk)
+  } else 2 / 3 * linf
+  if (!is.null(catch_by_gear)) {
+    pooled <- combine_lfd(lfd, catch_by_gear, lhpar = lhpar, ess.n = NULL, name = "pooled",
+                          catch_units = if (all(c("a", "b") %in% dimnames(lhpar)[[1]])) "weight" else "numbers")
+    lfd <- FLCore::FLQuants(c(as.list(lfd), as.list(pooled)))
+  }
+  gears <- if (is.null(gear)) names(lfd) else if (is.numeric(gear)) names(lfd)[gear] else gear
+  a <- getp("a"); b <- getp("b")
+  rows <- list()
+  for (g in gears) {
+    m <- lfd_matrix_flicc(lfd[[g]])
+    L <- as.numeric(rownames(m)); step <- if (length(L) > 1) L[2] - L[1] else 1
+    wt <- if (is.finite(a) && is.finite(b)) a * (L + step / 2)^b else (L + step / 2)^3
+    yrs <- colnames(m); if (!is.null(years)) yrs <- intersect(yrs, as.character(years))
+    for (y in yrs) {
+      r <- lbi_one(L, L + step, m[, y], linf, L50, Lo, k, wt)
+      if (!is.null(r)) rows[[length(rows) + 1]] <- cbind(gear = g, year = as.numeric(y), r)
+    }
+  }
+  if (!length(rows)) stop("No compositions with data.")
+  vals <- do.call(rbind, rows)
+  vals$gear <- factor(vals$gear, levels = gears)
+  def <- lbi_table_def()
+  rat <- do.call(rbind, lapply(seq_len(nrow(def)), function(i) {
+    v <- vals[[def$num[i]]] / (if (is.na(def$den[i])) 1 else vals[[def$den[i]]])
+    data.frame(gear = vals$gear, year = vals$year, indicator = def$indicator[i], value = v,
+               ref = def$ref[i], pass = v >= def$ref[i], property = def$property[i])
+  }))
+  rat$indicator <- factor(rat$indicator, levels = def$indicator)
+  rel <- NULL
+  if (!is.null(ref_years)) {
+    cols <- c("Lc", "L25", "Lbar", "Lmean", "LmaxY", "L95", "Lmax5", "Pmat", "Popt", "Pmega", "Z")
+    rel <- do.call(rbind, lapply(split(vals, vals$gear), function(d) {
+      ref <- d[d$year %in% ref_years, cols, drop = FALSE]
+      if (!nrow(ref)) return(NULL)
+      out <- d[, c("gear", "year")]
+      for (cc in cols) out[[cc]] <- d[[cc]] / mean(ref[[cc]], na.rm = TRUE)
+      out
+    }))
+  }
+  out <- list(values = vals, ratios = rat, relative = rel, ref_years = ref_years,
+              Lopt = Lo, linf = linf, L50 = L50)
+  class(out) <- c("flicc_lbi", "list")
+  out
+}
+
+#' Plot length-based indicators
+#'
+#' @param x Output of [lbi_flicc()].
+#' @param type `"traffic"` (default): one tile per indicator ratio and year, green
+#'   where the reference level is met, red where not, with the value; one panel
+#'   per gear. `"trend"`: the ratios over years with their reference levels
+#'   (dashed), one panel per indicator, one colour per gear. `"relative"`:
+#'   indicators relative to the reference period (needs `ref_years` in
+#'   [lbi_flicc()]).
+#' @param indicators Optional subset of ratio names (e.g. `c("Lmax5/Linf",
+#'   "Pmega", "Lmean/LFM")`).
+#' @return A `ggplot`.
+#' @export
+plot_lbi <- function(x, type = c("traffic", "trend", "relative"), indicators = NULL) {
+  type <- match.arg(type)
+  r <- x$ratios
+  if (!is.null(indicators)) r <- r[r$indicator %in% indicators, ]
+  if (type == "traffic") {
+    r$lab <- formatC(r$value, digits = 2, format = "f")
+    r$indicator <- factor(r$indicator, levels = rev(levels(droplevels(r$indicator))))
+    return(ggplot2::ggplot(r, ggplot2::aes(factor(year), indicator, fill = pass)) +
+             ggplot2::geom_tile(colour = "white") +
+             ggplot2::geom_text(ggplot2::aes(label = lab), size = 2.6) +
+             ggplot2::scale_fill_manual(values = c(`TRUE` = "#7FBF7B", `FALSE` = "#EF8A62"),
+                                        labels = c(`TRUE` = "meets reference", `FALSE` = "below reference"),
+                                        name = NULL, na.value = "grey85") +
+             ggplot2::facet_wrap(~gear, ncol = 1) +
+             ggplot2::labs(x = "Year", y = NULL, title = "Length-based indicators") +
+             ggplot2::theme_bw() +
+             ggplot2::theme(legend.position = "bottom", panel.grid = ggplot2::element_blank(),
+                            axis.text.x = ggplot2::element_text(angle = 90, vjust = 0.5)))
+  }
+  if (type == "trend") {
+    refs <- unique(r[, c("indicator", "ref")])
+    return(ggplot2::ggplot(r, ggplot2::aes(year, value, colour = gear)) +
+             ggplot2::geom_hline(data = refs, ggplot2::aes(yintercept = ref), linetype = "dashed") +
+             ggplot2::geom_line() + ggplot2::geom_point(size = 1.2) +
+             ggplot2::facet_wrap(~indicator, scales = "free_y") + year_axis_flicc() +
+             ggplot2::labs(x = "Year", y = "Indicator ratio", colour = "Gear",
+                           title = "Length-based indicators against reference levels") +
+             ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom"))
+  }
+  if (is.null(x$relative)) stop('type = "relative" needs ref_years in lbi_flicc().')
+  rl <- stats::reshape(x$relative, direction = "long", varying = setdiff(names(x$relative), c("gear", "year")),
+                       v.names = "value", timevar = "indicator",
+                       times = setdiff(names(x$relative), c("gear", "year")), idvar = c("gear", "year"))
+  rl <- rl[rl$indicator %in% c("Lmean", "L95", "Lmax5", "Pmega", "Pmat", "Z"), ]
+  yr <- range(x$ref_years)
+  ggplot2::ggplot(rl, ggplot2::aes(year, value, colour = gear)) +
+    ggplot2::annotate("rect", xmin = yr[1] - 0.5, xmax = yr[2] + 0.5, ymin = -Inf, ymax = Inf,
+                      fill = "grey85", alpha = 0.5) +
+    ggplot2::geom_hline(yintercept = 1, linetype = "dashed") +
+    ggplot2::geom_line() + ggplot2::geom_point(size = 1.2) +
+    ggplot2::facet_wrap(~indicator, scales = "free_y") + year_axis_flicc() +
+    ggplot2::labs(x = "Year", y = "Relative to the reference period", colour = "Gear",
+                  title = "Indicators relative to the reference period (shaded)") +
+    ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+}
