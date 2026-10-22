@@ -20,15 +20,22 @@ total mortality from the mean length:
 | Pmega | proportion above 1.1 Lopt | > 0.3 | conservation of large fish |
 | LmaxY/Lopt, Lmean/Lopt | class of maximum catch biomass; mean length above Lc | > 0.9 | optimal yield |
 | Lmean/LFM | LFM = 0.75 Lc + 0.25 Linf, the mean length at F = M | $\ge$ 1 | MSY proxy |
+| Pobj (Cope-Punt) | Pmat + Popt + Pmega, with a decision tree | see below | spawning biomass vs 0.4 B0 |
 
 with $L_{opt} = 2/3\,L_\infty$ (or $L_\infty\,3/(3 + M/k)$ with `Lopt = "mk"`),
 and the proportions of mature fish (`Pmat`), of fish around Lopt (`Popt`) and
-their sum `Pobj` (Cope and Punt 2009). `catch_by_gear` adds the gears pooled into
+their sum `Pobj`. Cope and Punt (2009) use `Pobj` to identify the selectivity
+pattern of the fishery (below 1: mainly small and immature fish; between 1 and 2:
+selection close to the maturity ogive; 2: only mature fish of optimal size and
+larger), and then `Pmat` or `Popt` to judge whether spawning biomass is at or above
+the target of 0.4 B0 (`cp_selectivity`, `cp_test`, `cp_status`). A fishery that
+takes only fish of optimal size gives no information on status. `catch_by_gear` adds the gears pooled into
 one composition raised by catch (`combine_lfd()`), as gear `"pooled"`:
 
 ```{r lbi-empirical, fig.height = 8}
 lbi <- lbi_flicc(lfd, lhpar, catch_by_gear = c(Trawl = 0.95, Gillnet = 0.05))
 lbi$values[lbi$values$year == 2024, c("gear", "Lc", "Lmean", "LFM", "L95", "Lmax5", "Pmat", "Pmega", "Z")]
+lbi$values[lbi$values$year == 2024, c("gear", "Pobj", "cp_selectivity", "cp_test", "cp_status")]
 plot_lbi(lbi)
 ```
 
@@ -43,6 +50,10 @@ How to read them:
   for this gear they describe its selectivity as much as the stock. The gillnet
   catches the larger fish and meets most reference levels. Indicators are
   therefore read **by gear**, and against each gear's own history.
+- By the Cope-Punt tree, the gillnet selects close to the maturity ogive, and
+  the proportion mature is mostly below the threshold for SB at or above 0.4 B0;
+  the trawl takes mainly small fish with too few mature fish. Both point to SB
+  below the target, in line with the SPR of the model (about 0.2).
 - The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
   best; those of the left limb (Lc, L25) also respond to recruitment (Kell et al.
   2022).

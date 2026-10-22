@@ -29,4 +29,11 @@ stopifnot(nrow(xf$values) == nrow(v[v$gear != "pooled", ]))
 rr <- x$relative[x$relative$year %in% 2013:2015, ]
 stopifnot(all(abs(tapply(rr$Lmean, rr$gear, mean) - 1) < 1e-9, na.rm = TRUE))
 for (ty in c("traffic", "trend", "relative")) ggplot2::ggplot_build(plot_lbi(x, ty))
+# Cope and Punt decision tree
+cp <- FLicc:::cope_punt_flicc(Pmat = c(0.1, 0.5, 0.3, 0.97, 1, 1), Popt = c(0, 0.2, 0.2, 0.3, 0.5, 1),
+                              Pmega = c(0, 0.1, 0.1, 0.2, 0.5, 0), Lmat_Lopt = 0.7)
+print(cp)
+stopifnot(cp$cp_status == c("SB < target", "SB >= target", "SB < target", "SB >= target",
+                            "SB >= target", "no information"))
+print(table(x$values$gear, x$values$cp_status))
 cat("lbi tests passed\n")

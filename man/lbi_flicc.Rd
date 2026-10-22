@@ -53,6 +53,15 @@ Indicators (lengths are class mid-points):
 biomass; \code{Lmax5}: mean length of the largest 5\% of the fish.
 \item \code{Pmat}: proportion mature (\eqn{\ge} L50); \code{Popt}: proportion within
 \eqn{\pm}10\% of Lopt; \code{Pmega}: proportion above 1.1 Lopt; \code{Pobj = Pmat + Popt + Pmega} (Cope and Punt 2009).
+\item Cope and Punt (2009) decision tree (\code{cp_selectivity}, \code{cp_test},
+\code{cp_status}): \code{Pobj} identifies the selectivity pattern (< 1: small and
+immature fish; 1-2: selection close to the maturity ogive; 2: only mature fish
+of optimal size and larger), and \code{Pmat} or \code{Popt} then indicates whether
+spawning biomass is at or above the target of 0.4 B0. The \code{Pmat} thresholds
+depend on Lmat/Lopt (0.75 and 0.9 in Cope and Punt; interpolated between,
+held constant outside). A fishery taking only fish of optimal size gives no
+status information. In the plots, the row "Pobj (Cope-Punt)" shows Pobj,
+green if SB >= target, red if not, grey if no information.
 \item Reference lengths: \verb{LFM = 0.75 Lc + 0.25 Linf} (length at F = M), \code{Lopt}
 (length of maximum cohort biomass: \verb{2/3 Linf}, or \verb{Linf 3 / (3 + M/k)} with
 \code{Lopt = "mk"}).

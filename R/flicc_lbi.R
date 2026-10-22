@@ -44,6 +44,39 @@ lbi_one <- function(lo, hi, n, linf, L50, Lopt, k, wt) {
              Z_k = Zk, Z = if (is.finite(k)) k * Zk else NA_real_)
 }
 
+# Cope and Punt (2009) decision tree: selectivity pattern from Pobj, then
+# whether spawning biomass is at or above the target (0.4 B0) from Pmat or Popt
+cope_punt_flicc <- function(Pmat, Popt, Pmega, Lmat_Lopt, tol = 0.02) {
+  Pobj <- Pmat + Popt + Pmega
+  # Pmat threshold interpolated between Lmat = 0.75 Lopt and Lmat = 0.9 Lopt
+  w <- rep_len(pmin(pmax((Lmat_Lopt - 0.75) / 0.15, 0), 1), length(Pobj))
+  out <- data.frame(Pobj = Pobj, cp_selectivity = NA_character_, cp_test = NA_character_,
+                    cp_status = NA_character_, stringsAsFactors = FALSE)
+  for (i in seq_along(Pobj)) {
+    if (Pobj[i] < 1) {
+      if (Popt[i] + Pmega[i] <= tol) {
+        sel <- "small, immature fish"; thr <- 0.25; v <- Pmat[i]; nm <- "Pmat"
+      } else {
+        sel <- "small and optimal-size fish"; thr <- 0.4 + (0.25 - 0.4) * w[i]; v <- Pmat[i]; nm <- "Pmat"
+      }
+      ok <- v > thr
+    } else if (Pobj[i] < 2 - tol) {
+      sel <- "maturity ogive"; thr <- 0.95 + (0.90 - 0.95) * w[i]; v <- Pmat[i]; nm <- "Pmat"
+      ok <- v > thr
+    } else if (Popt[i] < 1 - tol) {
+      sel <- "optimal-size and larger fish"; thr <- 0.65; v <- Popt[i]; nm <- "Popt"
+      ok <- v < thr
+    } else {
+      sel <- "optimal-size fish only"; nm <- NA; ok <- NA
+    }
+    out$cp_selectivity[i] <- sel
+    out$cp_test[i] <- if (is.na(nm)) "no status information" else
+      sprintf("%s %s %.2f", nm, if (nm == "Popt") "<" else ">", thr)
+    out$cp_status[i] <- if (is.na(ok)) "no information" else if (ok) "SB >= target" else "SB < target"
+  }
+  out
+}
+
 # indicator ratios, reference levels and properties (ICES WKLIFE; Kell et al. 2022)
 lbi_table_def <- function() {
   data.frame(
@@ -73,6 +106,15 @@ lbi_table_def <- function() {
 #' * `Pmat`: proportion mature (\eqn{\ge} L50); `Popt`: proportion within
 #'   \eqn{\pm}10% of Lopt; `Pmega`: proportion above 1.1 Lopt; `Pobj = Pmat +
 #'   Popt + Pmega` (Cope and Punt 2009).
+#' * Cope and Punt (2009) decision tree (`cp_selectivity`, `cp_test`,
+#'   `cp_status`): `Pobj` identifies the selectivity pattern (< 1: small and
+#'   immature fish; 1-2: selection close to the maturity ogive; 2: only mature fish
+#'   of optimal size and larger), and `Pmat` or `Popt` then indicates whether
+#'   spawning biomass is at or above the target of 0.4 B0. The `Pmat` thresholds
+#'   depend on Lmat/Lopt (0.75 and 0.9 in Cope and Punt; interpolated between,
+#'   held constant outside). A fishery taking only fish of optimal size gives no
+#'   status information. In the plots, the row "Pobj (Cope-Punt)" shows Pobj,
+#'   green if SB >= target, red if not, grey if no information.
 #' * Reference lengths: `LFM = 0.75 Lc + 0.25 Linf` (length at F = M), `Lopt`
 #'   (length of maximum cohort biomass: `2/3 Linf`, or `Linf 3 / (3 + M/k)` with
 #'   `Lopt = "mk"`).
@@ -180,13 +222,21 @@ lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear 
   if (!length(rows)) stop("No compositions with data.")
   vals <- do.call(rbind, rows)
   vals$gear <- factor(vals$gear, levels = gears)
+  cp <- cope_punt_flicc(vals$Pmat, vals$Popt, vals$Pmega, L50 / Lo)
+  vals$cp_selectivity <- cp$cp_selectivity
+  vals$cp_test <- cp$cp_test
+  vals$cp_status <- cp$cp_status
   def <- lbi_table_def()
   rat <- do.call(rbind, lapply(seq_len(nrow(def)), function(i) {
     v <- vals[[def$num[i]]] / (if (is.na(def$den[i])) 1 else vals[[def$den[i]]])
     data.frame(gear = vals$gear, year = vals$year, indicator = def$indicator[i], value = v,
                ref = def$ref[i], pass = v >= def$ref[i], property = def$property[i])
   }))
-  rat$indicator <- factor(rat$indicator, levels = def$indicator)
+  rat <- rbind(rat, data.frame(gear = vals$gear, year = vals$year, indicator = "Pobj (Cope-Punt)",
+                               value = vals$Pobj, ref = NA_real_,
+                               pass = ifelse(vals$cp_status == "no information", NA, vals$cp_status == "SB >= target"),
+                               property = "Spawning biomass vs 0.4 B0"))
+  rat$indicator <- factor(rat$indicator, levels = c(def$indicator, "Pobj (Cope-Punt)"))
   rel <- NULL
   if (!is.null(ref_years)) {
     cols <- c("Lc", "L25", "Lbar", "Lmean", "LmaxY", "L95", "Lmax5", "Pmat", "Popt", "Pmega", "Z")
@@ -238,6 +288,9 @@ plot_lbi <- function(x, type = c("traffic", "trend", "relative"), indicators = N
   }
   if (type == "trend") {
     refs <- unique(r[, c("indicator", "ref")])
+    refs <- refs[is.finite(refs$ref), ]
+    if ("Pobj (Cope-Punt)" %in% r$indicator)
+      refs <- rbind(refs, data.frame(indicator = "Pobj (Cope-Punt)", ref = c(1, 2)))
     return(ggplot2::ggplot(r, ggplot2::aes(year, value, colour = gear)) +
              ggplot2::geom_hline(data = refs, ggplot2::aes(yintercept = ref), linetype = "dashed") +
              ggplot2::geom_line() + ggplot2::geom_point(size = 1.2) +
