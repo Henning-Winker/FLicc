@@ -54,6 +54,9 @@ How to read them:
   the proportion mature is mostly below the threshold for SB at or above 0.4 B0;
   the trawl takes mainly small fish with too few mature fish. Both point to SB
   below the target, in line with the SPR of the model (about 0.2).
+  The tree has a threshold at Pobj = 1: in 2013-2014 the gillnet's Pobj is just
+  below 1, the weaker test on Pmat then applies, and the status switches to
+  "SB >= target". Near the branch points, read the tree's result with caution.
 - The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
   best; those of the left limb (Lc, L25) also respond to recruitment (Kell et al.
   2022).
