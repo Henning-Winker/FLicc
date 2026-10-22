@@ -1,0 +1,46 @@
+# Tail of the length composition
+
+## Tail cut
+
+`tail_cut = L` excludes bins with lower bound $\geq L$ from the likelihood;
+observed and predicted compositions are truncated and the predictions
+renormalised,
+$$
+\pi_{l \mid L < L_{cut}} = \pi_l \Big/ \sum_{l' : L_{l'} < L_{cut}} \pi_{l'} .
+$$
+This is exact conditioning: the model still describes the whole population with
+its input CVL, SPR and reference points use all lengths, and CVL needs no
+adjustment. `tail_cut` is an **absolute length** (as `Lplus`), so all sensitivity
+runs and ensemble draws use the same bins. (Values <= 1.5 are read as a fraction
+of Linf, with a warning.)
+
+```{r tailcut, fig.height = 4}
+fit_cut <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                  settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", tail_cut = 47))  # ~0.85 x Linf
+fit_cut$tmb_data$LLB[fit_cut$tmb_data$cut_bin + 1]
+plot_spr(list(no_cut = fit, cut_47 = fit_cut), ci = TRUE)
+```
+
+*Simulation* (stable F, correct Linf unless stated):
+
+| | no cut | cut at 0.80-0.85 x Linf |
+|---|---|---|
+| CVL input 0.07 / 0.10 / 0.13 (true 0.1) | +9 / -1 / -11% | +13 / +9 / +4% |
+| strong dome on one gear fitted as logistic | -17% | +1% |
+| SPR trend recovered in a rebuild (sigmaF 0.3) | 27% | ~50% |
+| Linf input 0.9 / 1.1 x true | +91 / -40% | +74 / -28% |
+
+The cut halves the CVL sensitivity, removes the bias of a strong unmodelled dome
+and roughly doubles responsiveness; it costs a small positive bias (+7 to +10%)
+and more noise under stable F, and does not remove the Linf sensitivity.
+Starting value: 0.80-0.85 x Linf, fixed across fits.
+
+## Plus group, robust likelihood, GTG range
+
+- `Lplus = L` pools bins with lower bound $\geq L$ into one (the total counts, the
+  shape does not).
+- `rob_eps = 0.001` bounds the cost of a few fish in bins the model barely reaches.
+- The largest growth group stops at $L_\infty(1 + \text{maxsd}\cdot\text{CVL})$
+  (1.3 Linf with the default `maxsd = 3` and CVL = 0.1). Fish beyond it get
+  near-zero probability, and `fiticc()` warns about them (`tail_warning`,
+  default `TRUE`); a tail cut makes this irrelevant.

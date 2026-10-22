@@ -1,0 +1,291 @@
+# Selectivity
+
+## Functions and parameterisation
+
+Selectivity is specified per gear in `sel_fun` and estimated on a scale relative
+to Linf (log parameters $\theta$), so starting values and priors are
+scale-free. With the estimated Linf:
+
+**Logistic** (`"logistic"`):
+$$
+S(L) = \left[1 + \exp\left(-\ln 19\,\frac{L - L_{50}}{L_{95} - L_{50}}\right)\right]^{-1},
+\quad L_{50} = e^{\theta_1} L_\infty,\; L_{95} - L_{50} = e^{\theta_2} L_\infty .
+$$
+
+**Double-sided normal** (`"dsnormal"`, dome):
+$$
+S(L) = \exp\left[-\frac{(L - L_{mode})^2}{2\sigma^2}\right],\quad
+\sigma = \begin{cases}\sigma_L & L < L_{mode}\\ \sigma_R & L \ge L_{mode}\end{cases},
+\quad L_{mode} = e^{\theta_1}L_\infty,\; \sigma_L = e^{\theta_2}L_\infty,\; \sigma_R = e^{\theta_3}L_\infty .
+$$
+
+**Normal** (`"normal"`): as above with $\sigma_L = \sigma_R$.
+
+**Two size modes** (`"binormal"`, `"bidsnormal"`): for gears whose catch has two
+size groups, e.g. juveniles and adults in different seasons, or a gillnet fleet
+with two mesh groups. The selectivity is the sum of two curves, scaled to a
+maximum of 1:
+$$
+S(L) = \frac{s(L)}{\max_L s(L)},\quad
+s(L) = \exp\left[-\frac{(L - L_{1})^2}{2\sigma_1^2}\right]
+ + h\,\exp\left[-\frac{(L - L_{2})^2}{2\sigma_2^2}\right],
+$$
+with the first mode $L_1$ (`mode1`, SD `sd1`), the second mode $L_2 > L_1$
+(`mode2`) and $h$ (`h`), the height of the second curve relative to the first.
+`"binormal"` uses one SD for the second curve (`sd2`); `"bidsnormal"` makes it
+double-sided (`lsd2` to the left, `rsd2` to the right of $L_2$), so the right
+limb of the large-fish mode can be domed or, with `rsd2 = 1000` fixed, flat.
+These functions have five and six parameters and need enough data in both modes:
+with few samples the second curve can degenerate (e.g. a vertical step).
+
+Starting values: the mode (or L50) at the gear's observed modal length, spreads
+of 0.1 Linf. Selectivity is evaluated at bin mid-points and is constant over
+time.
+
+```{r sel}
+plot_sel(fit)
+selpars_flicc(fit)
+```
+
+## Fixing selectivity parameters
+
+`sel_fixed` fixes parameters on the length scale by gear, e.g. from mesh
+experiments:
+
+```{r sel-fixed, eval = FALSE}
+fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+       settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"),
+       sel_fixed = list(Gillnet = list(SL50 = 30, SL95 = 34)))   # logistic
+# dsnormal: list(mode = 24, lsd = 3, rsd = 1000)  (rsd = 1000: flat right limb)
+# normal:   list(mode = 24, sd = 4)
+# binormal:   list(mode1 = 15, sd1 = 2, mode2 = 30, sd2 = 5, h = 0.5)
+# bidsnormal: list(mode1 = 15, sd1 = 2, mode2 = 30, lsd2 = 4, rsd2 = 1000, h = 0.5)
+```
+
+## Exploring selectivity shapes
+
+`plot_selfun()` draws a selectivity function for a range of parameter values,
+over the observed composition of a gear and with reference lengths. It helps to
+choose values for `sel_fixed` and the dome scenarios below:
+
+```{r selfun, fig.height = 4.5}
+gn <- lfd[["Gillnet"]]
+Lmid_g <- as.numeric(dimnames(gn)$len) + 0.5
+Lmean_g <- round(sum(Lmid_g * apply(gn, 1, sum)) / sum(gn), 1)
+Lmean_g
+
+ref_L <- c(L50mat = 31.2, Lmean = Lmean_g, Linf = 55.7)
+plot_selfun("dsnormal", list(mode = 34, lsd = 4, rsd = c(1000, round(c(0.85, 0.7, 0.55, 0.4) * 55.7, 1))),
+            lfd = gn, ref = ref_L)
+plot_selfun("logistic", list(SL50 = c(28, 31, 34), SL95 = 37), lfd = gn, ref = ref_L[c(1,3)])
+```
+
+A double-sided normal with a very large right-hand SD (`rsd = 1000`) has a flat
+right limb, i.e. no dome; smaller values give increasing doming. The values
+shown, `c(1000, 0.85, 0.7, 0.55, 0.4) x Linf`, are the default levels of the dome
+sensitivity below, from no dome to a moderate one. `sel_curve_flicc()` returns the
+values of a curve.
+
+The two-mode functions are explored the same way. A composition with two
+size modes arises, for example, when the gears are pooled into one fleet.
+`combine_lfd()` pools the gears, each raised by its catch share (for this example by weight,
+`cbg` = 70% trawl, 30% gillnet), and rescales the result to an effective sample
+size:
+
+```{r combine-lfd, fig.height = 3.5}
+yr_last  <- tail(as.numeric(dimnames(lfd[[1]])$year), 1)
+lfd_fleet <- combine_lfd(window(lfd, start = yr_last), catch_by_gear = c(0.7,0.3) ,
+                         lhpar = lhpar, ess.n = 500)
+plot_lfd(window(lfd, start = yr_last))
+plot_lfd(lfd_fleet)
+```
+
+The pooled fleet has a small-fish mode (from the trawl) at about 18 cm and a
+large-fish mode (mainly from the gillnet) at about 31 cm. Over it,
+`"binormal"` with two widths of the second curve, and `"bidsnormal"` with the
+second mode flat (`rsd2 = 1000`, asymptotic) or domed on the right:
+
+```{r selfun-twomodes, fig.height = 4.5}
+plot_selfun("binormal", list(mode1 = 22, sd1 = 3.3, mode2 = 31, sd2 = c(3, 8), h = 0.8),
+            lfd = lfd_fleet, ref = ref_L)
+plot_selfun("bidsnormal", list(mode1 = 22, sd1 = 3.3, mode2 = 31, lsd2 = 3,
+                               rsd2 = c(1000, 10, 4), h = 0.7),
+            lfd = lfd_fleet, ref = ref_L)
+```
+
+These curves are fitted to the pooled fleet in section *Sensitivity runs and
+ensembles: a single year*.
+
+## Gear selectivity, availability and population selectivity
+
+The selectivity $S_g(L)$ that FLicc estimates for a gear is not the selectivity
+of the gear itself (its contact or mesh selectivity) but the **population
+selectivity**: the relative fishing mortality at length for the stock as a
+whole, which combines the gear's contact selectivity with the availability of
+fish of each size to where the fleet fishes. Sampson and Scott (2011) showed
+with a spatial model of linked subpopulations that population selectivity
+becomes dome-shaped even when every subpopulation is fished with the same
+asymptotic gear, unless fishing mortality is uniform across them: older fish
+accumulate in less-fished areas, a "cryptic biomass" that escapes capture. The
+shape depends on the gear, the level and spatial distribution of fishing
+effort, and the movement of fish between areas.
+
+Consequences for FLicc:
+
+- **A logistic gear does not imply logistic population selectivity.** The
+  question is whether the fleet's fishing mortality reaches the large fish in
+  proportion, not only what the mesh or hook does.
+- **Slight doming is a plausible state of nature**, particularly where large
+  fish move deeper, offshore or into areas that are fished less. This is the
+  rationale for running the dome sensitivity routinely (next section) and, where
+  the doming level is uncertain, for integrating it with `ensemble_flicc()`.
+- **The dome is an assumption about fish that are not seen.** A fitted dome
+  tells the model that large fish are present but not caught, so they continue
+  to grow and spawn, and SPR increases. That is right if they are in a refuge,
+  and optimistic if they are missing because they died (higher F or natural
+  mortality of large fish). Length data alone cannot separate the two, and a
+  better likelihood for a stronger dome is not evidence that the cryptic
+  biomass exists; the doming level should be informed by knowledge of the
+  fishery and the stock's distribution.
+- **Data by area can be used as separate gears** ("areas as fleets"): each area
+  then has its own selectivity, which removes the part of the dome that comes
+  from mixing areas with different size compositions.
+- **The tail cut** conditions on the fish below the cut and so reduces the
+  dependence on the assumed dome, which acts on the largest fish.
+- Because population selectivity depends on where and how hard the fleet fishes,
+  it can change when the effort distribution changes substantially. With a
+  stable fishery a constant selectivity is a reasonable assumption; a change of
+  sign of the residuals between periods (section *Residual diagnostics*) is the
+  signal to check.
+
+| Situation | Population selectivity | In FLicc |
+|---|---|---|
+| Fleet covers the stock's range evenly, or fish mix well | close to gear selectivity | logistic base; dome sensitivity as a check |
+| Fishing concentrated where small and mid-sized fish are; large fish less available | dome plausible | dome sensitivity; ensemble over mild to moderate domes or tail cut |
+| Length data available by area | dome partly from the mix of areas | areas as separate gears |
+| Substantial change in where or how the fleet fishes | may change | check residuals by period; `by_year` |
+
+*Reference*: Sampson, D.B. and Scott, R.D. (2011). A spatial model for fishery
+age-selection at the population level. *Canadian Journal of Fisheries and
+Aquatic Sciences*. doi:10.1139/f2011-044.
+
+## Dome sensitivity: a recommended standard run
+
+Slight doming (large fish less selected or less available) is hard to detect
+from length data, and an unmodelled dome is read as higher F. A sensitivity over
+fixed dome shapes is therefore recommended for every gear assumed logistic.
+`dome_sens_flicc()` refits the model with that gear as a double-sided normal
+whose right-hand SD is fixed at a sequence of values (default
+`c(1000, 0.85, 0.7, 0.55, 0.4) x Linf`, from a flat right limb to a moderate
+dome in even steps; stronger domes can be given with `rsd`); the mode and left-hand SD are estimated, all
+other settings and data as in the base fit.
+
+```{r dome-sens, fig.height = 4.5}
+ds <- dome_sens_flicc(fit, gear = "Gillnet")
+ds$table
+plot_dome_sens(ds)
+plot_dome_sens(ds, "spr", ci = TRUE)
+```
+
+The run with `rsd = 1000` reproduces the logistic base fit (SPR
+`r ds$table$SPR_last[2]` vs `r ds$table$SPR_last[1]`), which is the check that the
+scenarios are comparable. For the gillnet the dome levels fit about equally
+well (dAIC `r paste(ds$table$dAIC[-1], collapse = ", ")` from no to moderate
+doming). The data therefore cannot tell whether large fish are fully selected
+or somewhat less so, and over that range the last-year SPR goes from
+`r ds$table$SPR_last[2]` to `r ds$table$SPR_last[6]`.
+Read the table as a sensitivity, not a model selection: report the range of
+status across the domes the data cannot reject. With a tail cut the scenarios
+differ less, because the bins where the dome acts are excluded:
+
+```{r dome-sens-cut}
+fit_cut_sel <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                     settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", tail_cut = 47))
+ds_cut <- dome_sens_flicc(fit_cut_sel, gear = "Gillnet", se = FALSE)
+data.frame(scenario = ds$table$scenario, SPR_no_cut = ds$table$SPR_last,
+           SPR_cut47 = ds_cut$table$SPR_last)
+```
+
+Here the cut narrows the range across no to moderate doming from
+`r ds$table$SPR_last[2]`-`r ds$table$SPR_last[6]` to
+`r ds_cut$table$SPR_last[2]`-`r ds_cut$table$SPR_last[6]`.
+
+**Integrating the dome levels.** Instead of reporting the dome levels side by
+side, they can be combined into one estimate with `ensemble_flicc()`. For each
+year the ensemble is the mixture of the members' distributions of log SPR,
+$\sum_i w_i\,N(\mu_i, se_i^2)$; its variance is the within-fit part
+$\sum_i w_i se_i^2$ plus the between-fit part $\sum_i w_i(\mu_i-\bar\mu)^2$,
+and the median and interval are quantiles of the mixture. Equal weights are the
+natural choice for assumptions the data cannot distinguish; Akaike weights
+(`weights = "aic"`) are only allowed when all members use the same data and
+likelihood, which holds for the dome levels but not, for example, across tail
+cuts.
+
+```{r dome-ensemble, fig.height = 4}
+ens <- ensemble_flicc(ds$fits[-1])     # the five dome levels, equal weights
+ens$members
+tail(ens$table[, c("year", "spr", "lwr", "upr", "sd_within", "sd_between")], 3)
+plot_ensemble_flicc(ens)
+```
+
+The sensitivity is meant for gears assumed asymptotic. For a gear already fitted
+as a dome (here the trawl, estimated right-hand SD about
+`r round(exp(fit$par$mpd[fit$par$par == "Sm"][3]) * 55.7, 1)` cm), fixing a
+wide right-hand SD forces a shape the data reject, which shows as very large dAIC.
+
+## Comparing selectivity functions
+
+`plot_compare_sel()` draws the fitted selectivity of a list of fits, one panel
+per gear and one colour per fit. The example refits the reference model with
+four selectivity functions for the gillnet, keeping the trawl as a
+double-sided normal: logistic; double-sided normal with the right-hand SD fixed
+at 1000 (a flat right limb, close to the logistic in shape); normal (a
+symmetric dome); and double-sided normal with both SDs estimated. The vectors
+`gill_fun` and `gill_fix` hold the gillnet function and the fixed parameters of
+each run, and `Map()` fits one model per pair.
+
+```{r compare-sel, fig.height = 4.5}
+gill_fun <- c(logistic = "logistic", dsnormal_rsd1000 = "dsnormal",
+              normal = "normal", dsnormal = "dsnormal")
+gill_fix <- list(NULL, list(rsd = 1000), NULL, NULL)
+fits_sel <- Map(function(fun, fix) {
+  fiticc(lfd, stklen, sel_fun = c("dsnormal", fun), catch_by_gear = cbg,
+         sel_fixed = if (is.null(fix)) NULL else list(Gillnet = fix),
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+}, gill_fun, gill_fix)
+plot_compare_sel(fits_sel)
+sel_tab <- data.frame(fit = names(fits_sel),
+                      AIC = sapply(fits_sel, function(f) round(AIC(LLflicc(f)), 1)),
+                      SPR_last = sapply(fits_sel, function(f) round(sprcur_flicc(f), 3)),
+                      row.names = NULL)
+sel_tab$dAIC <- sel_tab$AIC - min(sel_tab$AIC)
+sel_tab
+```
+
+The trawl panel shows how far the trawl estimate moves when only the gillnet
+shape changes. Over the four gillnet functions the last-year
+SPR ranges from `r min(sel_tab$SPR_last)` to `r max(sel_tab$SPR_last)`, with
+dAIC from 0 to `r max(sel_tab$dAIC)`. As with the dome sensitivity, read the
+comparison together with gear knowledge: a better fit for a dome does not show
+that large fish are less selected, because a shortage of large fish can also
+come from F.
+
+## Choosing selectivity
+
+- Use logistic unless gear knowledge (gillnet mesh, hook size, availability of
+  large fish) supports a dome.
+- A dome fitted without support absorbs a shortage of large fish that may come
+  from F; SPR then becomes optimistic.
+- Several gears sampling different length ranges make domes more identifiable.
+- A tail cut (section *Tail of the length composition*) reduces the cost of an unmodelled mild dome
+  (*simulation*: a strong dome fitted as logistic, -17% bias in SPR; with a cut at
+  0.8 Linf, +1%).
+- Always run the dome sensitivity for gears assumed logistic, and report it.
+
+## Check 6: selectivity plausibility
+
+| | |
+|---|---|
+| **Look for** | Ascending limbs consistent with the gear and the left limb of the compositions; domes only where expected. |
+| **Red flags** | Very narrow domes; $\sigma_R$ at very small values for a gear expected to be logistic; L50 below the smallest sampled fish. |
+| **Action** | Compare logistic and dome by AIC and by status; fix parameters from external information; use a tail cut. |

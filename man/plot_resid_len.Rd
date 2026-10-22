@@ -7,8 +7,13 @@
 plot_resid_len(
   x,
   type = c("pearson", "osa"),
-  years = c("mean", "each"),
-  cap = 5
+  year = NULL,
+  gear = NULL,
+  by_gear = TRUE,
+  pool_years = FALSE,
+  cap = 5,
+  years = NULL,
+  title = NULL
 )
 }
 \arguments{
@@ -16,33 +21,66 @@ plot_resid_len(
 
 \item{type}{Residual type when \code{x} is a fit: \code{"pearson"} or \code{"osa"}.}
 
-\item{years}{\code{"mean"} (average over years) or \code{"each"}.}
+\item{year}{Optional year selection: \code{NULL} for all years, year values, or
+indices (as in \code{\link[=plot_len]{plot_len()}}).}
+
+\item{gear}{Optional gear selection: \code{NULL} for all gears, gear names or
+indices.}
+
+\item{by_gear}{Logical. \code{TRUE} (default): one panel per gear (and year);
+\code{FALSE}: gears pooled.}
+
+\item{pool_years}{Logical. \code{FALSE} (default): one panel per year; \code{TRUE}:
+the selected years pooled.}
 
 \item{cap}{Absolute residual at which bars are capped (default 5; \code{Inf}
 for none).}
+
+\item{years}{Deprecated: \code{"mean"} is \code{pool_years = TRUE}, \code{"each"} is
+\code{pool_years = FALSE}.}
+
+\item{title}{Optional plot title.}
 }
 \value{
 A \code{ggplot} object; the capped residuals are in attribute \code{"capped"}.
 }
 \description{
-Residuals against length, one panel per gear, as bars. Useful for any
-number of years and the natural residual plot for a single year, where the
-bubble plot (\code{\link[=plot_resid_bubble]{plot_resid_bubble()}}) collapses to one column. With several
-years the residuals are averaged over years (\code{years = "mean"}) or shown by
-year in colour (\code{years = "each"}).
+Residuals against length as bars, with the same panel layout as
+\code{\link[=plot_len]{plot_len()}}: with \code{by_gear = TRUE} one panel per year and gear, with
+\code{by_gear = FALSE} the gears pooled into one panel per year. \code{pool_years = TRUE} pools the selected years into one panel per gear (or one panel). The
+natural residual plot for a single year, where the bubble plot
+(\code{\link[=plot_resid_bubble]{plot_resid_bubble()}}) collapses to one column.
 }
 \details{
-Systematic patterns point to the model rather than to noise: runs of
-positive and negative residuals along the length axis indicate a selectivity
-shape the model cannot follow (e.g. two modes), and large positive
-residuals at the largest lengths observed fish the model cannot produce
-(above the largest growth-type group's Linf, where the predicted proportion
-is floored at 1e-12). Residuals beyond \code{cap} are drawn at the cap, in red,
-and labelled with their value, so a single outlier does not hide the rest.
+Residuals are pooled (over gears or years) bin by bin as
+\eqn{\sum_i r_i / \sqrt{k}} over the \eqn{k} residuals of the bin (Stouffer).
+For independent standard-normal residuals (OSA residuals under a correct
+model) the pooled residual is again standard normal, so the dashed lines at
+\eqn{\pm 2} keep their meaning; a simple mean would shrink towards zero.
+
+Reading the plot:
+\itemize{
+\item Runs of positive and negative residuals along the length axis point to the
+model rather than to noise: a selectivity shape the model cannot follow
+(e.g. two modes), Linf or CVL (the largest fish), or a year class passing
+through (in one year only).
+\item Pooled over years (\code{pool_years = TRUE}), year classes largely average out,
+while misfit at the same lengths in all years (selectivity, Linf) remains.
+\item Pearson residuals are drawn for all bins: the observed zeros beyond the
+largest (and below the smallest) fish give a fringe of small negative
+residuals, and a single fish in a bin with a tiny expected count gives a
+large positive one. OSA residuals stop at the largest fish of each
+composition and condition on the smaller bins, so such rare fish do not
+inflate them.
+}
+
+Residuals beyond \code{cap} are drawn at the cap, in red, and labelled with their
+value, so a single outlier does not hide the rest.
 }
 \examples{
 \dontrun{
-plot_resid_len(fit)
-plot_resid_len(fit, years = "each", cap = 4)
+plot_resid_len(fit, year = 2022:2024)                 # year x gear panels
+plot_resid_len(fit, type = "osa", pool_years = TRUE)  # persistent misfit by gear
+plot_resid_len(fit, by_gear = FALSE, year = 2024)     # gears pooled, one year
 }
 }

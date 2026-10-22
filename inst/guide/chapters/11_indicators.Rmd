@@ -1,0 +1,52 @@
+# Length-based indicators
+
+## LBIspr
+
+For each gear, `LBIspr()` compares the observed proportion of large fish with
+the proportion expected at the reference $F_{\mathrm{SPR}x}$:
+
+1. Equilibrium numbers-at-length at $F_{\mathrm{SPR}x}$, $N^{ref}(L)$, and the
+   reference catch composition of gear $g$, $v_g(L) = N^{ref}(L) S_g(L)$ (retained
+   bins only, i.e. below the tail cut).
+2. Threshold length $L^*_g$: the length at which the cumulative $v_g$ reaches the
+   fraction `thresh` (default 0.75) of its total.
+3. Reference proportion above the threshold,
+   $P^{ref}_g = \sum_{L \ge L^*_g} v_g(L) / \sum_L v_g(L)$ (about $1 -$ `thresh`).
+4. Observed proportion in year $y$,
+   $P^{obs}_{g,y} = \sum_{L \ge L^*_g} y_{g,y,L} / \sum_L y_{g,y,L}$.
+5. Indicator $\mathrm{LBI}_{g,y} = P^{obs}_{g,y}/P^{ref}_g$.
+
+$\mathrm{LBI} = 1$: as many large fish as at the target; $< 1$: fewer, i.e. F above
+$F_{\mathrm{SPR}x}$. The threshold lengths are returned as `attr(, "Lref")`.
+
+```{r lbispr}
+lbi <- LBIspr(fit, spr = 40, thresh = 0.75)
+attr(lbi, "Lref")
+plot_LBIspr(fit, thresh = 0.75)
+plot_LBIp(fit, year = 2024)
+```
+
+## LBImean
+
+`LBImean()` is the model-based analogue of the ICES mean-length indicator
+$\bar L/L_{F=M}$: the reference mean length (above `lc`, default the gear's
+50% selectivity length) is computed from the fitted model at $F = M$
+(`ref = "FM"`) or at $F_{\mathrm{SPR}x}$ (`ref = "spr"`), using the fitted growth
+variability and gear selectivity, including domes.
+
+```{r lbimean}
+LBImean(fit, ref = "FM")
+```
+
+## Indicators and the tail cut
+
+Both indicators use the fit's tail cut by default (`tail_cut = NULL`), so the
+indicator and the likelihood use the same bins; `tail_cut = FALSE` uses all bins.
+
+## Check 10: indicators against status
+
+| | |
+|---|---|
+| **Look for** | LBIspr and SPR/SPR40 telling the same story; similar indicators across gears. |
+| **Red flags** | Gears disagreeing strongly (selectivity misfit or sampling); indicator noise much larger than the SPR trend. |
+| **Action** | Use the more informative gear; pool gears (`pool` in `flicc.sa()`); smooth in the harvest control rule. |

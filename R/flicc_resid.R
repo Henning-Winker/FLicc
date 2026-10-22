@@ -214,62 +214,127 @@ plot_resid_qq <- function(x) {
 
 #' Length-composition residuals by length
 #'
-#' Residuals against length, one panel per gear, as bars. Useful for any
-#' number of years and the natural residual plot for a single year, where the
-#' bubble plot ([plot_resid_bubble()]) collapses to one column. With several
-#' years the residuals are averaged over years (`years = "mean"`) or shown by
-#' year in colour (`years = "each"`).
+#' Residuals against length as bars, with the same panel layout as
+#' [plot_len()]: with `by_gear = TRUE` one panel per year and gear, with
+#' `by_gear = FALSE` the gears pooled into one panel per year. `pool_years =
+#' TRUE` pools the selected years into one panel per gear (or one panel). The
+#' natural residual plot for a single year, where the bubble plot
+#' ([plot_resid_bubble()]) collapses to one column.
 #'
-#' Systematic patterns point to the model rather than to noise: runs of
-#' positive and negative residuals along the length axis indicate a selectivity
-#' shape the model cannot follow (e.g. two modes), and large positive
-#' residuals at the largest lengths observed fish the model cannot produce
-#' (above the largest growth-type group's Linf, where the predicted proportion
-#' is floored at 1e-12). Residuals beyond `cap` are drawn at the cap, in red,
-#' and labelled with their value, so a single outlier does not hide the rest.
+#' Residuals are pooled (over gears or years) bin by bin as
+#' \eqn{\sum_i r_i / \sqrt{k}} over the \eqn{k} residuals of the bin (Stouffer).
+#' For independent standard-normal residuals (OSA residuals under a correct
+#' model) the pooled residual is again standard normal, so the dashed lines at
+#' \eqn{\pm 2} keep their meaning; a simple mean would shrink towards zero.
+#'
+#' Reading the plot:
+#' * Runs of positive and negative residuals along the length axis point to the
+#'   model rather than to noise: a selectivity shape the model cannot follow
+#'   (e.g. two modes), Linf or CVL (the largest fish), or a year class passing
+#'   through (in one year only).
+#' * Pooled over years (`pool_years = TRUE`), year classes largely average out,
+#'   while misfit at the same lengths in all years (selectivity, Linf) remains.
+#' * Pearson residuals are drawn for all bins: the observed zeros beyond the
+#'   largest (and below the smallest) fish give a fringe of small negative
+#'   residuals, and a single fish in a bin with a tiny expected count gives a
+#'   large positive one. OSA residuals stop at the largest fish of each
+#'   composition and condition on the smaller bins, so such rare fish do not
+#'   inflate them.
+#'
+#' Residuals beyond `cap` are drawn at the cap, in red, and labelled with their
+#' value, so a single outlier does not hide the rest.
 #'
 #' @param x Output of [resid_flicc()] or a fitted FLicc object.
 #' @param type Residual type when `x` is a fit: `"pearson"` or `"osa"`.
-#' @param years `"mean"` (average over years) or `"each"`.
+#' @param year Optional year selection: `NULL` for all years, year values, or
+#'   indices (as in [plot_len()]).
+#' @param gear Optional gear selection: `NULL` for all gears, gear names or
+#'   indices.
+#' @param by_gear Logical. `TRUE` (default): one panel per gear (and year);
+#'   `FALSE`: gears pooled.
+#' @param pool_years Logical. `FALSE` (default): one panel per year; `TRUE`:
+#'   the selected years pooled.
 #' @param cap Absolute residual at which bars are capped (default 5; `Inf`
 #'   for none).
+#' @param years Deprecated: `"mean"` is `pool_years = TRUE`, `"each"` is
+#'   `pool_years = FALSE`.
+#' @param title Optional plot title.
 #' @return A `ggplot` object; the capped residuals are in attribute `"capped"`.
 #' @examples
 #' \dontrun{
-#' plot_resid_len(fit)
-#' plot_resid_len(fit, years = "each", cap = 4)
+#' plot_resid_len(fit, year = 2022:2024)                 # year x gear panels
+#' plot_resid_len(fit, type = "osa", pool_years = TRUE)  # persistent misfit by gear
+#' plot_resid_len(fit, by_gear = FALSE, year = 2024)     # gears pooled, one year
 #' }
 #' @export
-plot_resid_len <- function(x, type = c("pearson", "osa"), years = c("mean", "each"), cap = 5) {
-  type <- match.arg(type); years <- match.arg(years)
+plot_resid_len <- function(x, type = c("pearson", "osa"), year = NULL, gear = NULL,
+                           by_gear = TRUE, pool_years = FALSE, cap = 5, years = NULL,
+                           title = NULL) {
+  type <- match.arg(type)
+  if (!is.null(years)) pool_years <- match.arg(years, c("mean", "each")) == "mean"
   if (!is.data.frame(x)) x <- resid_flicc(x, type = type)
   rtype <- if (!is.null(attr(x, "type"))) attr(x, "type") else type
   d <- x[is.finite(x$resid), ]
   d$L <- if (!is.null(d$lmid)) as.numeric(d$lmid) else as.numeric(as.character(d$len))
-  if (years == "mean" || length(unique(d$year)) == 1) {
-    d <- stats::aggregate(resid ~ gear + L, data = d, FUN = mean)
-    d$year <- "all"
-  } else {
-    d$year <- factor(d$year)
+  d$year <- as.character(d$year)
+  gear_levels <- if (is.factor(d$gear)) levels(d$gear) else unique(as.character(d$gear))
+  d$gear <- as.character(d$gear)
+
+  # selection as in plot_len()
+  yl <- sort(unique(d$year))
+  if (!is.null(year)) {
+    ys <- as.character(year)
+    if (!all(ys %in% yl) && is.numeric(year) && all(year %in% seq_along(yl))) ys <- yl[year]
+    if (!all(ys %in% yl)) stop("Requested 'year' not found: ", paste(setdiff(ys, yl), collapse = ", "))
+    d <- d[d$year %in% ys, ]
   }
+  if (!is.null(gear)) {
+    gs <- if (is.numeric(gear)) gear_levels[gear] else as.character(gear)
+    if (!all(gs %in% gear_levels)) stop("Requested 'gear' not found: ", paste(setdiff(gs, gear_levels), collapse = ", "))
+    d <- d[d$gear %in% gs, ]
+    gear_levels <- gs
+  }
+  if (!nrow(d)) stop("No residuals for the selected years and gears.")
+
+  # pooling over gears and/or years (Stouffer: sum / sqrt(k))
+  stouffer <- function(r) sum(r) / sqrt(length(r))
+  if (!by_gear) {
+    d <- stats::aggregate(resid ~ year + L, data = d, FUN = stouffer)
+    d$gear <- "all gears"; gear_levels <- "all gears"
+  }
+  if (pool_years) {
+    d <- stats::aggregate(resid ~ gear + L, data = d, FUN = stouffer)
+    d$year <- "all years"
+  }
+  d$gear <- factor(d$gear, levels = gear_levels)
+  d$year <- factor(d$year, levels = sort(unique(d$year)))
+
   d$capped <- abs(d$resid) > cap
   d$r <- pmax(pmin(d$resid, cap), -cap)
   lab <- d[d$capped, ]
+  if (is.null(title))
+    title <- paste0(if (rtype == "osa") "OSA" else "Pearson", " residuals by length",
+                    if (pool_years) ", years pooled" else "", if (!by_gear) ", gears pooled" else "")
   p <- ggplot2::ggplot(d, ggplot2::aes(L, r)) +
     ggplot2::geom_hline(yintercept = c(-2, 2), linetype = "dashed", colour = "grey60") +
-    ggplot2::geom_hline(yintercept = 0, colour = "grey30")
-  p <- if (years == "each" && length(unique(d$year)) > 1)
-    p + ggplot2::geom_col(ggplot2::aes(fill = year), position = "dodge", width = 0.9)
-  else p + ggplot2::geom_col(ggplot2::aes(fill = capped), width = 0.9) +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey30") +
+    ggplot2::geom_col(ggplot2::aes(fill = capped), width = 0.9) +
     ggplot2::scale_fill_manual(values = c(`FALSE` = "grey35", `TRUE` = "#D6604D"), guide = "none")
   if (nrow(lab))
     p <- p + ggplot2::geom_text(data = lab, ggplot2::aes(label = signif(resid, 3)),
                                 vjust = ifelse(lab$r > 0, -0.3, 1.2), size = 3, colour = "#D6604D")
-  p <- p + ggplot2::facet_wrap(~gear, scales = "free_x") +
+  ny <- length(levels(d$year)); ng <- length(levels(d$gear))
+  p <- p + if (ny > 1 && ng > 1) ggplot2::facet_grid(year ~ gear)
+           else if (ng > 1) ggplot2::facet_wrap(~gear)
+           else if (ny > 1) ggplot2::facet_wrap(~year)
+           else ggplot2::facet_wrap(~gear)
+  p <- p +
     (if (is.finite(cap)) ggplot2::coord_cartesian(ylim = c(-cap, cap) * 1.15) else NULL) +
     ggplot2::labs(x = "Length", y = paste(if (rtype == "osa") "OSA" else "Pearson", "residual"),
-                  fill = "Year", title = "Length-composition residuals by length") +
-    ggplot2::theme_bw()
+                  title = title) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
+                   strip.background = ggplot2::element_rect(fill = "grey90"))
   attr(p, "capped") <- x[is.finite(x$resid) & abs(x$resid) > cap, ]
   p
 }

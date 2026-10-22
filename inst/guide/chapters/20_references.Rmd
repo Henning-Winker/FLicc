@@ -1,0 +1,64 @@
+# References
+
+Fournier, D.A., Sibert, J.R., Majkowski, J. and Hampton, J. (1990). MULTIFAN a
+likelihood-based method for estimating growth parameters and age composition
+from multiple length frequency data sets illustrated using data for southern
+bluefin tuna (*Thunnus maccoyii*). Canadian Journal of Fisheries and Aquatic
+Sciences 47: 301-317.
+
+Froese, R., Winker, H., Coro, G., Demirel, N., Tsikliras, A.C., Dimarchopoulou,
+D., Scarcella, G., Probst, W.N., Dureuil, M. and Pauly, D. (2018). A new approach
+for estimating stock status from length frequency data. *ICES Journal of Marine
+Science* 75(6): 2004-2015. doi:10.1093/icesjms/fsy078. R code:
+<https://github.com/SISTA16/LBB>
+
+Froese, R., Winker, H., Coro, G., Demirel, N., Tsikliras, A.C., Dimarchopoulou,
+D., Scarcella, G., Probst, W.N., Dureuil, M. and Pauly, D. (2019). On the pile-up
+effect and priors for Linf and M/K: response to a comment by Hordyk et al. on "A
+new approach for estimating stock status from length frequency data". *ICES
+Journal of Marine Science*. doi:10.1093/icesjms/fsy199
+
+Hordyk, A., Ono, K., Valencia, S., Loneragan, N. and Prince, J. (2015). A novel
+length-based empirical estimation method of spawning potential ratio (SPR), and
+tests of its performance, for small-scale, data-poor fisheries. *ICES Journal of
+Marine Science* 72(1): 217-231. doi:10.1093/icesjms/fsu004
+
+Hordyk, A.R., Ono, K., Prince, J.D. and Walters, C.J. (2016). A simple
+length-structured model based on life history ratios and incorporating
+size-dependent selectivity: application to spawning potential ratios for
+data-poor stocks. *Canadian Journal of Fisheries and Aquatic Sciences* 73(12):
+1787-1799. doi:10.1139/cjfas-2015-0422
+
+Hordyk, A.R., Prince, J.D., Carruthers, T.R. and Walters, C.J. (2019). Comment
+on "A new approach for estimating stock status from length frequency data" by
+Froese et al. (2018). *ICES Journal of Marine Science* 76(2): 457-460.
+doi:10.1093/icesjms/fsy168
+
+Kell, L.T., Mosqueira, I., Grosjean, P., Fromentin, J.-M., Garcia, D., Hillary,
+R., Jardim, E., Mardle, S., Pastoors, M.A., Poos, J.J., Scott, F. and Scott,
+R.D. (2007). FLR: an open-source framework for the evaluation and development of
+management strategies. *ICES Journal of Marine Science* 64(4): 640-646.
+doi:10.1093/icesjms/fsm012
+
+Kristensen, K., Nielsen, A., Berg, C.W., Skaug, H. and Bell, B.M. (2016). TMB:
+automatic differentiation and Laplace approximation. *Journal of Statistical
+Software* 70(5): 1-21. doi:10.18637/jss.v070.i05
+
+Medley, P.A.H. (2025). A new Bayesian catch curve stock assessment model for
+the analysis of length data from multi-gear fisheries. *ICES Journal of Marine
+Science* 82(12): fsaf224. doi:10.1093/icesjms/fsaf224. R package fishblicc:
+<https://github.com/PaulAHMedley/fishblicc>
+
+Sampson, D.B. and Scott, R.D. (2011). A spatial model for fishery age-selection
+at the population level. *Canadian Journal of Fisheries and Aquatic Sciences*.
+doi:10.1139/f2011-044
+
+Thorson, J.T., Johnson, K.F., Methot, R.D. and Taylor, I.G. (2017). Model-based
+estimates of effective sample size in stock assessment models using the
+Dirichlet-multinomial distribution. *Fisheries Research* 192: 84-93.
+doi:10.1016/j.fishres.2016.06.005
+
+Trijoulet, V., Albertsen, C.M., Kristensen, K., Legault, C.M., Miller, T.J. and
+Nielsen, A. (2023). Model validation for compositional data in stock assessment
+models: calculating residuals with correct properties. *Fisheries Research* 257:
+106487. doi:10.1016/j.fishres.2022.106487

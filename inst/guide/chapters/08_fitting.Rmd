@@ -1,0 +1,317 @@
+# Fitting and fit checks
+
+## The model in brief
+
+For each gear $g$ and year $y$, fishing mortality at length is the gear's F
+times its selectivity, $F_{g,y}(L) = F_{g,y}S_g(L)$, and total mortality is
+$Z_y(L) = M(L) + \sum_g F_{g,y}(L)$. Fish grow through the length bins
+following von Bertalanffy growth, with variation in Linf among fish; the
+expected length composition of each gear's catch follows from the numbers
+surviving to each length and the gear's F. Each year is fitted as an
+equilibrium at that year's F, with F linked between years by a random walk and
+selectivity shared by all years. Status is the spawning potential ratio,
+$$
+\mathrm{SPR}_y = \frac{\sum_L N_{F_y}(L) W(L) P_{mat}(L)}{\sum_L N_0(L) W(L) P_{mat}(L)} ,
+$$
+the spawning output per recruit at the year's F relative to the unfished state.
+The equations are in section *Model equations and comparison of models*.
+
+## Fitting the reference model
+
+The reference fit was made in section *The reference fit*; it takes under a
+second:
+
+```{r fit}
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                   settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating")))
+sigmaF_flicc(fit)
+neff_flicc(fit)[1:4, ]
+```
+
+## Settings
+
+| Setting | Default | Role |
+|---|---|---|
+| `pop_model` | `"gtg"` | `"gtg"`, `"gamma"` (`"gtg.dyn"`: development) |
+| `obs_model` | `"dm"` | `"dm"`, `"mn"`, `"nb"` |
+| `dm_theta` | `"saturating"` | DM precision: estimated (`"saturating"`, `"linear"`) or `"fixed"` |
+| `CVL` | 0.1 | CV of Linf among growth groups (fixed unless `CVL.sd`) |
+| `ngtg`, `maxsd` | 13, 3 | GTG grid (LBSPR: 13, 2) |
+| `Mpow` | 0 | M/k at length $\propto (L_\infty/L)^{Mpow}$ |
+| `linf.sd`, `Mk.sd`, `CVL.sd` | `NULL` | estimate with a prior around the input |
+| `sigmaF` | 0.3 | random-walk SD of log F, fixed |
+| `prior_sigmaF` | – | `c(mean, sd, use)`: estimate sigmaF with a prior; `FALSE`: no random walk |
+| `F_re` | `FALSE` | log F as random effects (Laplace), sigmaF estimated |
+| `catch.sd` | 0.05 | SD of the catch-share constraint |
+| `tail_cut` | `NULL` | exclude bins with lower bound `>= tail_cut` (length) |
+| `Lplus` | `NULL` | pool bins with lower bound `>= Lplus` |
+| `rob_eps` | 0 | robust likelihood: $(1 - \epsilon)\pi + \epsilon/n_{bins}$ |
+| `spr_ref` | 40 | SPR target(s) (%) whose Fspr is stored with the fit |
+| `FM_min`, `FM_max` | 0.05, 4 | bounds on apical F/M (soft penalty) |
+| `tail_warning` | `FALSE` | warn about fish beyond the largest GTG Linf |
+
+Further arguments of `fiticc()`: `n_restart` (restarts while the gradient is
+large), `se = FALSE` (skip standard errors), `start` (e.g. `fit$opt$par`),
+`years`, `by_year`, `sel_fixed`.
+
+## Check 7: convergence
+
+```{r check-conv}
+flicc_convergence(fit)
+```
+
+| | |
+|---|---|
+| **Pass** | convergence code 0, maximum gradient < 0.001-0.01, positive-definite Hessian, finite standard errors. |
+| **Red flags** | large gradient after restarts; non-positive-definite Hessian; parameters at bounds (F/M at `FM_min`/`FM_max`, very small selectivity spreads). |
+| **Action** | more restarts (`n_restart`); restart from `fit$opt$par`; simplify selectivity (logistic, fewer gears); check sample sizes; a tail cut or `rob_eps` if the tail drives the problem. |
+
+## Check 8: fit to the compositions
+
+```{r check-len, fig.height = 6}
+plot_len(fit, by_gear = TRUE, year = 2020:2024)
+plot_len(fit)
+```
+
+| | |
+|---|---|
+| **Look for** | Predictions through the observed modes and descending limbs in every gear. |
+| **Red flags** | Systematic misfit of the left limb (selectivity), of the tail (Linf, CVL, dome), or of one gear only; the misfit changing sign between periods (time-varying selectivity or sampling). |
+| **Action** | Revisit selectivity form and Linf; tail cut; split periods. |
+
+## Residual diagnostics
+
+FLicc is an equilibrium model: each year's composition is explained by the
+equilibrium at that year's F. Strong and weak year classes growing through the
+compositions are therefore expected to leave patterns in the residuals. The aim
+of the diagnostics is not to remove these patterns but to see them and judge
+their size, and to separate them from misfit that a setting can fix
+(selectivity, Linf, tail, effective sample size).
+
+**Residuals.** `resid_flicc()` computes residuals consistent with the
+likelihood of the fit (effective sample size, observation model, tail cut, plus
+group):
+
+- Pearson residuals, $r = (o - n\pi)/\sqrt{V}$, with $V = n\pi(1-\pi)$ for the
+  multinomial and the same times $(n+\alpha_0)/(1+\alpha_0)$ for the
+  Dirichlet-multinomial. They are easy to read in bubble plots but correlated
+  within a composition and not normal for small expected counts.
+- One-step-ahead (OSA) residuals: the composition is split, along increasing
+  length, into a sequence of conditional binomials (beta-binomials for the
+  Dirichlet-multinomial), and each observed count is turned into a randomized
+  quantile residual $r = \Phi^{-1}(u)$. Under a correct model they are
+  independent standard normal (Trijoulet et al. 2023), so QQ plots and tests
+  are valid.
+
+**How OSA residuals work.** A composition is not a set of independent
+numbers: with $n$ fish measured, a high count in one bin forces lower counts
+elsewhere. OSA residuals step through the bins of one composition, from small
+to large, and ask at each step a conditional question:
+
+- bin 1: of all $n$ fish, how many should be in bin 1? Binomial$(n, \pi_1)$;
+- bin 2: of the fish not in bin 1, how many should be in bin 2?
+  Binomial$(n - o_1, \pi_2/(1-\pi_1))$; and so on. The last bin is determined
+  by the others and has no residual.
+
+The observed count is located in its predicted distribution: at the 97.5th
+percentile, $u = 0.975$ and $r = \Phi^{-1}(0.975) = 1.96$. Because counts are
+whole numbers, $u$ is drawn at random within the step of the distribution where
+the count falls (the "randomized" part). For the Dirichlet-multinomial the
+binomials are beta-binomials, so its extra variance is included.
+
+"One step ahead" refers to stepping through the bins, not through time. In
+models with random effects, OSA residuals step through time and re-estimate the
+random effects at each step. FLicc has no random effects by default (F is
+estimated each year, the random walk is a penalty), so the expected compositions
+are fixed once the model is fitted and the residuals are exact and cheap.
+
+Reading them:
+
+- **Size**: about 5% beyond $\pm 2$, almost none beyond $\pm 3$.
+- **Sign**: each residual is conditional on the smaller bins. A positive
+  residual at length $L$ means that, of the fish still present at $L$ or
+  larger, more were in bin $L$ than predicted: fish "drop out" faster than the
+  model expects (higher mortality or falling selectivity), as in a catch curve.
+  A negative residual means more fish carried on to larger sizes.
+- **Spread**: an sd well above 1 means the data are noisier than the effective
+  sample size and observation model allow (intervals too narrow); well below 1,
+  that the noise is overstated.
+- **Process variation**: the model does not include year-class strength, so
+  strong and weak year classes appear as structure in the residuals (runs along
+  the cohort tracks, mean-length runs) rather than as noise.
+- **Few data per parameter**: residuals are computed at parameters estimated
+  from the same data, so they shrink towards zero (sd below 1) when there are
+  few data per parameter, e.g. a fit to a single year. A single year also gives
+  no between-year diagnostics, and a year-class bump within one composition
+  cannot be told apart from a selectivity misfit at those lengths. Across years,
+  cohorts move along the growth tracks while selectivity misfit stays at the
+  same length; the joint fit with shared selectivity is what lets the residuals
+  separate the two.
+
+```{r resid, fig.height = 4.5}
+res_osa <- resid_flicc(fit, type = "osa")
+c(mean = mean(res_osa$resid, na.rm = TRUE), sd = sd(res_osa$resid, na.rm = TRUE))
+plot_resid_qq(res_osa)
+```
+
+**Bubble plots.** Residuals by length and year; blue where more fish were
+observed than expected, red where fewer. `cohorts = TRUE` adds von Bertalanffy
+growth tracks of year classes (grey lines):
+
+```{r resid-bubble, fig.height = 5}
+plot_resid_bubble(res_osa, fit = fit, cohorts = TRUE)
+```
+
+
+**Residuals by length.** `plot_resid_len()` draws the residuals against length
+as bars, with the same panels as `plot_len()`: one panel per year and gear
+(`year =`, `gear =` select them), the gears pooled with `by_gear = FALSE`, or the
+years pooled with `pool_years = TRUE`. Pooled residuals are summed and divided
+by $\sqrt{k}$ (for $k$ residuals per bin), so the dashed lines at $\pm 2$ keep
+their meaning.
+
+Pooled over all years, year classes largely cancel out, and what remains is
+misfit at the same lengths in every year: the selectivity shape, or Linf and CVL
+in the largest fish. This is the first plot to look at:
+
+```{r resid-len-pooled, fig.height = 3.5}
+plot_resid_len(res_osa, pool_years = TRUE)
+```
+
+Here two runs stand out. In the trawl, the OSA residuals are positive from about
+28 to 35 cm: of the fish at these lengths or larger, more stop at each length
+than predicted, i.e. the trawl catches fewer fish above 35 cm than the fitted
+dome allows (its right limb falls more steeply). In the gillnet, positive
+residuals from about 45 to 50 cm say the same for the largest fish: fewer reach
+the largest lengths than predicted, which points to Linf or CVL (the growth of
+the largest fish), to a slight dome of the gillnet, or to a higher F on the
+largest fish. Both runs are at the same lengths in every year (below), so they
+are not year classes.
+
+By year, a misfit that moves to larger lengths from one year to the next is a
+year class growing through; one that stays at the same length is selectivity.
+The last three years, as OSA and as Pearson residuals:
+
+```{r resid-len-years, fig.height = 6}
+plot_resid_len(res_osa, year = 2022:2024)
+plot_resid_len(fit, type = "pearson", year = 2022:2024)
+```
+
+The trawl run at about 30-35 cm is there in all three years, together with a
+deficit at about 20-28 cm, as OSA and as Pearson residuals: a shape the trawl
+selectivity does not follow, not a year class (which would move by a few cm per
+year). In the Pearson panels, the long rows of small negative bars at both ends
+of each panel are the empty bins beyond the observed fish: they carry no
+information.
+
+**Pearson or OSA?** Both measure how far the observed count in a bin is from
+its expectation, in standard deviations, but they answer different questions:
+
+| | Pearson | OSA |
+|---|---|---|
+| Question | Is the count in this bin far from $n\pi$? | Given the fish in the smaller bins, is the count in this bin unusual? |
+| Independence | correlated within a composition (they sum to about zero: a misfit at one length forces opposite residuals elsewhere) | independent under a correct model |
+| Distribution | skewed for small expected counts: observed zeros give small negative values, one fish where 0.05 are expected gives about +4 | standard normal, also for small counts |
+| Tails | drawn for every bin, so the empty bins beyond the largest fish form a fringe of small negative bars | end at the largest fish of each composition (and the last bin has none) |
+| Randomness | none | a random draw within each count's step (`seed`): small details change with the seed, patterns do not |
+| Use | bubble plots, a quick look at where the fit is high or low | QQ plot, sd, tests, the $\pm 2$ rule |
+
+In practice: read patterns with either, judge size and significance with OSA.
+A pattern that shows in both (e.g. too few fish at one range of lengths and too
+many at the next) is real. A single large Pearson residual at the largest
+lengths that is small as OSA residual is one rare fish, not a misfit.
+
+The sign of an OSA residual is conditional: a positive residual at length $L$
+means that, of the fish at $L$ or larger, more were in bin $L$ than predicted.
+A run of negative OSA residuals followed by a run of positive ones therefore
+marks a dip followed by a surplus in the composition, e.g. a second mode or a
+year class at the larger lengths.
+
+
+**Mean length and runs test.** The observed mean length of each composition is
+compared with its expectation, standardized with the standard error implied by
+the observation model (Francis 2011). A runs test checks whether the residuals
+change sign as often as random residuals would; too few runs mean systematic
+structure (green background: passed; red: failed; limits at three standard
+deviations, as in `ss3diags` and JABBA):
+
+```{r lmean-resid, fig.height = 3.5}
+lmr <- lmean_resid_flicc(fit)
+lmr$runs
+lmr$plot
+```
+
+**Posterior predictive checks.** `ppc_flicc()` simulates compositions from the
+fitted model (at the effective sample size and with the observation model of
+the fit) and compares observed statistics with their predictive distribution:
+mean length, 95th percentile, proportion of mature fish and largest length.
+With `par_draws = TRUE` the parameters are also drawn from their estimated
+uncertainty.
+
+```{r ppc, fig.height = 7}
+ppc <- ppc_flicc(fit, nsim = 300)
+ppc$coverage
+ppc$plot
+```
+
+```{r resid-numbers, include = FALSE}
+osa_sd <- round(sd(res_osa$resid, na.rm = TRUE), 2)
+sdz <- setNames(lmr$runs$sd_z, as.character(lmr$runs$gear))
+out_lmean <- with(ppc$coverage[ppc$coverage$stat == "Lmean", ],
+                  setNames(round(100 * share_outside_95), as.character(gear)))
+```
+
+In this fit the OSA residuals have sd `r osa_sd`, so the bin-to-bin noise
+within a year is `r if (osa_sd < 0.9) "smaller than" else if (osa_sd > 1.1) "larger than" else "close to"`
+what the observation model allows. The mean lengths, however, vary between years
+with an sd of `r sdz["Trawl"]` (trawl) and `r sdz["Gillnet"]` (gillnet) in
+standardized units, and `r out_lmean["Trawl"]`% and `r out_lmean["Gillnet"]`% of
+the observed mean lengths lie outside their 95% predictive intervals. Where the
+between-year variation is large while the within-year noise is not, the misfit
+is not sampling noise: whole compositions shift between years, as year classes
+pass through, which the equilibrium model cannot follow.
+
+About 5% of the observed values should lie outside the 95% intervals. Many more
+means that the effective sample size or the observation model understate the
+variability of the data, so the intervals of the assessment are too narrow;
+far fewer means the effective sample size could be higher.
+
+| Pattern | Likely cause | Response |
+|---|---|---|
+| Diagonal runs of one sign along the cohort tracks; mean-length runs test failed | strong or weak year classes (expected in an equilibrium model) | report it; check that status is robust (retrospective, tail cut); do not over-fit |
+| Vertical bands of one sign at the same lengths in all years | selectivity shape | logistic vs dome; dome sensitivity |
+| Misfit of the largest fish in all years | Linf, CVL or doming | Linf sensitivity, tail cut |
+| A change of sign between periods | change of selectivity, gear or sampling | split periods; `by_year` check |
+| Many observed statistics outside the predictive intervals | ESS too high, or observation model too narrow | lower ESS; Dirichlet-multinomial |
+| OSA residuals with sd well above 1 | the same | the same |
+
+## Check 9: retrospective consistency
+
+The model is refitted with the last one, two and three years removed (`peels`);
+`Map()` runs one fit per peel. Mohn's rho compares the terminal SPR of each peel
+with the SPR of the same year in the full fit.
+
+```{r check-retro, fig.height = 4}
+yrs <- as.numeric(dimnames(lfd[[1]])$year)
+peels <- 1:3
+
+retro <- Map(function(p) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"),
+         years = head(yrs, -p), se = FALSE)
+}, peels)
+names(retro) <- paste0("peel", peels)
+plot_spr(c(list(full = fit), retro))
+
+spr_full <- c(fit$report$spr)
+spr_peel <- sapply(retro, sprcur_flicc)               # terminal SPR of each peel
+spr_same <- spr_full[length(spr_full) - peels]        # same years in the full fit
+mohn_rho <- mean((spr_peel - spr_same) / spr_same)
+round(mohn_rho, 3)
+```
+
+| | |
+|---|---|
+| **Pass** | Mohn's rho for SPR within about ±0.2. |
+| **Red flags** | Consistent revisions in one direction (the terminal SPR is systematically revised up or down). |
+| **Action** | Check for trends in selectivity or sampling; in a rebuild, an equilibrium model is expected to under-estimate SPR at the end of the series (section *Lag under changing F*). |

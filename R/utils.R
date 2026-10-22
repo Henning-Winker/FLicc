@@ -1070,3 +1070,6 @@ lfd_trim <- function(lfd, Lmin = NULL, Lmax = NULL, verbose = TRUE) {
   attr(out, "removed") <- removed
   out
 }
+
+# null default (base R has it from 4.4.0 only; defined here for older R)
+`%||%` <- function(x, y) if (is.null(x)) y else x

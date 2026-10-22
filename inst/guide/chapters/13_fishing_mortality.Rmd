@@ -1,0 +1,195 @@
+<!-- needs: 12_sample_size -->
+# Fishing mortality over time
+
+Log F by gear follows a random walk,
+$$
+\log F_{g,y} = \log F_{g,y-1} + \varepsilon_{g,y}, \qquad \varepsilon_{g,y} \sim N(0, \sigma_F^2).
+$$
+With selectivity $S_g(L)$ shared by all years, the model is fitted to all
+compositions at once; the objective is
+$$
+-\log L = -\sum_{y} \log L_y\!\left(F_{\cdot,y}, S\right)
+          - \sum_{g,y>1} \log \phi\!\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right).
+$$
+Compared with fitting each year on its own (as LBSPR does), this has four
+advantages:
+
+- **Selectivity from all years.** The left limb of the compositions is
+  informed by every year, so selectivity is better determined and does not
+  absorb year-to-year sampling noise.
+- **Borrowing strength.** A year with few fish is fitted close to its
+  neighbours instead of producing an extreme F.
+- **Missing years.** A year without data of a gear still gets an F, bridged by
+  the random walk (section *Missing data*).
+- **Separation of signal and noise.** $\sigma_F$ sets how much of the
+  year-to-year change in the compositions is read as a change in F.
+
+The price is smoothing: with small $\sigma_F$ a real change in F is spread over
+several years (section *Lag under changing F*). The options below differ in how
+$\sigma_F$ is treated.
+
+The four options for $\sigma_F$ are fitted below to the same data (raw counts,
+Dirichlet-multinomial with estimated precision). Only the F settings differ, so each option has its own
+`settings` list; `Map()` fits them in turn.
+
+```{r f-options}
+f_settings <- list(
+  fixed_0.3 = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", sigmaF = 0.3),                       # default
+  prior     = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", prior_sigmaF = c(log(0.5), 0.3, 1)), # penalised
+  F_re      = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", F_re = TRUE),                        # random effects
+  no_RW     = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", prior_sigmaF = FALSE))               # no random walk
+
+fits_F <- Map(function(set) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = set)
+}, f_settings)
+
+data.frame(option   = names(fits_F),
+           sigmaF   = round(sapply(fits_F, sigmaF_flicc), 3),
+           SPR_last = round(sapply(fits_F, sprcur_flicc), 3),
+           se_log   = round(sapply(fits_F, se_logspr), 3),
+           row.names = NULL)
+```
+
+`sigmaF_flicc()` returns the fixed or estimated $\sigma_F$ (NA without a random
+walk). The SPR trajectories with 95% intervals, and the apical F by year
+(`report$Fap`):
+
+```{r f-options-plot, fig.height = 4}
+plot_spr(fits_F, ci = TRUE)
+
+F_by_option <- FLQuants(fixed_0.3 = fits_F$fixed_0.3$report$Fap,
+                        prior     = fits_F$prior$report$Fap,
+                        F_re      = fits_F$F_re$report$Fap,
+                        no_RW     = fits_F$no_RW$report$Fap)
+ggplot(F_by_option, aes(year, data, colour = qname)) +
+  geom_line(linewidth = 0.8) + geom_point(size = 1.5) +
+  labs(x = "Year", y = "Apical F", colour = NULL) + theme_bw()
+```
+
+The estimated $\sigma_F$ of the penalised and random-effects options is much
+smaller than 0.3, so their F trajectories are smoother; without a random walk F
+follows each year's composition. To see what $\sigma_F$ does, the next runs fix it
+at a range of values (`sigmaF_values`):
+
+```{r sigmaF-range, fig.height = 4}
+sigmaF_values <- c(0.05, 0.1, 0.3, 0.6, 1)
+
+fits_sigmaF <- Map(function(sF) {
+  fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+         settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating", sigmaF = sF), se = FALSE)
+}, sigmaF_values)
+names(fits_sigmaF) <- paste0("sigmaF_", sigmaF_values)
+
+plot_spr(fits_sigmaF)
+data.frame(sigmaF   = sigmaF_values,
+           SPR_last = round(sapply(fits_sigmaF, sprcur_flicc), 3),
+           neg_logL = round(sapply(fits_sigmaF, function(fit) fit$opt$objective), 1))
+```
+
+Small values force F (and SPR) towards a flat line; from about 0.3 upward the
+trajectories change little. The objective (`neg_logL`) includes the random-walk
+penalty, which is why it cannot be used to choose $\sigma_F$ directly: it always
+favours the smallest value that the compositions tolerate.
+
+## Default: sigmaF fixed
+
+`sigmaF = 0.3` (the default) fixes the year-to-year standard deviation of log F,
+roughly a 30% typical annual change. It is fast, cannot collapse, and the
+simulations showed that it removes most of the smoothing lag (next section).
+Change it where fleet dynamics are known to be smoother (0.2) or more variable
+(0.5).
+
+## Estimating sigmaF with a prior (penalised)
+
+With `prior_sigmaF = c(mu, sd, 1)`, $\sigma_F$ is a fixed-effect parameter and the
+objective is
+$$
+-\log L = -\log L_{data} - \sum_{g,y} \log \phi\left(\log F_{g,y} - \log F_{g,y-1};\, 0, \sigma_F\right)
+          - \log \phi\left(\log \sigma_F;\, \mu, sd\right).
+$$
+Each random-walk term contributes $-\log \sigma_F$, so the joint maximum favours
+small $\sigma_F$ with flat F whenever the data do not resist: the estimate is
+pulled down (here `r round(sigmaF_flicc(fits_F$prior), 3)`), and only the prior keeps it
+away from 0. Without a prior (`prior_sigmaF = c(NA, NA, 1)`) it collapses; FLicc
+warns.
+
+## F as random effects (`F_re = TRUE`)
+
+The log F are integrated out,
+$$
+L(\theta) = \int L_{data}(\theta, \mathbf F)\, p(\mathbf F \mid \sigma_F)\, d\mathbf F,
+$$
+by the Laplace approximation (TMB): for each value of the other parameters
+$\theta$ (selectivity, $\sigma_F$), the F path is optimised and the curvature
+around it enters the marginal likelihood. Consequences:
+
+- $\sigma_F$ is estimated from the marginal likelihood, which properly accounts for
+  the uncertainty of the F path (here `r round(sigmaF_flicc(fits_F$F_re), 3)`). It can still
+  go to small values when the compositions carry little year-to-year
+  information; a weak prior `c(log(0.3), 0.5, 1)` is used unless another is given.
+- Standard errors (e.g. of log SPR) include the uncertainty of the F process.
+- Fitting is slower:
+
+```{r f-re-time}
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$fixed_0.3))
+system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$F_re))
+```
+
+Use it for a final assessment and to estimate $\sigma_F$ once; then fix it for
+repeated fits: `sigmaF = sigmaF_flicc(fit_re)`. `F_re = TRUE` with `sigmaF` given
+keeps the random effects but fixes $\sigma_F$.
+
+## No random walk and separate years
+
+`prior_sigmaF = FALSE` estimates each year's F freely with shared selectivity
+(LBSPR fitted year by year, with common selectivity): no smoothing lag, but noisier
+F and no information for years without data. `by_year = TRUE` fits each year
+completely separately (including selectivity).
+
+| Option | Settings | sigmaF | Use |
+|---|---|---|---|
+| fixed (default) | `sigmaF = 0.3` | fixed | routine, MSE, ensembles |
+| penalised with prior | `prior_sigmaF = c(log(0.5), 0.3, 1)` | estimated, pulled down | comparison with earlier versions |
+| random effects | `F_re = TRUE` | marginal likelihood | final assessment; estimate sigmaF once |
+| no random walk | `prior_sigmaF = FALSE` | – | complete data, maximum responsiveness |
+| separate years | `by_year = TRUE` | – | checks of selectivity change |
+
+## Joint fit versus each year separately
+
+`by_year = TRUE` fits every year on its own and re-estimates all parameters,
+including selectivity, for each year: the LBSPR-style approach. The comparison
+below uses the same data and settings as the reference fit `fit`.
+
+```{r by-year, fig.height = 4}
+fit_by_year <- fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
+                      settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"), by_year = TRUE)
+
+plot_spr(list(joint = fit, by_year = fit_by_year))
+plot_sel(flicc_stklen(fit_by_year))
+```
+
+The by-year selectivities differ between years although the gears did not
+change; these differences are sampling noise taken up by selectivity, and they
+pass on to F and SPR. The joint fit estimates one selectivity per gear and gives
+a smoother, more precise SPR series. Use `by_year = TRUE` as a check for real
+changes in selectivity (a new mesh size, a change of fishing grounds), not as
+the main assessment.
+
+## Lag under changing F
+
+An equilibrium model explains each year's composition by the equilibrium at that
+year's F. After a change in F, the large fish adjust only over many years, so the
+estimated SPR lags behind (*simulation*, rebuild from 3x to 0.7x Fmsy):
+
+| F model | SPR trend recovered, no cut | with cut at 0.8 Linf |
+|---|---|---|
+| sigmaF estimated (collapsing) | 14% | 26% |
+| sigmaF fixed 0.3 | 27% | 50% |
+| sigmaF fixed 1 | 29% | 57% |
+| no random walk | 30% | 59% |
+
+The smoothing lag of the random walk is largely removed at sigmaF = 0.3; larger
+values add little responsiveness but more year-to-year noise (+10 to +50%). The
+rest of the lag comes from the data (the tail carries the memory of past F) and
+from recruitment rising during recovery under a stock-recruitment relationship.
+In a rebuild from deep depletion the equilibrium model stays pessimistic.

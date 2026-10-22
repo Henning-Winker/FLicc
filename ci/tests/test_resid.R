@@ -54,7 +54,11 @@ stopifnot(abs(sc_dm["mean"]) < 0.1, abs(sc_dm["sd"] - 1) < 0.1)
 # residuals by length (single year and several years)
 od <- if (dir.exists("out/tests")) "out/tests" else "."
 p1 <- plot_resid_len(fdm)
-p2 <- plot_resid_len(fdm, years = "each", cap = 3)
+p2 <- plot_resid_len(fdm, years = "each", cap = 3)       # deprecated argument still works
+p3 <- plot_resid_len(fdm, type = "osa", pool_years = TRUE)
+p4 <- plot_resid_len(fdm, by_gear = FALSE, year = tail(fdm$tmb_data$year_names, 2))
+p5 <- plot_resid_len(fdm, gear = 1, year = 1:2)
+for (pp in list(p3, p4, p5)) stopifnot(inherits(pp, "ggplot")); invisible(lapply(list(p3, p4, p5), ggplot2::ggplot_build))
 ggplot2::ggsave(file.path(od, "resid_len.png"), p1, width = 8, height = 4, dpi = 100)
 ggplot2::ggsave(file.path(od, "resid_len_each.png"), p2, width = 8, height = 4, dpi = 100)
 print(nrow(attr(p2, "capped")))

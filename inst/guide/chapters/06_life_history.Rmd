@@ -1,0 +1,116 @@
+# Life history and the stock object
+
+```{r stocklen}
+stklen
+```
+
+`stocklen(lfd, lhpar, m_model)` builds the length-based stock object: weight
+$W(L) = aL^b$, maturity as a logistic ogive with `L50` and `L95` (default
+`L95 = L50 + 0.2 Linf`), and natural mortality at length:
+
+| `m_model` | $M(L)$ |
+|---|---|
+| `"constant"` | $M$ |
+| `"inverse"` | $M\, L_{ref}/L$ |
+| `"Lorenzen"` | Lorenzen weight-based, scaled to $M$ at `reflen` |
+| `"Gislason"` | Gislason et al. (2010) from $L$, $L_\infty$, $k$ |
+
+The length model uses $M/k$ (and $Z/k$): what matters is the ratio, so k and M
+uncertainty should be considered jointly (as in `mc_flicc()`).
+
+## Check 5: life-history inputs
+
+| | |
+|---|---|
+| **Look for** | Linf close to the largest regularly observed lengths (Check 3); M/k near the life-history invariant range (often 1-2); L50 below the modal length of the main gear. |
+| **Red flags** | Linf well below the largest fish (many fish beyond Linf) or far above it; Linf from another region or sex; M/k outside 0.5-3 without justification. |
+| **Action** | Linf is the dominant sensitivity (simulation: a 10% error shifts SPR by +75% / -30%); run Linf sensitivities and include Linf in the ensemble. |
+
+### Growth and the growth-type groups
+
+`plot_growth()` draws the growth curves of the growth-type groups the model
+uses (as in Fig. 1 of Hordyk et al. 2015), with Linf, the Linf of the largest
+group (no fish in the model grows beyond it), L50 and the largest observed fish
+of each gear. It needs only the life history and the GTG settings, so it is a
+check **before** the fit: the largest fish should lie below the largest group.
+`composition = TRUE` adds the unfished length composition of each group on the
+same length axis:
+
+```{r growth, fig.height = 4.5}
+plot_growth(lhpar, CVL = 0.1, lfd = lfd, composition = TRUE)
+```
+
+After a fit, `plot_growth(fit)` shows the groups of the fitted model (with the
+estimated Linf and CVL when `linf.sd` or `CVL.sd` are used).
+
+### Cohort modes and t0
+
+FLicc does not need t0: it works in length, and t0 only shifts the age axis. But
+the length compositions can say something about growth when year classes show
+as modes. `growth_phase_flicc()` fits each composition as a mixture of age
+components whose mean lengths follow the growth curve,
+$\mu_j = L_\infty(1 - e^{-k(j + \phi)})$, with widths from the growth-type groups
+($\mathrm{CVL}\,\mu_j$, plus a small extra spread `sd0`), as in MULTIFAN
+(Fournier et al. 1990). The weights of the components are free in each
+composition, so year-class strength and selectivity do not matter; only the
+positions and widths of the modes have to fit. The phase $\phi$ is common to all
+years and gears and is profiled:
+
+- a clear maximum of the profile means that the modes follow the growth curve;
+- a flat profile means that the compositions carry no information on the phase:
+  the annual growth increment $(L_\infty - L)(1 - e^{-k})$ is small compared with
+  the spread of length at age, so neighbouring year classes overlap;
+- a vector of `k` gives a joint profile over phase and k, a check of the growth
+  rate (with Linf fixed).
+
+With the samples taken $\tau$ years after spawning (`sample - spawn`, as
+fractions of the year), $t_0 = \tau - \phi - m$. The integer $m$ (is the first
+mode age 0 or age 1?) is not identified by lengths alone; `$t0` lists the
+candidates with the implied lengths at age 1 and 2, to be chosen with knowledge
+of the biology. `age_first` is the true age of the first age component under
+each candidate (negative: that component is not yet born and the first mode is
+the next one), and `phase_interval` the approximate 95% interval of the phase
+(`NA` when the profile is flat). This is also the information needed for growth in age-based
+models (e.g. the length at a minimum age and the CV of young fish in SS3).
+
+```{r growth-phase, fig.height = 3.5}
+gph <- growth_phase_flicc(fit, spawn = 0, sample = 0.5)   # spawning at the start, sampling mid-year
+gph$best
+gph$t0
+plot_growth_phase(gph)
+```
+
+```{r growth-lfd, fig.height = 6}
+plot_growth_lfd(gph)
+plot_growth_lfd(gph, ages = c(2, 12))     # selected ages only
+```
+
+For alfonsino the profile is flat (it varies by only
+`r round(gph$contrast, 1)` log-likelihood units over the phase): with k = 0.08
+the fish grow about 2-3 cm a year at the lengths caught, less than the spread of
+length at age, so year classes cannot be followed in the compositions: they are
+separable (shaded bands) only at lengths below those caught, and at the lengths
+caught the tracks run closer together than the width of a year class. The data neither support nor contradict the growth
+parameters here, and the t0 candidates are not informative. For fast-growing
+species with seasonal recruitment, sampled over a short period of the year, the
+modes are separate and the profile has a clear peak. Simulated compositions of
+such a species (k = 0.25, recruitment once a year, year-class strength varying
+at random) show what this looks like: the modes follow the tracks from year to
+year, and the phase is recovered (simulated: 0.35):
+
+```{r growth-sim, fig.height = 3.5}
+set.seed(3)
+L <- 0:60
+lfd_sim <- FLQuants(Sim = FLQuant(0, dimnames = list(len = L, year = 2001:2006)))
+for (y in 2001:2006) {
+  mu <- 50 * (1 - exp(-0.25 * (0:12 + 0.35)))                   # mean length at age
+  s  <- sqrt((0.08 * mu)^2 + 1)
+  w  <- exp(-0.4 * (0:12)) * exp(rnorm(13, 0, 0.5))             # year classes
+  p  <- sapply(seq_along(mu), function(j) pnorm(L + 1, mu[j], s[j]) - pnorm(L, mu[j], s[j])) %*% w
+  lfd_sim$Sim[, as.character(y)] <- rmultinom(1, 2000, p)
+}
+gph_sim <- growth_phase_flicc(FLPar(linf = 50, k = 0.25, M = 0.3, L50 = 30), lfd = lfd_sim,
+                              CVL = 0.08, sd0 = 1)
+gph_sim$best
+plot_growth_lfd(gph_sim)
+```

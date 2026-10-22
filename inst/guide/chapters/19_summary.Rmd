@@ -1,0 +1,34 @@
+# Summary of checks and recommendations
+
+| # | Check | Red flag | Action |
+|---|---|---|---|
+| 1 | sample size by gear-year (`plot_lfdn`) | < 50 fish or < 10 bins; gear mix changing | ESS per gear; drop/pool poor gear-years |
+| 2 | composition consistency (`plot_lfd`) | shifts in mode or left limb | split gears/periods; restrict years |
+| 3 | largest fish vs Linf | > 1% at or above Linf | revisit Linf; tail cut |
+| 4 | empirical catch curves (`plot_zlcc`) | curved limbs, jumping slopes | dome or tail cut; keep random walk |
+| 5 | life-history inputs (`plot_growth`, `growth_phase_flicc`) | Linf inconsistent with data; odd M/k; largest fish beyond the largest growth group; cohort modes not following the growth curve | Linf sensitivity; priors (`linf.sd`) as a check; maxsd; growth check of k |
+| 6 | selectivity plausibility (`plot_sel`) | narrow or unsupported domes | logistic; fix from external data; dome sensitivity (`dome_sens_flicc`) |
+| 7 | convergence (`flicc_convergence`) | gradient, Hessian, bounds | restarts; simplify; tail cut |
+| 8 | fit to compositions (`plot_len`, `plot_resid_bubble`, `lmean_resid_flicc`, `ppc_flicc`) | systematic misfit; failed runs test; many values outside predictive intervals | selectivity, Linf, tail cut; lower ESS; cohort patterns are expected |
+| 9 | retrospective | rho beyond ±0.2 | trends in selectivity or sampling |
+| 10 | indicators vs status | gears disagree | best gear; pooling; HCR smoothing |
+
+| Topic | Recommendation |
+|---|---|
+| Observation model | `dm` with real data |
+| Sample size | `dm` with `dm_theta = "saturating"` on raw counts or ESS >= 500 (the data set their weight); with fixed precision or `mn`, ESS about 150-200 per gear-year, never raw thousands |
+| Single year | `mn` (ESS 150-200 per gear) or `dm` with `dm_theta = "fixed"`: the DM precision is not estimable from one composition per gear (`dm_shared = TRUE` with several gears may work) |
+| Growth | fix Linf and CVL; Linf is the main sensitivity; default `maxsd = 3, ngtg = 13` (`maxsd = 2` only to reproduce LBSPR) |
+| Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.4 x Linf); `binormal`/`bidsnormal` for two size modes |
+| Sensitivity runs | `fits_summary()` for the table; `ensemble_flicc()` with equal weights (AIC weights as a check, same data only) |
+| Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |
+| F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate); `by_year = TRUE` only as a check |
+| Tail | `tail_cut` at about 0.80-0.85 x Linf, as a length |
+| Missing data | keep zeros, rely on the random walk; not without random walk |
+| Status | SPR at the year's F; `s` for $B/B_{tgt}$ under Beverton-Holt; `plot_LBAdvice(flicc2FLStockR(fit))` |
+| Models | `gtg` + `dm` routinely; `gamma` + `nb` to replicate fishblicc |
+| MSE | fixed sigmaF, absolute tail cut, `se = FALSE`; tune with the HCR |
+
+*Planned: a worked example of a rebuilding stock, refitted year by year, to show
+how SPR, the tail cut and sigmaF respond over time; estimated Dirichlet-multinomial
+overdispersion.*
