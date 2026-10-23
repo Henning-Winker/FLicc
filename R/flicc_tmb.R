@@ -1108,7 +1108,7 @@ fiticc_core <- function(lfd, stklen,
 #'       reuse them for these targets.}
 #'     \item{\code{FM_min}, \code{FM_max}, \code{FMpen_sd}}{Bounds on
 #'       apical F/M (F at the most selected length over M at that length) by
-#'       year: outside [\code{FM_min}, \code{FM_max}] (defaults 0.05 and 4) a
+#'       year: below \code{FM_min} or above \code{FM_max} (defaults 0.05 and 4) a
 #'       steep one-sided penalty on log F/M applies; inside there is no
 #'       penalty. \code{FMpen_sd > 0} (default 0.2) switches the bounds on,
 #'       \code{0} off. The lower bound stops F sliding to 0 (SPR = 1) when no
