@@ -156,9 +156,20 @@ lbi_table_def <- function() {
 #' @param lhpar `FLPar` with `linf` and `L50` (and `k`, `M` for `Z` and `Lopt =
 #'   "mk"`; `a`, `b` for `LmaxY`). Taken from the fit if `x` is a fit.
 #' @param gear,years Optional selection.
-#' @param catch_by_gear Optional relative catch by gear (weight): adds the gears
-#'   pooled into one composition raised by catch ([combine_lfd()]) as gear
-#'   `"pooled"`.
+#' @param pool Logical; add the gears pooled into one composition as gear
+#'   `"pooled"`. The length frequency of each gear and year is converted to
+#'   proportions, raised to catch numbers with the gear's relative catch
+#'   (`catch_by_gear`; in weight divided by the mean weight of a sampled fish)
+#'   and summed over gears ([combine_lfd()]), so each gear contributes in
+#'   proportion to its catch rather than to its sampling effort. Default `TRUE`
+#'   when `catch_by_gear` is given.
+#' @param catch_by_gear Relative catch by gear for pooling: a numeric vector
+#'   (named by gear, or in the order of the data) or `FLQuants` by gear with the
+#'   catch by year; only relative values matter. For a fit, the fit's catch by
+#'   gear is used when not given. Without it, gears are pooled with equal catch
+#'   shares (with a message).
+#' @param catch_units Units of `catch_by_gear`: `"weight"` (default; needs `a`,
+#'   `b` in `lhpar`) or `"numbers"`. For a fit, the fit's setting.
 #' @param ref_years Optional reference years for indicators relative to a
 #'   historical reference period.
 #' @param Lopt `"wklife"` (2/3 Linf, default) or `"mk"` (Linf 3/(3 + M/k)).
@@ -194,13 +205,19 @@ lbi_table_def <- function() {
 #' lbi_flicc(lfd, lhpar, catch_by_gear = c(Trawl = 0.7, Gillnet = 0.3), ref_years = 2013:2015)
 #' }
 #' @export
-lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear = NULL,
+lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, pool = !is.null(catch_by_gear),
+                      catch_by_gear = NULL, catch_units = NULL,
                       ref_years = NULL, Lopt = c("wklife", "mk"), limits = NULL) {
   Lopt <- match.arg(Lopt)
-  if (is.list(x) && !is.null(x$tmb_data) && !is.null(x$report)) {
+  is_fit <- is.list(x) && !is.null(x$tmb_data) && !is.null(x$report)
+  if (is_fit) {
     lfd <- x$report$obslen
     if (is.null(lhpar)) lhpar <- x$report$lhpar
+    if (pool && is.null(catch_by_gear)) catch_by_gear <- x$report$catch_by_gear
+    if (is.null(catch_units)) catch_units <- if (is.null(x$settings$catch_units)) "weight" else x$settings$catch_units
   } else lfd <- x
+  if (is.null(catch_units)) catch_units <- "weight"
+  catch_units <- match.arg(catch_units, c("weight", "numbers"))
   if (!inherits(lfd, "FLQuants")) stop("x must be FLQuants of length frequencies or a fitted FLicc object.")
   if (is.null(lhpar)) stop("lhpar (FLPar with linf and L50) is needed.")
   getp <- function(nm) if (nm %in% dimnames(lhpar)[[1]]) as.numeric(lhpar[nm]) else NA_real_
@@ -212,9 +229,15 @@ lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear 
     if (!is.finite(Mk)) stop('Lopt = "mk" needs M and k (or Mk) in lhpar.')
     linf * 3 / (3 + Mk)
   } else 2 / 3 * linf
-  if (!is.null(catch_by_gear)) {
+  if (pool) {
+    if (is.null(catch_by_gear)) {
+      catch_by_gear <- rep(1, length(lfd))
+      message("lbi_flicc: no catch_by_gear; gears pooled with equal catch shares.")
+    }
+    if (catch_units == "weight" && !all(c("a", "b") %in% dimnames(lhpar)[[1]]))
+      stop('catch_units = "weight" needs a and b in lhpar (or use catch_units = "numbers").')
     pooled <- combine_lfd(lfd, catch_by_gear, lhpar = lhpar, ess.n = NULL, name = "pooled",
-                          catch_units = if (all(c("a", "b") %in% dimnames(lhpar)[[1]])) "weight" else "numbers")
+                          catch_units = catch_units)
     lfd <- FLCore::FLQuants(c(as.list(lfd), as.list(pooled)))
   }
   gears <- if (is.null(gear)) names(lfd) else if (is.numeric(gear)) names(lfd)[gear] else gear

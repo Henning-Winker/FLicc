@@ -44,4 +44,17 @@ stopifnot(all(rr2$status[rr2$value >= rr2$ref] == "green"),
 xl <- lbi_flicc(lfd, lhpar, limits = c("Lmean/LFM" = 0.95))
 stopifnot(all(xl$ratios$lim[xl$ratios$indicator == "Lmean/LFM"] == 0.95))
 print(table(x$ratios$indicator, x$ratios$status))
+# pooling: explicit pool, numbers, FLQuants by year, from a fit
+xp1 <- lbi_flicc(lfd, lhpar, pool = TRUE, catch_by_gear = c(0.95, 0.05))
+stopifnot(isTRUE(all.equal(xp1$values[xp1$values$gear == "pooled", "Lmean"],
+                           x$values[x$values$gear == "pooled", "Lmean"])))
+xp2 <- lbi_flicc(lfd, lhpar, catch_by_gear = c(Trawl = 0.95, Gillnet = 0.05), catch_units = "numbers")
+yrs <- dimnames(lfd[[1]])$year
+cq <- FLQuants(Trawl = FLQuant(0.95, dimnames = list(year = yrs)), Gillnet = FLQuant(0.05, dimnames = list(year = yrs)))
+xp3 <- lbi_flicc(lfd, lhpar, catch_by_gear = cq)
+stopifnot(isTRUE(all.equal(xp3$values$Lmean, x$values$Lmean)))
+xp4 <- lbi_flicc(fit, pool = TRUE)                     # fit's catch shares
+stopifnot("pooled" %in% xp4$values$gear)
+xp5 <- suppressMessages(lbi_flicc(lfd, lhpar, pool = TRUE))   # equal shares
+stopifnot("pooled" %in% xp5$values$gear, !"pooled" %in% lbi_flicc(lfd, lhpar)$values$gear)
 cat("lbi tests passed\n")

@@ -9,7 +9,9 @@ lbi_flicc(
   lhpar = NULL,
   gear = NULL,
   years = NULL,
+  pool = !is.null(catch_by_gear),
   catch_by_gear = NULL,
+  catch_units = NULL,
   ref_years = NULL,
   Lopt = c("wklife", "mk"),
   limits = NULL
@@ -24,9 +26,22 @@ with the fitted Linf).}
 
 \item{gear, years}{Optional selection.}
 
-\item{catch_by_gear}{Optional relative catch by gear (weight): adds the gears
-pooled into one composition raised by catch (\code{\link[=combine_lfd]{combine_lfd()}}) as gear
-\code{"pooled"}.}
+\item{pool}{Logical; add the gears pooled into one composition as gear
+\code{"pooled"}. The length frequency of each gear and year is converted to
+proportions, raised to catch numbers with the gear's relative catch
+(\code{catch_by_gear}; in weight divided by the mean weight of a sampled fish)
+and summed over gears (\code{\link[=combine_lfd]{combine_lfd()}}), so each gear contributes in
+proportion to its catch rather than to its sampling effort. Default \code{TRUE}
+when \code{catch_by_gear} is given.}
+
+\item{catch_by_gear}{Relative catch by gear for pooling: a numeric vector
+(named by gear, or in the order of the data) or \code{FLQuants} by gear with the
+catch by year; only relative values matter. For a fit, the fit's catch by
+gear is used when not given. Without it, gears are pooled with equal catch
+shares (with a message).}
+
+\item{catch_units}{Units of \code{catch_by_gear}: \code{"weight"} (default; needs \code{a},
+\code{b} in \code{lhpar}) or \code{"numbers"}. For a fit, the fit's setting.}
 
 \item{ref_years}{Optional reference years for indicators relative to a
 historical reference period.}

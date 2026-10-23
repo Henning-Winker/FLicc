@@ -35,11 +35,15 @@ pattern of the fishery (below 1: mainly small and immature fish; between 1 and 2
 selection close to the maturity ogive; 2: only mature fish of optimal size and
 larger), and then `Pmat` or `Popt` to judge whether spawning biomass is at or above
 the target of 0.4 B0 (`cp_selectivity`, `cp_test`, `cp_status`). A fishery that
-takes only fish of optimal size gives no information on status. `catch_by_gear` adds the gears pooled into
-one composition raised by catch (`combine_lfd()`), as gear `"pooled"`:
+takes only fish of optimal size gives no information on status. `pool = TRUE` adds the gears pooled into
+one composition, as gear `"pooled"`: the length frequency of each gear is raised
+to catch numbers with its relative catch (`catch_by_gear`, in weight by default,
+`catch_units = "numbers"` otherwise) and the gears are summed (`combine_lfd()`).
+Each gear then contributes in proportion to its catch, not to how many fish were
+measured. For a fit, the fit's catch by gear is used by default:
 
 ```{r lbi-empirical, fig.height = 8}
-lbi <- lbi_flicc(lfd, lhpar, catch_by_gear = c(Trawl = 0.95, Gillnet = 0.05))
+lbi <- lbi_flicc(lfd, lhpar, pool = TRUE, catch_by_gear = c(Trawl = 0.95, Gillnet = 0.05))
 lbi$values[lbi$values$year == 2024, c("gear", "Lc", "Lmean", "LFM", "L95", "Lmax5", "Pmat", "Pmega", "Z")]
 lbi$values[lbi$values$year == 2024, c("gear", "Pobj", "cp_selectivity", "cp_test", "cp_status")]
 plot_lbi(lbi)
