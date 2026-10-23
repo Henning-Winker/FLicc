@@ -1,0 +1,100 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-22 12:26:42 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> lfd200 <- lfdess(lfd, ess.g = 200)
+
+> for (pm in c("gtg", "gamma")) {
++     fit <- fiticc(lfd200, stklen, sel_fun = c("dsnormal", "logistic"), 
++         catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, 
++             obs_model = "dm", pop_model = pm))
++     st <- FLicc:::gear_state_flicc(fit)
++     for (g in st$gears) {
++      .... [TRUNCATED] 
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+gtg Trawl max |sel diff| 2.78e-16 
+gtg Gillnet max |sel diff| 1.11e-16 
+gtg surface seconds: 0.407 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 23.20211 0.2062828 0.2159802 0.1491149 0.8694443
+Gillnet Gillnet logistic 29.87594 0.2062828 0.2159802 0.1491149 0.9917500
+           Fshare    Cshare
+Trawl   0.6427428 0.6977289
+Gillnet 0.3572572 0.3022711
+gtg SPR engine 0.2159802 report 0.2159802  YPR engine 0.1491149 ypr_flicc 0.1491149 
+      loc              F               SPR              YPRrel      
+ Min.   : 5.00   Min.   :0.0000   Min.   :0.02297   Min.   :0.0000  
+ 1st Qu.:17.68   1st Qu.:0.1095   1st Qu.:0.13715   1st Qu.:0.6027  
+ Median :30.35   Median :0.2190   Median :0.28339   Median :0.8238  
+ Mean   :30.35   Mean   :0.2190   Mean   :0.34856   Mean   :0.7384  
+ 3rd Qu.:43.02   3rd Qu.:0.3285   3rd Qu.:0.49994   3rd Qu.:0.9329  
+ Max.   :55.70   Max.   :0.4381   Max.   :1.00000   Max.   :1.0000  
+view fleet 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 23.20211 0.2062828 0.2159802 0.1491149 0.8694443
+Gillnet Gillnet logistic 29.87594 0.2062828 0.2159802 0.1491149 0.9917500
+           Fshare    Cshare
+Trawl   0.6427428 0.6977289
+Gillnet 0.3572572 0.3022711
+view share 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 64.27428 0.2062828 0.2159802 0.1491149 0.8699979
+Gillnet Gillnet logistic 35.72572 0.2062828 0.2159802 0.1491149 0.8699979
+           Fshare    Cshare
+Trawl   0.6427428 0.6977289
+Gillnet 0.3572572 0.3022711
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+gamma Trawl max |sel diff| 2.22e-16 
+gamma Gillnet max |sel diff| 2.22e-16 
+gamma surface seconds: 16.521 
+           gear     type      loc         F       SPR       YPR    YPRrel
+Trawl     Trawl dsnormal 23.19971 0.2065852 0.2154636 0.1492798 0.8702518
+Gillnet Gillnet logistic 29.89952 0.2065852 0.2154636 0.1492798 0.9920082
+           Fshare   Cshare
+Trawl   0.6416599 0.697739
+Gillnet 0.3583401 0.302261
+gamma SPR engine 0.2154636 report 0.2154636  YPR engine 0.1492798 ypr_flicc 0.1492798 
+      loc              F               SPR              YPRrel      
+ Min.   : 5.00   Min.   :0.0000   Min.   :0.02296   Min.   :0.0000  
+ 1st Qu.:17.68   1st Qu.:0.1095   1st Qu.:0.13704   1st Qu.:0.6034  
+ Median :30.35   Median :0.2190   Median :0.28331   Median :0.8240  
+ Mean   :30.35   Mean   :0.2190   Mean   :0.34835   Mean   :0.7388  
+ 3rd Qu.:43.02   3rd Qu.:0.3284   3rd Qu.:0.49952   3rd Qu.:0.9333  
+ Max.   :55.70   Max.   :0.4379   Max.   :1.00000   Max.   :1.0000  
+
+> d <- sf$surface
+
+> s1 <- 1
+
+> b <- 100 * pmax(4 * s1 * d$SPR - (1 - s1), 0)/(5 * 
++     s1 - 1)
+
+> stopifnot(max(abs(b - 100 * d$SPR)) < 1e-08)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

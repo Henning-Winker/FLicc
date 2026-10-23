@@ -1,0 +1,83 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-22 12:26:42 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> options(width = 250)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> f <- file.path(od, "lbb_examples.rds")
+
+> if (!file.exists(f)) {
++     cat("lbb_examples.rds not available; skipped.\n")
++ } else {
++     source(system.file("protocols", "lbb_comparison.R", package = "FLicc"))
++     lbbx <- readRDS(f)
++     t0 <- system.time(res <- run_lbb_examples(lbbx))
++     cat("total seconds", t0[["elapsed"]], "\n")
+ .... [TRUNCATED] 
+NEP_GSA22 [dm]: failed: Too few fully selected length classes for the LBB Linf/ZK guess: set Lstart.user.
+NEP_GSA22 [lbb]: failed: Too few fully selected length classes for the LBB Linf/ZK guess: set Lstart.user.
+RPG_GSA22 [dm]: failed: wrong sign in 'by' argument
+total seconds 19.454 
+           Stock weighting  Linf    Lc   MK     FM      BB0      EPR      SPR n_years n_ok
+       ANK_GSA22        dm  69.3 11.69 1.50  1.493 0.125745 0.125477 8.18e-02      12   12
+       ANN_GSA22        dm  20.0 11.17 1.50  1.578 0.250197 0.251346 2.95e-01       7    7
+       BOC_GSA22        dm  14.0  8.26 1.50  5.563 0.131141 0.131383 1.35e-01       6    6
+       BRF_GSA22        dm  36.0 13.72 1.50  1.368 0.206007 0.206015 1.10e-01      10    9
+       DPS_GSA22        dm  40.2 18.52 1.50  1.174 0.271691 0.271504 1.68e-01      13   12
+   Ench_cim22-24        dm  37.0 19.86 1.50  1.103 0.334565 0.334113 2.78e-01      17   15
+       HKE_GSA22        dm  73.4  9.30 1.50  3.407 0.028375 0.028356 9.78e-03      13    5
+     Ille_coi_AD        dm  23.0  5.96 1.50  1.853 0.120192 0.120200 3.48e-02       7    5
+     Merl_mer_CY        dm  55.1 21.37 1.50  2.631 0.109987 0.109825 7.68e-02       3    2
+     Micr_pou_AD        dm  40.0 21.54 1.50  2.325 0.176751 0.176806 2.36e-01       7    5
+       MUT_GSA22        dm  25.2 12.24 1.50  1.661 0.213440 0.213532 1.17e-01      11    7
+   Myo_quad_Balt        dm  30.6 21.02 1.50  0.964 0.333751 0.333846 4.09e-01       5    5
+ Myox_scor_22-24        dm  32.0 15.71 1.50  1.643 0.229047 0.229234 2.41e-01      18   18
+     Octo_vul_AD        dm  19.0  6.93 1.50  1.621 0.146408 0.146574 1.14e-01       9    8
+       PIL_GSA22        dm  19.0  7.31 1.50  1.103 0.277860 0.276455 1.63e-01       3    3
+            PNSK        dm 114.1 70.42 1.51  1.439 0.301709 0.301508 3.84e-01       1    1
+    rjc.27.3a47d        dm 101.3 29.26 1.50  0.730 0.345250 0.345037 2.02e-01       7    7
+      SEPIOFF_CY        dm  12.0  7.59 1.50  1.770 0.253746 0.251821 1.64e-01       8    8
+           STKB1        dm  81.6 41.05 1.50  2.192 0.179206 0.176157 2.20e-01       1    0
+       WHB_GSA22        dm  39.0 20.48 1.50  2.208 0.179589 0.179621 1.06e-01       5    3
+       ANK_GSA22       lbb  69.8 13.38 1.49  1.309 0.157269 0.157246 1.10e-01      12   12
+       ANN_GSA22       lbb  20.0 11.48 1.47  2.029 0.216086 0.217233 3.03e-01       7    7
+       BOC_GSA22       lbb  13.8  7.79 1.53  5.137 0.141667 0.143131 2.06e-01       6    4
+       BRF_GSA22       lbb  36.0 14.49 1.53  1.005 0.283958 0.283989 2.03e-01      10    9
+       DPS_GSA22       lbb  40.3 19.53 1.50  0.808 0.378283 0.378192 2.80e-01      13   13
+   Ench_cim22-24       lbb  36.8 20.02 1.50  0.667 0.517457 0.518674 4.35e-01      17   14
+       HKE_GSA22       lbb  74.8  9.41 1.50  3.299 0.033643 0.033607 1.28e-02      13   13
+     Ille_coi_AD       lbb  22.9  5.97 1.49  1.342 0.221623 0.221537 1.11e-01       7    7
+     Merl_mer_CY       lbb  55.1 22.72 1.52 10.887 0.020856 0.020756 2.91e-02       3    3
+     Micr_pou_AD       lbb  40.4 22.27 1.51  2.621 0.164551 0.164563 2.31e-01       7    7
+       MUT_GSA22       lbb  25.5 12.26 1.47  1.473 0.252847 0.252787 1.51e-01      11   11
+   Myo_quad_Balt       lbb  30.6 21.41 1.55  2.573 0.397773 0.397621 4.40e-01       5    4
+ Myox_scor_22-24       lbb  32.4 16.09 1.54  2.095 0.171564 0.172110 2.66e-01      18   16
+     Octo_vul_AD       lbb  19.0  7.87 1.50  2.448 0.133854 0.126128 7.11e-02       9    7
+       PIL_GSA22       lbb  18.4  7.61 1.50  0.827 0.429604 0.429778 3.52e-01       3    3
+            PNSK       lbb 115.0 72.02 1.57  0.973 0.405141 0.404592 4.96e-01       1    1
+    rjc.27.3a47d       lbb 102.3 32.04 1.62  0.271 0.632646 0.639481 5.28e-01       7    7
+       RPG_GSA22       lbb  48.0  7.02 1.49 20.631 0.000623 0.000617 1.24e-06      14   13
+      SEPIOFF_CY       lbb  11.8  8.10 1.52  1.174 0.377374 0.381470 3.59e-01       8    4
+           STKB1       lbb  81.3 42.17 1.44  2.440 0.161875 0.161786 2.12e-01       1    1
+       WHB_GSA22       lbb  39.8 20.90 1.50  2.322 0.191955 0.191980 1.31e-01       5    5
+       Stock weighting                                                                             error
+1  NEP_GSA22        dm Too few fully selected length classes for the LBB Linf/ZK guess: set Lstart.user.
+11 NEP_GSA22       lbb Too few fully selected length classes for the LBB Linf/ZK guess: set Lstart.user.
+12 RPG_GSA22        dm                                                       wrong sign in 'by' argument
+There were 50 or more warnings (use warnings() to see the first 50)

@@ -1,0 +1,124 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-22 12:26:42 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> gd <- names(lfd)[sf == "dsnormal"]
+
+> sfx <- setNames(list(list(rsd = 30)), gd)
+
+> fit <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = list(CVL = 0.1), sel_fixed = sfx)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> stopifnot(identical(fit$sel_fixed[[gd]]$rsd, 30))
+
+> t0 <- Sys.time()
+
+> mc <- mc_flicc(fit, nsim = 12, cv = list(linf = 0.1, 
++     k = 0.1, M = 0.2, L50 = 0.1, CVL = 0.2), seed = 1)
+Monte Carlo FLicc:   |                                                                             |                                                                     |   0%Monte Carlo FLicc:   |                                                                             |                                                                     |   0%  |                                                                             |><>><>                                                               |   8%  |                                                                             |><>><>><>><>                                                         |  17%  |                                                                             |><>><>><>><>><>><>                                                   |  25%  |                                                                             |><>><>><>><>><>><>><>><>                                             |  33%  |                                                                             |><>><>><>><>><>><>><>><>><>><>                                       |  42%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>                                 |  50%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>                              |  58%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>                        |  67%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>                  |  75%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>            |  83%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>      |  92%  |                                                                             |><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>><>| 100%
+Monte Carlo FLicc completed in 4.6 sec
+Converged refits: 12 of 12  
+
+
+> cat("time:", round(as.numeric(difftime(Sys.time(), 
++     t0, units = "secs"))), "s\n")
+time: 5 s
+
+> print(table(mc$conv))
+
+ok 
+12 
+
+> print(mc$ok)
+ [1] TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE
+
+> stopifnot(is.logical(mc$ok), !anyNA(mc$ok), !anyNA(mc$conv))
+
+> print(mc$selpars[[gd]])
+An object of class "FLPar"
+iters:  12 
+
+params
+          mode            lsd            rsd 
+22.6811(0.334)  2.9808(0.113) 30.0000(0.000) 
+units:  NA 
+
+> rsd <- as.numeric(mc$selpars[[gd]]["rsd", ])[mc$ok]
+
+> print(rsd)
+ [1] 30 30 30 30 30 30 30 30 30 30 30 30
+
+> stopifnot(all(abs(rsd - 30) < 1e-06))
+
+> stopifnot(all(is.na(mc$logLik[!mc$ok])), all(is.finite(mc$logLik[mc$ok])))
+
+> w_aic <- mc_aic_weights(mc)
+
+> w_eq <- mc_aic_weights(mc, weights = "equal")
+
+> stopifnot(abs(sum(w_aic$weight) - 1) < 1e-08, abs(sum(w_eq$weight) - 
++     1) < 1e-08, all(w_eq$weight[!mc$ok] == 0), length(unique(round(w_eq$weight[mc$ok], 
++     10))) == 1)
+
+> print(mc_spr_tab(mc, dAIC_cut = 1e+06, weights = "equal"))
+   year        mle   mean_uw     cv_uw    mean_w      cv_w n_retained n_eff
+1  2013 0.11792617 0.1243419 0.8024224 0.1243419 0.7682609         12    12
+2  2014 0.09636264 0.1041245 0.8431023 0.1041245 0.8072090         12    12
+3  2015 0.13140870 0.1386077 0.8009362 0.1386077 0.7668380         12    12
+4  2016 0.15260296 0.1593031 0.7804125 0.1593031 0.7471881         12    12
+5  2017 0.14086177 0.1494343 0.8071179 0.1494343 0.7727565         12    12
+6  2018 0.14209580 0.1515378 0.8140022 0.1515378 0.7793477         12    12
+7  2019 0.18055498 0.1877544 0.7707935 0.1877544 0.7379786         12    12
+8  2020 0.16896997 0.1798613 0.8079171 0.1798613 0.7735217         12    12
+9  2021 0.19887530 0.2085270 0.7809192 0.2085270 0.7476732         12    12
+10 2022 0.23721922 0.2425624 0.7396386 0.2425624 0.7081501         12    12
+11 2023 0.22929706 0.2360026 0.7472398 0.2360026 0.7154276         12    12
+12 2024 0.19012852 0.2015442 0.7952537 0.2015442 0.7613974         12    12
+
+> print(mc_spr_tab(mc, dAIC_cut = 1e+06, weights = "aic"))
+   year        mle   mean_uw     cv_uw     mean_w      cv_w n_retained    n_eff
+1  2013 0.11792617 0.1243419 0.8024224 0.05977110 0.1426111         12 1.958255
+2  2014 0.09636264 0.1041245 0.8431023 0.04788533 0.1521562         12 1.958255
+3  2015 0.13140870 0.1386077 0.8009362 0.06633231 0.1375068         12 1.958255
+4  2016 0.15260296 0.1593031 0.7804125 0.07839166 0.1334890         12 1.958255
+5  2017 0.14086177 0.1494343 0.8071179 0.07161974 0.1400312         12 1.958255
+6  2018 0.14209580 0.1515378 0.8140022 0.07210616 0.1398152         12 1.958255
+7  2019 0.18055498 0.1877544 0.7707935 0.09291339 0.1267301         12 1.958255
+8  2020 0.16896997 0.1798613 0.8079171 0.08566066 0.1327485         12 1.958255
+9  2021 0.19887530 0.2085270 0.7809192 0.10259203 0.1275001         12 1.958255
+10 2022 0.23721922 0.2425624 0.7396386 0.12474037 0.1207107         12 1.958255
+11 2023 0.22929706 0.2360026 0.7472398 0.12141962 0.1241725         12 1.958255
+12 2024 0.19012852 0.2015442 0.7952537 0.09874658 0.1329067         12 1.958255
+
+> stopifnot(nrow(mc$draws) == 12)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

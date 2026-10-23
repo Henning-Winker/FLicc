@@ -1,0 +1,102 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-22 12:26:42 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> options(width = 220)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> f <- file.path(od, "lbb_examples.rds")
+
+> if (!file.exists(f)) {
++     cat("no lbb_examples.rds\n")
++ } else {
++     lbbx <- readRDS(f)
++     lbb <- data.frame(Year = c(1996, 1999, 2001, 2002, 2009, 
++         2014, 2016), Lc = c(12.71, 5.23, 3.64, 4.33, 7.74, 5.32, 
++         5.56), MK = c(1.82, 1.66, 1.47, 1.49, 1.66, 1.41, 1.5), 
++     .... [TRUNCATED] 
+                                             variant Year conv    Lc Lc_LBB    MK MK_LBB   ZK ZK_LBB       FM FM_LBB    BB0 BB0_LBB
+                         A lbb weighting, no F/M cap 1996   ok 13.64  12.71 1.582   1.82 3.17   2.32 1.01e+00  0.265 0.3850  0.6986
+                         A lbb weighting, no F/M cap 1999   ok  5.95   5.23 1.489   1.66 3.96   3.12 1.66e+00  0.878 0.1424  0.2668
+                         A lbb weighting, no F/M cap 2001   ok  4.08   3.64 1.495   1.47 3.34   2.57 1.23e+00  0.732 0.1695  0.2932
+                         A lbb weighting, no F/M cap 2002   ok  4.71   4.33 1.490   1.49 4.56   3.72 2.06e+00  1.467 0.0886  0.1384
+                         A lbb weighting, no F/M cap 2009   ok  8.67   7.74 1.434   1.66 4.28   3.15 1.99e+00  0.910 0.1426  0.2942
+                         A lbb weighting, no F/M cap 2014   ok  5.64   5.32 1.408   1.41 6.04   5.24 3.29e+00  2.713 0.0514  0.0648
+                         A lbb weighting, no F/M cap 2016   ok  5.99   5.56 1.485   1.50 7.75   6.85 4.22e+00  3.570 0.0365  0.0438
+                B + lengths shifted -0.25 (half bin) 1996   ok 13.46  12.71 1.571   1.82 3.34   2.32 1.12e+00  0.265 0.3523  0.6986
+                B + lengths shifted -0.25 (half bin) 1999   ok  5.72   5.23 1.487   1.66 4.05   3.12 1.73e+00  0.878 0.1317  0.2668
+                B + lengths shifted -0.25 (half bin) 2001   ok  3.84   3.64 1.495   1.47 3.47   2.57 1.32e+00  0.732 0.1511  0.2932
+                B + lengths shifted -0.25 (half bin) 2002   ok  4.47   4.33 1.489   1.49 4.63   3.72 2.11e+00  1.467 0.0829  0.1384
+                B + lengths shifted -0.25 (half bin) 2009   ok  8.44   7.74 1.433   1.66 4.37   3.15 2.05e+00  0.910 0.1345  0.2942
+                B + lengths shifted -0.25 (half bin) 2014   ok  5.41   5.32 1.408   1.41 6.17   5.24 3.38e+00  2.713 0.0472  0.0648
+                B + lengths shifted -0.25 (half bin) 2016   ok  5.74   5.56 1.485   1.50 7.87   6.85 4.30e+00  3.570 0.0337  0.0438
+                  C + lengths shifted -0.5 (one bin) 1996   ok 13.27  12.71 1.562   1.82 3.52   2.32 1.25e+00  0.265 0.3210  0.6986
+                  C + lengths shifted -0.5 (one bin) 1999   ok  5.49   5.23 1.485   1.66 4.16   3.12 1.80e+00  0.878 0.1215  0.2668
+                  C + lengths shifted -0.5 (one bin) 2001   ok  3.59   3.64 1.495   1.47 3.51   2.57 1.35e+00  0.732 0.1437  0.2932
+                  C + lengths shifted -0.5 (one bin) 2002   ok  4.22   4.33 1.489   1.49 4.70   3.72 2.16e+00  1.467 0.0774  0.1384
+                  C + lengths shifted -0.5 (one bin) 2009   ok  8.21   7.74 1.432   1.66 4.47   3.15 2.12e+00  0.910 0.1266  0.2942
+                  C + lengths shifted -0.5 (one bin) 2014   ok  5.17   5.32 1.408   1.41 6.29   5.24 3.47e+00  2.713 0.0433  0.0648
+                  C + lengths shifted -0.5 (one bin) 2016   ok  5.50   5.56 1.485   1.50 8.00   6.85 4.39e+00  3.570 0.0311  0.0438
+                  D default weighting (estimated DM) 1996   ok 13.75  12.71 1.504   1.82 3.27   2.32 1.17e+00  0.265 0.3415  0.6986
+                  D default weighting (estimated DM) 1999   ok  6.01   5.23 1.499   1.66 4.28   3.12 1.85e+00  0.878 0.1202  0.2668
+                  D default weighting (estimated DM) 2001   ok  4.06   3.64 1.500   1.47 3.26   2.57 1.17e+00  0.732 0.1799  0.2932
+                  D default weighting (estimated DM) 2002 fail  4.71   4.33 1.499   1.49 4.50   3.72 2.00e+00  1.467 0.0924  0.1384
+                  D default weighting (estimated DM) 2009   ok  8.59   7.74 1.496   1.66 4.04   3.15 1.70e+00  0.910 0.1712  0.2942
+                  D default weighting (estimated DM) 2014   ok  5.61   5.32 1.494   1.41 6.05   5.24 3.05e+00  2.713 0.0562  0.0648
+                  D default weighting (estimated DM) 2016 fail  5.96   5.56 1.499   1.50 7.46   6.85 3.98e+00  3.570 0.0404  0.0438
+               E lbb weighting, M/K free (Mk.sd 0.5) 1996   ok 13.93  12.71 3.059   1.82 3.06   2.32 4.61e-08  0.265 1.0000  0.6986
+               E lbb weighting, M/K free (Mk.sd 0.5) 1999   ok  5.94   5.23 1.282   1.66 3.96   3.12 2.09e+00  0.878 0.1069  0.2668
+               E lbb weighting, M/K free (Mk.sd 0.5) 2001   ok  4.08   3.64 1.398   1.47 3.34   2.57 1.39e+00  0.732 0.1475  0.2932
+               E lbb weighting, M/K free (Mk.sd 0.5) 2002   ok  4.71   4.33 1.295   1.49 4.56   3.72 2.52e+00  1.467 0.0669  0.1384
+               E lbb weighting, M/K free (Mk.sd 0.5) 2009   ok  8.60   7.74 0.809   1.66 4.30   3.15 4.32e+00  0.910 0.0535  0.2942
+               E lbb weighting, M/K free (Mk.sd 0.5) 2014   ok  5.63   5.32 0.691   1.41 6.06   5.24 7.76e+00  2.713 0.0141  0.0648
+               E lbb weighting, M/K free (Mk.sd 0.5) 2016   ok  5.98   5.56 1.225   1.50 7.75   6.85 5.33e+00  3.570 0.0253  0.0438
+                           F lbb weighting, Pile = 0 1996   ok 13.89  12.71 1.554   1.82 2.34   2.32 5.04e-01  0.265 0.5721  0.6986
+                           F lbb weighting, Pile = 0 1999   ok  5.99   5.23 1.486   1.66 3.03   3.12 1.04e+00  0.878 0.2435  0.2668
+                           F lbb weighting, Pile = 0 2001   ok  4.08   3.64 1.495   1.47 2.39   2.57 5.99e-01  0.732 0.3629  0.2932
+                           F lbb weighting, Pile = 0 2002   ok  4.72   4.33 1.489   1.49 3.63   3.72 1.43e+00  1.467 0.1475  0.1384
+                           F lbb weighting, Pile = 0 2009   ok  8.76   7.74 1.430   1.66 3.35   3.15 1.34e+00  0.910 0.2216  0.2942
+                           F lbb weighting, Pile = 0 2014   ok  5.65   5.32 1.407   1.41 5.14   5.24 2.65e+00  2.713 0.0711  0.0648
+                           F lbb weighting, Pile = 0 2016   ok  5.97   5.56 1.484   1.50 6.85   6.85 3.62e+00  3.570 0.0460  0.0438
+           G lbb weighting, slope fixed at LBB alpha 1996   ok 13.38  12.71 3.250   1.82 3.25   2.32 8.23e-08  0.265 1.0000  0.6986
+           G lbb weighting, slope fixed at LBB alpha 1999   ok  5.63   5.23 1.694   1.66 3.88   3.12 1.29e+00  0.878 0.1832  0.2668
+           G lbb weighting, slope fixed at LBB alpha 2001   ok  4.41   3.64 1.292   1.47 3.25   2.57 1.52e+00  0.732 0.1403  0.2932
+           G lbb weighting, slope fixed at LBB alpha 2002   ok  4.78   4.33 1.455   1.49 4.58   3.72 2.15e+00  1.467 0.0847  0.1384
+           G lbb weighting, slope fixed at LBB alpha 2009   ok  8.11   7.74 1.857   1.66 3.99   3.15 1.15e+00  0.910 0.2449  0.2942
+           G lbb weighting, slope fixed at LBB alpha 2014   ok  5.68   5.32 1.391   1.41 6.07   5.24 3.37e+00  2.713 0.0500  0.0648
+           G lbb weighting, slope fixed at LBB alpha 2016   ok  5.98   5.56 1.489   1.50 7.74   6.85 4.20e+00  3.570 0.0367  0.0438
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 1996   ok 13.48  12.71 2.434   1.82 2.43   2.32 1.22e-07  0.265 1.0000  0.6986
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 1999   ok  5.67   5.23 1.691   1.66 2.97   3.12 7.59e-01  0.878 0.3171  0.2668
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 2001   ok  4.44   3.64 1.284   1.47 2.29   2.57 7.86e-01  0.732 0.3007  0.2932
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 2002   ok  4.80   4.33 1.448   1.49 3.64   3.72 1.52e+00  1.467 0.1393  0.1384
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 2009   ok  8.23   7.74 1.836   1.66 3.10   3.15 6.89e-01  0.910 0.3835  0.2942
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 2014   ok  5.72   5.32 1.376   1.41 5.20   5.24 2.78e+00  2.713 0.0675  0.0648
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha 2016   ok  5.98   5.56 1.477   1.50 6.85   6.85 3.64e+00  3.570 0.0457  0.0438
+                                             variant    dZK    dFM   dBB0   dLc
+                         A lbb weighting, no F/M cap  0.876  0.703 -0.112 0.593
+                B + lengths shifted -0.25 (half bin)  0.991  0.783 -0.124 0.362
+                  C + lengths shifted -0.5 (one bin)  1.097  0.857 -0.134 0.131
+                  D default weighting (estimated DM)  0.840  0.627 -0.114 0.595
+               E lbb weighting, M/K free (Mk.sd 0.5)  0.865  1.839 -0.055 0.619
+                           F lbb weighting, Pile = 0 -0.034  0.094 -0.019 0.647
+           G lbb weighting, slope fixed at LBB alpha  0.829  0.448 -0.009 0.492
+ H lbb weighting, Pile = 0, slope fixed at LBB alpha -0.068 -0.053  0.065 0.541
+Warning messages:
+1: replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
+2: In sqrt(diag(object$cov.fixed)) : NaNs produced
+3: In sqrt(diag(object$cov.fixed)) : NaNs produced
