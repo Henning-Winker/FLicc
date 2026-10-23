@@ -1,0 +1,61 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 10:59:54 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> if ("lbspr_test" %in% data(package = "FLicc")$results[, 
++     "Item"]) data("lbspr_test", package = "FLicc") else load(file.path(if (dir.exists("out/tests")) "out/tests" else ".", 
++     "lbspr_test.rda"))
+
+> stopifnot(inherits(lfd_lbspr, "FLQuants"), inherits(FLicc::lfd_lbspr, 
++     "FLQuants"))
+
+> set_lbspr <- list(CVL = 0.1, ngtg = 13, maxsd = 2, 
++     obs_model = "mn")
+
+> res <- lapply(dimnames(lfd_lbspr[[1]])$year, function(y) {
++     lfd_y <- FLQuants(lapply(lfd_lbspr, function(x) x[, y]))
++     f <- fiticc(lfd_y, stocklen(lfd_y, lhpar_lbspr, m_model = "constant"), 
++         sel_fun = "logistic", catch_by_gear = 1, settings = set_lbspr, 
++         verbose = FALS .... [TRUNCATED] 
+
+> res <- do.call(rbind, res)
+
+> res$LBSPR <- lbspr_est$SPR
+
+> print(res, digits = 4)
+  year    spr spr_len spr_rel spr_lbspr   adj    lwr    upr  LBSPR
+1 2010 0.4040  0.4040  0.3994    0.4361 1.079 0.3713 0.5121 0.4372
+2 2011 0.4061  0.4061  0.4014    0.4379 1.078 0.3734 0.5135 0.4391
+3 2012 0.4001  0.4001  0.3953    0.4312 1.078 0.3686 0.5045 0.4322
+4 2013 0.4503  0.4503  0.4458    0.4814 1.069 0.4119 0.5627 0.4830
+5 2014 0.3148  0.3148  0.3102    0.3504 1.113 0.2999 0.4094 0.3507
+6 2015 0.5133  0.5133  0.5089    0.5382 1.048 0.4596 0.6301 0.5405
+
+> cat("max |spr_len - spr| =", max(abs(res$spr_len - 
++     res$spr)), "\n")
+max |spr_len - spr| = 2.775558e-16 
+
+> cat("mean |spr - LBSPR| =", mean(abs(res$spr - res$LBSPR)), 
++     " mean |spr_rel - LBSPR| =", mean(abs(res$spr_rel - res$LBSPR)), 
++     " mean |spr_lbspr - LBSPR| =", mean(abs(res$spr_lbspr - res$LBSPR)), 
++     "\n")
+mean |spr - LBSPR| = 0.03234219  mean |spr_rel - LBSPR| = 0.03696753  mean |spr_lbspr - LBSPR| = 0.001261697 
+
+> stopifnot(max(abs(res$spr_len - res$spr)) < 1e-06, 
++     mean(abs(res$spr_lbspr - res$LBSPR)) < 0.005)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

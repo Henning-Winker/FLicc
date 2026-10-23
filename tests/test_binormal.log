@@ -1,0 +1,231 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 10:59:54 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> lfdc <- FLQuants(Pooled = lfd[[1]] + lfd[[2]])
+
+> stk <- stocklen(lfdc, lhpar, m_model = "constant")
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> set <- list(CVL = 0.1)
+
+> f_ds <- fiticc(lfdc, stk, sel_fun = "dsnormal", catch_by_gear = 1, 
++     settings = set)
+
+> f_bn <- fiticc(lfdc, stk, sel_fun = "binormal", catch_by_gear = 1, 
++     settings = set)
+
+> print(f_bn$diagnostics)
+$newton_steps
+[1] 1
+
+$hess_pd
+[1] TRUE
+
+$decrement
+[1] 1.424954e-13
+
+$max_gradient
+[1] 6.522413e-05
+
+$optimizer_code
+[1] 0
+
+$conv_tier
+[1] "ok"
+
+$dm
+    gear       type estimate prior_centre at_bound n_median
+1 Pooled saturating 1202.691        10000    FALSE     1000
+
+
+> sp <- selpars_flicc(f_bn)
+
+> print(sp)
+An object of class "FLPars"
+[[1]]
+An object of class "FLPar"
+params
+mode1   sd1 mode2   sd2     h 
+22.73  2.93 36.25  7.24  2.86 
+units:  cm 
+
+Slot "names":
+[1] "Pooled"
+
+Slot "desc":
+character(0)
+
+Slot "lock":
+[1] FALSE
+
+
+> tab <- data.frame(model = c("dsnormal", "binormal"), 
++     conv = c(f_ds$diagnostics$conv_tier, f_bn$diagnostics$conv_tier), 
++     AIC = c(AIC(LLflicc(f_ds)), AIC(LLflicc(f_bn))), SPR_last = c(tail(c(f_ds$report$spr), 
++         1), tail(c(f_bn$report$spr), 1)))
+
+> print(tab)
+     model conv      AIC  SPR_last
+1 dsnormal   ok 79244.59 0.9295636
+2 binormal   ok 79253.27 0.4245637
+
+> p <- as.list(as.numeric(sp$Pooled))
+
+> names(p) <- dimnames(sp$Pooled)$params
+
+> stopifnot(p$mode2 > p$mode1, all(is.finite(unlist(p))))
+
+> L <- as.numeric(f_bn$tmb_data$Lmid)
+
+> s_r <- sel_curve_flicc(L, "binormal", p)
+
+> s_t <- as.numeric(f_bn$obj$report(f_bn$obj$env$last.par.best)$Sel[, 
++     1])
+
+> cat("max |R - TMB| selectivity:", max(abs(s_r - s_t)), 
++     "\n")
+max |R - TMB| selectivity: 1.110223e-16 
+
+> stopifnot(max(abs(s_r - s_t)) < 1e-06, abs(max(s_t) - 
++     1) < 1e-08)
+
+> f_fx <- fiticc(lfdc, stk, sel_fun = "binormal", catch_by_gear = 1, 
++     settings = set, sel_fixed = list(Pooled = list(h = 1, sd2 = p$sd2)))
+
+> print(selpars_flicc(f_fx))
+An object of class "FLPars"
+[[1]]
+An object of class "FLPar"
+params
+mode1   sd1 mode2   sd2     h 
+25.76  4.47 37.30  7.24  1.00 
+units:  cm 
+
+Slot "names":
+[1] "Pooled"
+
+Slot "desc":
+character(0)
+
+Slot "lock":
+[1] FALSE
+
+
+> stopifnot(abs(as.numeric(selpars_flicc(f_fx)$Pooled["h"]) - 
++     1) < 1e-08)
+
+> ggplot2::ggsave(file.path(od, "binormal_len.png"), 
++     plot_len(f_bn), width = 8, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "binormal_sel.png"), 
++     plot_compare_sel(list(dsnormal = f_ds, binormal = f_bn)), 
++     width = 6, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "binormal_resid.png"), 
++     plot_resid_len(f_ds), width = 6, height = 4, dpi = 100)
+
+> f_bd <- fiticc(lfdc, stk, sel_fun = "bidsnormal", 
++     catch_by_gear = 1, settings = set, sel_fixed = list(Pooled = list(rsd2 = 1000)))
+
+> print(f_bd$diagnostics)
+$newton_steps
+[1] 1
+
+$hess_pd
+[1] TRUE
+
+$decrement
+[1] 2.263117e-14
+
+$max_gradient
+[1] 8.100544e-06
+
+$optimizer_code
+[1] 0
+
+$conv_tier
+[1] "ok"
+
+$dm
+    gear       type estimate prior_centre at_bound n_median
+1 Pooled saturating 1903.128        10000    FALSE     1000
+
+
+> spd <- selpars_flicc(f_bd)
+
+> print(spd)
+An object of class "FLPars"
+[[1]]
+An object of class "FLPar"
+params
+  mode1     sd1   mode2    lsd2    rsd2       h 
+  22.32    2.90   32.30    4.53 1000.00    2.39 
+units:  cm 
+
+Slot "names":
+[1] "Pooled"
+
+Slot "desc":
+character(0)
+
+Slot "lock":
+[1] FALSE
+
+
+> pd <- as.list(as.numeric(spd$Pooled))
+
+> names(pd) <- dimnames(spd$Pooled)$params
+
+> stopifnot(abs(pd$rsd2 - 1000) < 1e-06, pd$mode2 > 
++     pd$mode1)
+
+> s_r <- sel_curve_flicc(L, "bidsnormal", pd)
+
+> s_t <- as.numeric(f_bd$obj$report(f_bd$obj$env$last.par.best)$Sel[, 
++     1])
+
+> cat("bidsnormal max |R - TMB|:", max(abs(s_r - s_t)), 
++     "\n")
+bidsnormal max |R - TMB|: 0 
+
+> stopifnot(max(abs(s_r - s_t)) < 1e-06)
+
+> tab2 <- rbind(tab, data.frame(model = "bidsnormal (rsd2 = 1000)", 
++     conv = f_bd$diagnostics$conv_tier, AIC = AIC(LLflicc(f_bd)), 
++     SPR_last = tail(c(f_bd$report$spr), 1)))
+
+> print(tab2)
+                     model conv      AIC  SPR_last
+1                 dsnormal   ok 79244.59 0.9295636
+2                 binormal   ok 79253.27 0.4245637
+3 bidsnormal (rsd2 = 1000)   ok 79108.26 0.2763921
+
+> ggplot2::ggsave(file.path(od, "binormal_sel.png"), 
++     plot_compare_sel(list(dsnormal = f_ds, binormal = f_bn, bidsnormal = f_bd)), 
++     width = 6, height = 4, dpi = 100)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

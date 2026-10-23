@@ -1,0 +1,146 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 10:59:54 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> se_last <- function(f) tail(spr_ci_flicc(f)$se_log, 
++     1)
+
+> ess_values <- c(50, 100, 200, 500, 1000, NA)
+
+> res <- list()
+
+> for (dt in c("fixed", "linear", "saturating")) for (ess in ess_values) {
++     d <- if (is.na(ess)) 
++         lfd
++     else lfdess(lfd, ess.g = ess)
++     t0 <- system.time(f <- tryCatch(fiticc(d, stklen, sel_fun = sf, 
++         catch_by_gear = cbg, settings = list(CVL = 0.1, obs_model = "dm",  .... [TRUNCATED] 
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 50, Gillnet 50).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 100, Gillnet 100).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 50, Gillnet 50).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 100, Gillnet 100).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> tab <- do.call(rbind, res)
+
+> print(tab, row.names = FALSE)
+         dm  ESS conv maxgrad SPR_last se_log par_Trawl par_Gillnet neff_Trawl
+      fixed   50    0 9.9e-07    0.426  0.217    10.000      10.000       25.5
+      fixed  100    0 4.9e-07    0.322  0.193    10.000      10.000       50.5
+      fixed  200    0 1.3e-05    0.257  0.160    10.000      10.000      100.5
+      fixed  500    0 1.4e-05    0.211  0.114    10.000      10.000      250.5
+      fixed 1000    0 7.8e-05    0.195  0.085    10.000      10.000      500.5
+      fixed  raw    0 4.6e-06    0.229  0.123    10.000      10.000      300.5
+     linear   50    0 7.4e-06    0.228  0.230    96.074      91.693       49.5
+     linear  100    0 1.5e-06    0.222  0.180    85.420      77.714       98.9
+     linear  200    0 6.4e-06    0.216  0.136    62.822      48.212      196.9
+     linear  500    0 4.8e-06    0.217  0.111     2.502       1.204      357.5
+     linear 1000    0 3.7e-05    0.206  0.109     0.475       0.327      322.6
+     linear  raw    0 8.1e-07    0.217  0.112     1.377       2.396      348.0
+ saturating   50    0 2.1e-06    0.228  0.230  4803.700    4584.647       49.5
+ saturating  100    0 2.5e-06    0.222  0.180  8542.038    7771.417       98.9
+ saturating  200    0 1.3e-06    0.216  0.136 12564.446    9642.363      196.9
+ saturating  500    0 3.1e-05    0.217  0.111  1250.968     602.129      357.5
+ saturating 1000    0 3.0e-05    0.206  0.109   474.845     326.753      322.6
+ saturating  raw    0 4.3e-05    0.217  0.112   826.151     958.274      348.0
+ neff_Gillnet sec
+         25.5 0.5
+         50.5 0.4
+        100.5 0.4
+        250.5 0.4
+        500.5 0.4
+        200.5 0.4
+         49.5 0.4
+         98.7 0.4
+        196.0 0.4
+        273.7 0.4
+        247.2 0.4
+        282.6 0.4
+         49.5 0.4
+         98.7 0.4
+        196.0 0.4
+        273.7 0.4
+        247.2 0.4
+        282.6 0.4
+
+> print(aggregate(SPR_last ~ dm, data = tab, FUN = function(v) round(diff(range(v)), 
++     3)))
+          dm SPR_last
+1      fixed    0.231
+2     linear    0.022
+3 saturating    0.022
+
+> r <- resid_flicc(fsat, "osa")
+
+> cat("saturating ESS 200: OSA mean", round(mean(r$resid, 
++     na.rm = TRUE), 2), "sd", round(sd(r$resid, na.rm = TRUE), 
++     2), "\n")
+saturating ESS 200: OSA mean 0.08 sd 0.9 
+
+> print(lmean_resid_flicc(fsat)$runs)
+           gear p_value  pass sd_z
+Trawl     Trawl   0.038 FALSE 1.40
+Gillnet Gillnet   0.965  TRUE 0.83
+
+> print(ppc_flicc(fsat, nsim = 300)$coverage)
+     gear  stat share_outside_95
+1   Trawl Lmean             0.17
+2 Gillnet Lmean             0.00
+3   Trawl   L95             0.00
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.00
+7   Trawl  Lmax             0.08
+8 Gillnet  Lmax             0.00
+
+> f0 <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = list(CVL = 0.1))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> f1 <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating"))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> stopifnot(identical(f0$obs_model, "dm"), f0$tmb_data$dm_type == 
++     2)
+
+> stopifnot(isTRUE(all.equal(f0$opt$objective, f1$opt$objective)))
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
