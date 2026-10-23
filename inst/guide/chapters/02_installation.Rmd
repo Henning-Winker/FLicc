@@ -7,8 +7,7 @@ model requires Rtools (<https://cran.r-project.org/bin/windows/Rtools/>).
 install.packages("TMB", type = "source")
 install.packages(c("FLCore", "ggplotFL"),
                  repos = c("https://flr.r-universe.dev", "https://cloud.r-project.org"))
-remotes::install_github("henning-winker/FLicc")                    # release
-remotes::install_github("henning-winker/FLicc", ref = "dev-merge")  # development
+remotes::install_github("henning-winker/FLicc")
 ```
 
 ```{r load}
