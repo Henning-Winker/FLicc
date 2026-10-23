@@ -1,0 +1,360 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 09:52:13 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> options(width = 200)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> for (w in c(0.5, 1, 2.5)) print(c(width = w, lbb_bh_flicc(seq(22.5, 
++     120, by = w), 120, 1.5385, 0.7692, FALSE, 0.2917, 60)))
+     width        BB0         YR 
+0.50000000 0.45852261 0.03315461 
+     width        BB0         YR 
+1.00000000 0.45854142 0.03315519 
+     width        BB0         YR 
+2.50000000 0.45859498 0.03315421 
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> gn <- lfd["Gillnet"]
+
+> pr <- lbb_priors_flicc(gn)
+
+> str(pr[c("Linf", "Linf.sd", "ZK", "MK", "Lc", "alpha", 
++     "Lstart", "Lmax", "Lmax.med")])
+List of 9
+ $ Linf    : num 59.6
+ $ Linf.sd : num 0.596
+ $ ZK      : num 3.16
+ $ MK      : num 1.5
+ $ Lc      : num 26
+ $ alpha   : num 0.468
+ $ Lstart  : num 31.8
+ $ Lmax    : num 57
+ $ Lmax.med: num 52
+
+> t1 <- system.time(lb <- lbb_flicc(gn, Lm50 = 31.2))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+
+> print(lb)
+LBB in FLicc (years fitted separately, logistic selectivity)
+Linf prior 59.64 (SD 0.6), M/K prior 1.5 (SD 0.15), Z/K guess 3.16, Lmax 57, median Lmax 52
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 2013 59.9 27.5 1.50 1.86 4.30 0.19 0.16
+ 2014 59.7 28.2 1.50 2.53 5.30 0.14 0.12
+ 2015 59.5 25.6 1.50 1.24 3.35 0.26 0.22
+ 2016 59.7 27.0 1.50 1.56 3.83 0.22 0.19
+ 2017 59.7 28.5 1.50 2.25 4.88 0.16 0.14
+ 2018 59.6 28.8 1.50 2.28 4.92 0.16 0.14
+ 2019 59.8 28.8 1.50 1.54 3.81 0.23 0.21
+ 2020 59.6 29.2 1.50 1.90 4.35 0.19 0.18
+ 2021 59.6 28.9 1.50 1.75 4.13 0.21 0.19
+ 2022 59.5 29.0 1.50 1.41 3.61 0.26 0.24
+ 2023 59.6 28.1 1.50 1.70 4.05 0.21 0.18
+ 2024 59.9 30.0 1.51 2.59 5.41 0.15 0.14
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.37 
+
+> cat("sec", t1[["elapsed"]], "\n")
+sec 1.24 
+
+> print(lb$table[, c("year", "Linf", "Lc", "alpha", 
++     "MK", "FK", "FM", "FM_lcl", "FM_ucl", "BB0", "BB0_lcl", "BB0_ucl", 
++     "YR", "SPR", "Lmean_Lopt", "Lc_Lc_opt")])
+   year     Linf       Lc    alpha       MK       FK       FM    FM_lcl   FM_ucl       BB0    BB0_lcl   BB0_ucl         YR       SPR Lmean_Lopt Lc_Lc_opt
+1  2013 59.92706 27.49198 27.01684 1.504949 2.794062 1.856582 1.3859585 2.487013 0.1871313 0.11213446 0.2857981 0.03565895 0.1583229  0.8496563 0.7798988
+2  2014 59.67636 28.18672 21.72958 1.500292 3.795874 2.530090 1.9069719 3.356817 0.1385181 0.08427067 0.2092611 0.02630967 0.1175606  0.8523800 0.7824162
+3  2015 59.54826 25.64460 31.71789 1.498494 1.852715 1.236385 0.8959713 1.706134 0.2638963 0.15080880 0.4168485 0.04607553 0.2211987  0.8508070 0.7588724
+4  2016 59.73351 26.96845 31.11163 1.500095 2.334630 1.556321 1.1765329 2.058706 0.2200773 0.13451820 0.3313549 0.04188144 0.1860323  0.8555881 0.7787836
+5  2017 59.65743 28.50142 41.50314 1.500743 3.380785 2.252741 1.8025965 2.815295 0.1610978 0.10720325 0.2279123 0.03187695 0.1397332  0.8619162 0.7985822
+6  2018 59.62974 28.80708 26.75872 1.500008 3.424622 2.283069 1.6897188 3.084776 0.1593167 0.09418290 0.2456855 0.03127215 0.1409479  0.8674836 0.8065389
+7  2019 59.83311 28.75430 24.50619 1.500273 2.311566 1.540763 1.1258661 2.108556 0.2328434 0.13486743 0.3643240 0.04506803 0.2112203  0.8935774 0.8297670
+8  2020 59.60605 29.15258 24.48521 1.502920 2.850270 1.896488 1.4526826 2.475880 0.1933986 0.12061472 0.2869600 0.03787363 0.1765451  0.9003066 0.8295766
+9  2021 59.55565 28.93828 24.45937 1.501748 2.626852 1.749196 1.3322001 2.296718 0.2079112 0.12853629 0.3104618 0.04054330 0.1888588  0.8886636 0.8297420
+10 2022 59.52403 29.02456 32.99230 1.498184 2.107233 1.406525 1.0179467 1.943435 0.2563922 0.14621159 0.4055954 0.04870567 0.2354937  0.9234346 0.8486725
+11 2023 59.57596 28.08978 41.22607 1.499479 2.553150 1.702691 1.3271378 2.184518 0.2098050 0.13435063 0.3053550 0.04113568 0.1826668  0.8780836 0.8066479
+12 2024 59.87463 30.02707 27.38886 1.506135 3.899811 2.589284 2.0455466 3.277556 0.1455999 0.09509263 0.2088577 0.02892287 0.1382268  0.8899691 0.8303917
+
+> lbu <- lbb_flicc(gn, Linf = 55.7, MK = 0.162/0.08, 
++     Lm50 = 31.2)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+FLicc: Dirichlet-multinomial precision at its upper bound for Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+
+> print(lbu)
+LBB in FLicc (years fitted separately, logistic selectivity)
+Linf prior 55.7 (SD 0.56, user), M/K prior 2.025 (SD 0.075, user), Z/K guess 2.54, Lmax 57, median Lmax 52
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 2013 55.8 27.6 2.03 0.81 3.68 0.40 0.36
+ 2014 55.8 27.9 2.03 1.11 4.27 0.32 0.29
+ 2015 55.8 25.3 2.02 0.35 2.73 0.62 0.57
+ 2016 56.3 26.7 2.03 0.58 3.20 0.49 0.44
+ 2017 55.8 28.3 2.03 0.98 4.01 0.36 0.33
+ 2018 55.7 28.5 2.03 0.96 3.96 0.37 0.34
+ 2019 56.1 28.5 2.03 0.53 3.10 0.52 0.50
+ 2020 55.7 28.9 2.03 0.72 3.48 0.45 0.42
+ 2021 55.6 28.6 2.03 0.63 3.30 0.48 0.45
+ 2022 55.6 28.6 2.02 0.41 2.85 0.60 0.57
+ 2023 55.7 27.9 2.02 0.63 3.31 0.47 0.44
+ 2024 55.8 30.1 2.03 1.26 4.59 0.31 0.30
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.35 
+
+> lbj <- lbb_flicc(gn, Linf = 55.7, Lm50 = 31.2, by_year = FALSE)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Gillnet 400).
+
+> print(lbj)
+LBB in FLicc (joint fit, logistic selectivity)
+Linf prior 55.7 (SD 0.56, user), M/K prior 1.5 (SD 0.15), Z/K guess 2.54, Lmax 57, median Lmax 52
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 2013 56.8 28.3 1.46 1.92 4.27 0.19 0.17
+ 2014 56.8 28.3 1.46 2.22 4.70 0.17 0.14
+ 2015 56.8 28.3 1.46 1.50 3.65 0.24 0.22
+ 2016 56.8 28.3 1.46 1.55 3.73 0.24 0.21
+ 2017 56.8 28.3 1.46 1.69 3.93 0.22 0.19
+ 2018 56.8 28.3 1.46 1.76 4.04 0.21 0.18
+ 2019 56.8 28.3 1.46 1.26 3.31 0.28 0.26
+ 2020 56.8 28.3 1.46 1.41 3.53 0.26 0.23
+ 2021 56.8 28.3 1.46 1.33 3.40 0.27 0.24
+ 2022 56.8 28.3 1.46 1.06 3.01 0.33 0.30
+ 2023 56.8 28.3 1.46 1.37 3.47 0.27 0.24
+ 2024 56.8 28.3 1.46 1.67 3.90 0.22 0.20
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.37 
+
+> stopifnot(inherits(lb, "flicc_lbb"), nrow(lb$table) == 
++     12, all(is.finite(lb$table$BB0)), all(lb$table$BB0 > 0), 
++     nrow(lbj$table) == 12)
+
+> ggplot2::ggsave(file.path(od, "lbb_alfonsino.png"), 
++     plot_lbb(lb), width = 10, height = 7, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "lbb_alfonsino_joint.png"), 
++     plot_lbb(lbj), width = 10, height = 7, dpi = 100)
+
+> url <- "https://raw.githubusercontent.com/SISTA16/LBB/master/Example_Dat.csv"
+
+> dat <- tryCatch(utils::read.csv(url), error = function(e) NULL)
+
+> if (!is.null(dat)) {
++     d <- dat[dat$Stock == "Ille_coi_AD" & !is.na(dat$CatchNo), 
++         ]
++     df <- aggregate(data ~ len + year + qname, data.frame(len = d$Length/10, 
++         year = d$Year, data = d$CatchNo, qname = "Illex"), sum)
++     il <- FLQuantLen(lfd_long_to_wide(df), unit = " ..." ... [TRUNCATED] 
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 88).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 410).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 277).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+LBB in FLicc (years fitted separately, logistic selectivity)
+Linf prior 23 (SD 0.23, user), M/K prior 1.5 (SD 0.15), Z/K guess 3.21, Lmax 23.5, median Lmax 20.5
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 1996 23.0 13.7 1.50 1.22 3.33 0.33 0.26
+ 1999 23.0  6.0 1.50 1.85 4.28 0.12 0.03
+ 2001 23.0  4.1 1.50 1.20 3.31 0.17 0.07
+ 2002 23.0  4.7 1.50 2.00 4.50 0.09 0.02
+ 2009 23.0  8.6 1.50 1.69 4.03 0.17 0.07
+ 2014 23.0  5.6 1.49 2.94 5.89 0.06 0.01
+ 2016 23.1  6.0 1.50 4.00 7.48 0.04 0.00
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.37 
+  year     Linf        Lc       MK       FM       ZK        BB0          YR Lmean_Lopt
+1 1996 23.02567 13.748870 1.501235 1.217656 3.329223 0.33310859 0.045437196  1.0516530
+2 1999 22.95215  6.012747 1.499282 1.852850 4.277225 0.12019321 0.016090344  0.6345525
+3 2001 23.00238  4.084897 1.499856 1.204080 3.305802 0.17449673 0.022293055  0.5568709
+4 2002 23.01963  4.710106 1.499198 2.004238 4.503949 0.09244260 0.010396671  0.5334731
+5 2009 23.02012  8.595795 1.498627 1.688201 4.028610 0.17257576 0.029050871  0.7749398
+6 2014 22.99797  5.551250 1.494229 2.942342 5.890764 0.05883058 0.006180667  0.5459249
+7 2016 23.09296  5.964316 1.497655 3.996732 7.483382 0.03994557 0.003851055  0.5206050
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 88).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 410).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Illex 277).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+FLicc: convergence check failed (Hessian not positive definite or large Newton decrement). See flicc_convergence(fit).
+FLicc: Dirichlet-multinomial precision at its upper bound for Illex: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+LBB in FLicc (years fitted separately, logistic selectivity)
+Linf prior 24.6 (SD 0.25), M/K prior 1.5 (SD 0.15), Z/K guess 3.66, Lmax 23.5, median Lmax 20.5
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 1996 24.6 13.8 1.50 1.74 4.11 0.24 0.18
+ 1999 24.6  6.1 1.50 2.26 4.89 0.09 0.02
+ 2001 24.6  4.1 1.50 1.47 3.70 0.13 0.05
+ 2002 24.6  4.8 1.50 2.37 5.04 0.07 0.02
+ 2009 24.6  8.8 1.50 2.20 4.80 0.12 0.04
+ 2014 24.6  5.6 1.49 3.45 6.65 0.04 0.01
+ 2016 24.7  6.0 1.50 4.59 8.37 0.03 0.00
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.37 
+
+> print(lb$table[, c("year", "BB0", "EPR", "SPR")])
+   year       BB0       EPR       SPR
+1  2013 0.1871313 0.1869678 0.1583229
+2  2014 0.1385181 0.1383282 0.1175606
+3  2015 0.2638963 0.2635248 0.2211987
+4  2016 0.2200773 0.2199190 0.1860323
+5  2017 0.1610978 0.1611023 0.1397332
+6  2018 0.1593167 0.1590404 0.1409479
+7  2019 0.2328434 0.2320154 0.2112203
+8  2020 0.1933986 0.1932721 0.1765451
+9  2021 0.2079112 0.2077614 0.1888588
+10 2022 0.2563922 0.2559404 0.2354937
+11 2023 0.2098050 0.2097476 0.1826668
+12 2024 0.1455999 0.1455158 0.1382268
+
+> stopifnot(all(is.finite(lb$table$EPR)), cor(lb$table$BB0, 
++     lb$table$EPR) > 0.9)
+
+> data("alfonsino")
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stk <- stocklen(lfd, lhpar, m_model = "constant")
+
+> fit2 <- fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), 
++     catch_by_gear = c(0.7, 0.3), settings = list(CVL = 0.1, obs_model = "dm", 
++         dm_theta = "saturating"))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> print(epr_ci_flicc(fit2))
+   year       epr     se_log       lwr       upr
+1  2013 0.2160061 0.07656353 0.1859067 0.2509788
+2  2014 0.1822400 0.07443383 0.1575018 0.2108637
+3  2015 0.2339088 0.07258481 0.2028908 0.2696689
+4  2016 0.2672665 0.07279237 0.2317307 0.3082517
+5  2017 0.2512497 0.07444426 0.2171394 0.2907185
+6  2018 0.2543838 0.07509071 0.2195695 0.2947180
+7  2019 0.3040044 0.07126501 0.2643742 0.3495753
+8  2020 0.2924962 0.07496315 0.2525291 0.3387887
+9  2021 0.3370916 0.07488011 0.2910783 0.3903786
+10 2022 0.3900700 0.07271599 0.3382568 0.4498197
+11 2023 0.3855316 0.07608431 0.3321214 0.4475309
+12 2024 0.3360170 0.08435514 0.2848118 0.3964281
+
+> print(spr_ci_flicc(fit2)[1:3, ])
+  year        spr     se_log        lwr       upr
+1 2013 0.11909733 0.09664596 0.09854551 0.1439353
+2 2014 0.09519223 0.09078620 0.07967538 0.1137310
+3 2015 0.13209597 0.09327332 0.11002597 0.1585930
+
+> ggplot2::ggsave(file.path(od, "epr_alfonsino.png"), 
++     plot_epr(fit2, ci = TRUE), width = 7, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "epr_lbb.png"), plot_epr(lb$fits[["2024"]], 
++     ref_levels = attr(lb$table, "BFM1B0") * c(1, 0.5)), width = 7, 
++     height = 4, dpi = 100)
+`geom_line()`: Each group consists of only one observation.
+ℹ Do you need to adjust the group aesthetic?
+
+> lbe <- lbb_flicc(gn, Lm50 = 31.2, ess = 20000)
+
+> print(lbe)
+LBB in FLicc (years fitted separately, logistic selectivity)
+Linf prior 59.64 (SD 0.6), M/K prior 1.5 (SD 0.15), Z/K guess 3.16, Lmax 57, median Lmax 52
+ year Linf   Lc   MK   FM   ZK  BB0  SPR
+ 2013 60.6 27.9 1.64 2.00 4.91 0.18 0.15
+ 2014 59.9 28.5 1.49 2.87 5.76 0.12 0.10
+ 2015 57.1 25.6 1.46 1.09 3.04 0.30 0.26
+ 2016 59.1 27.2 1.48 1.74 4.04 0.20 0.17
+ 2017 59.4 28.5 1.51 2.27 4.93 0.16 0.14
+ 2018 59.1 29.0 1.49 2.39 5.06 0.15 0.14
+ 2019 61.4 29.2 1.47 1.99 4.39 0.18 0.16
+ 2020 58.2 29.1 1.56 1.69 4.19 0.22 0.20
+ 2021 56.6 28.6 1.54 1.30 3.55 0.28 0.26
+ 2022 55.5 28.6 1.45 0.99 2.88 0.35 0.33
+ 2023 57.7 28.0 1.48 1.54 3.76 0.24 0.21
+ 2024 60.0 30.4 1.60 2.72 5.96 0.14 0.14
+B/B0 at F = M, Lc = Lc_opt (Bmsy proxy): 0.37 
+
+> tb2 <- lbbref_flicc(fit2)
+
+> print(tb2[, c("year", "Linf", "Lc", "alpha", "MK", 
++     "FK", "FM", "Lopt", "Lc_opt", "Lmean", "BB0", "BB0_lcl", 
++     "BB0_ucl", "SPR")])
+   year Linf       Lc    alpha    MK       FK       FM     Lopt   Lc_opt    Lmean       BB0   BB0_lcl   BB0_ucl        SPR
+1  2013 55.7 20.50156 15.54692 2.025 3.238449 1.599234 33.25373 28.98918 27.38311 0.2160061 0.1859067 0.2509788 0.11909733
+2  2014 55.7 20.71427 15.41516 2.025 3.807210 1.880104 33.25373 29.40506 26.54855 0.1822400 0.1575018 0.2108637 0.09519223
+3  2015 55.7 20.40060 15.67221 2.025 2.998093 1.480540 33.25373 28.78512 26.53164 0.2339088 0.2028908 0.2696689 0.13209597
+4  2016 55.7 20.28689 15.90905 2.025 2.620025 1.293839 33.25373 28.42141 27.64098 0.2672665 0.2317307 0.3082517 0.15862347
+5  2017 55.7 20.35948 15.74387 2.025 2.790051 1.377803 33.25373 28.59204 27.01700 0.2512497 0.2171394 0.2907185 0.14615376
+6  2018 55.7 20.33589 15.79163 2.025 2.755943 1.360959 33.25373 28.55879 27.67847 0.2543838 0.2195695 0.2947180 0.14836692
+7  2019 55.7 20.15294 16.29155 2.025 2.285367 1.128576 33.25373 28.04622 27.83293 0.3040044 0.2643742 0.3495753 0.18877270
+8  2020 55.7 20.18882 16.17453 2.025 2.383143 1.176861 33.25373 28.16173 27.16212 0.2924962 0.2525291 0.3387887 0.17905494
+9  2021 55.7 20.07440 16.62598 2.025 2.033081 1.003991 33.25373 27.72248 27.92484 0.3370916 0.2910783 0.3903786 0.21803422
+10 2022 55.7 19.97359 17.20009 2.025 1.704586 0.841771 33.25373 27.23530 27.79982 0.3900700 0.3382568 0.4498197 0.26740356
+11 2023 55.7 19.98848 17.09731 2.025 1.728981 0.853818 33.25373 27.27441 28.42080 0.3855316 0.3321214 0.4475309 0.26329791
+12 2024 55.7 20.09122 16.54364 2.025 2.039599 1.007209 33.25373 27.73135 28.56642 0.3360170 0.2848118 0.3964281 0.21747411
+
+> cat("BFM1B0", attr(tb2, "BFM1B0"), "\n")
+BFM1B0 0.3476279 
+
+> stopifnot(nrow(tb2) == 12, all(is.finite(tb2$BB0)), 
++     all(is.finite(tb2$Lc)))
+
+> ggplot2::ggsave(file.path(od, "lbb_anyfit.png"), plot_lbb(fit2), 
++     width = 10, height = 7, dpi = 100)
+There were 17 warnings (use warnings() to see them)

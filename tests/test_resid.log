@@ -1,0 +1,183 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 09:52:13 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> lfd200 <- lfdess(lfd, ess.g = 200)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> for (om in c("dm", "mn")) {
++     f <- fiticc(lfd200, stklen, sel_fun = sf, catch_by_gear = cbg, 
++         settings = list(CVL = 0.1, obs_model = om))
++     rp <- resid_flicc(f, "pearson")
++     ro <- resid_flicc(f, "osa")
++     cat("\n==", om, " Pearson sd", round(sd(rp$resid), 2), " OSA mean",  .... [TRUNCATED] 
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+
+== dm  Pearson sd 0.64  OSA mean 0.08 sd 0.9  n 1000 
+           gear p_value  pass sd_z
+Trawl     Trawl   0.038 FALSE 1.40
+Gillnet Gillnet   0.965  TRUE 0.83
+ppc seconds 0.291 
+     gear  stat share_outside_95
+1   Trawl Lmean             0.17
+2 Gillnet Lmean             0.00
+3   Trawl   L95             0.00
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.00
+7   Trawl  Lmax             0.08
+8 Gillnet  Lmax             0.00
+
+== mn  Pearson sd 0.64  OSA mean 0.08 sd 0.9  n 1000 
+           gear p_value  pass sd_z
+Trawl     Trawl   0.038 FALSE 1.42
+Gillnet Gillnet   0.965  TRUE 0.84
+ppc seconds 0.216 
+     gear  stat share_outside_95
+1   Trawl Lmean             0.25
+2 Gillnet Lmean             0.00
+3   Trawl   L95             0.00
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.00
+7   Trawl  Lmax             0.08
+8 Gillnet  Lmax             0.00
+
+> pc2 <- ppc_flicc(fdm, nsim = 200, par_draws = TRUE)
+
+> print(pc2$coverage)
+     gear  stat share_outside_95
+1   Trawl Lmean             0.17
+2 Gillnet Lmean             0.00
+3   Trawl   L95             0.00
+4 Gillnet   L95             0.00
+5   Trawl  Pmat             0.00
+6 Gillnet  Pmat             0.00
+7   Trawl  Lmax             0.08
+8 Gillnet  Lmax             0.00
+
+> selfcheck <- function(f, om) {
++     cd <- FLicc:::comp_data_flicc(f)
++     set.seed(42)
++     sim <- f$tmb_data$obs
++     td <- f$tmb_data
++     rep0 <- f$obj$report(f$obj$env$last.par.best)
++     rpp <- rep0$plen
++     for (g in seq_len(dim(sim)[3])) for (y in seq_len(dim(sim)[2])) {
++         n .... [TRUNCATED] 
+
+> sc_dm <- selfcheck(fdm, "dm")
+
+> print(round(sc_dm, 3))
+  mean     sd   ks_p 
+-0.005  0.993  0.875 
+
+> stopifnot(abs(sc_dm["mean"]) < 0.1, abs(sc_dm["sd"] - 
++     1) < 0.1)
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> p1 <- plot_resid_len(fdm)
+
+> p2 <- plot_resid_len(fdm, years = "each", cap = 3)
+
+> p3 <- plot_resid_len(fdm, type = "osa", pool_years = TRUE)
+
+> p4 <- plot_resid_len(fdm, by_gear = FALSE, year = tail(fdm$tmb_data$year_names, 
++     2))
+
+> p5 <- plot_resid_len(fdm, gear = 1, year = 1:2)
+
+> for (pp in list(p3, p4, p5)) stopifnot(inherits(pp, 
++     "ggplot"))
+
+> invisible(lapply(list(p3, p4, p5), ggplot2::ggplot_build))
+
+> ggplot2::ggsave(file.path(od, "resid_len.png"), p1, 
++     width = 8, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "resid_len_each.png"), 
++     p2, width = 8, height = 4, dpi = 100)
+
+> print(nrow(attr(p2, "capped")))
+[1] 4
+
+> lt <- lfd_trim(lfd, Lmin = 20, Lmax = 60)
+    gear total below_Lmin above_Lmax share
+   Trawl  7200       1105          0 0.153
+ Gillnet  4800         38          0 0.008
+
+> rm_tab <- attr(lt, "removed")
+
+> print(rm_tab)
+     gear total below_Lmin above_Lmax share
+1   Trawl  7200       1105          0 0.153
+2 Gillnet  4800         38          0 0.008
+
+> L1 <- lapply(lt, function(x) as.numeric(dimnames(x)$len))
+
+> stopifnot(all(vapply(L1, function(l) min(l) >= 20 && 
++     max(l) < 60, logical(1))), all(abs(vapply(names(lfd), function(g) sum(lfd[[g]]) - 
++     sum(lt[[g]]), numeric(1)) - (rm_tab$below_Lmin + rm_tab$above_Lmax)) < 
++     1e-06))
+
+> ft <- fiticc(lt, stocklen(lt, lhpar, m_model = "constant"), 
++     sel_fun = sf, catch_by_gear = cbg, settings = list(CVL = 0.1))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 510, Gillnet 397).
+
+> print(ft$diagnostics)
+$newton_steps
+[1] 1
+
+$hess_pd
+[1] TRUE
+
+$decrement
+[1] 2.523282e-15
+
+$max_gradient
+[1] 4.559244e-06
+
+$optimizer_code
+[1] 0
+
+$conv_tier
+[1] "ok"
+
+$dm
+     gear       type  estimate prior_centre at_bound n_median
+1   Trawl saturating  757.0726         5330    FALSE    510.5
+2 Gillnet saturating 1062.6233         4000    FALSE    397.0
+
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

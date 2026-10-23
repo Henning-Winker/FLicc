@@ -1,0 +1,139 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-23 09:52:13 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, 
++     c("len", "year", "data", "qname")]), unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> p1 <- plot_growth(lhpar, CVL = 0.1, lfd = lfd)
+
+> p2 <- plot_growth(lhpar, CVL = 0.1, lfd = lfd, composition = TRUE)
+
+> fit <- fiticc(lfd, stklen, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = c(0.7, 0.3))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> p3 <- plot_growth(fit)
+
+> ggplot2::ggsave(file.path(od, "growth.png"), p1, width = 8, 
++     height = 5, dpi = 90)
+
+> set.seed(3)
+
+> sim_phase <- 0.35
+
+> k <- 0.25
+
+> linf <- 50
+
+> cv <- 0.08
+
+> L <- 0:60
+
+> sim <- FLQuants(G = FLQuant(0, dimnames = list(len = L, 
++     year = 2001:2006)))
+
+> for (y in 2001:2006) {
++     mu <- linf * (1 - exp(-k * (0:12 + sim_phase)))
++     sdv <- sqrt((cv * mu)^2 + 1)
++     w <- exp(-0.4 * (0:12)) * exp(rnorm(13, 0, 0.5))
++     pr <- sapply(seq_along(mu), function(j) pnorm(L + 1, mu[j], 
++         sdv[j]) - pnorm(L, mu[j], sdv[j])) %*% w
++     sim$G[, .... [TRUNCATED] 
+
+> lh_sim <- FLPar(linf = linf, k = k, M = 0.3, L50 = 30)
+
+> gp_sim <- growth_phase_flicc(lh_sim, lfd = sim, CVL = cv/0.99, 
++     sd0 = 1)
+
+> print(gp_sim$best)
+      k phase   logLik dLL
+18 0.25  0.34 -3997.68   0
+
+> print(gp_sim$t0)
+   m age_first    t0 t0_lwr t0_upr L_age1 L_age2
+1 -1         1  0.66   0.66   0.66   4.07  14.23
+2  0         0 -0.34  -0.34  -0.34  14.23  22.14
+3  1        -1 -1.34  -1.34  -1.34  22.14  28.31
+4  2        -2 -2.34  -2.34  -2.34  28.31  33.10
+
+> stopifnot(abs(gp_sim$best$phase - sim_phase) <= 0.06)
+
+> gp_k <- growth_phase_flicc(lh_sim, lfd = sim, CVL = cv/0.99, 
++     sd0 = 1, k = c(0.15, 0.2, 0.25, 0.3, 0.35), phase = seq(0, 
++         0.95, 0.05))
+
+> print(gp_k$best)
+      k phase    logLik dLL
+38 0.25  0.35 -3996.519   0
+
+> stopifnot(gp_k$best$k == 0.25)
+
+> t_g <- system.time(gp <- growth_phase_flicc(fit))
+growth_phase_flicc(): the profile is flat (all phases within dLL > -1.92): the compositions carry no information on the phase or t0.
+
+> print(t_g)
+   user  system elapsed 
+  3.494   0.006   3.502 
+
+> print(gp$best)
+      k phase    logLik dLL
+15 0.08  0.28 -14786.47   0
+
+> print(gp$t0)
+   m age_first    t0 t0_lwr t0_upr L_age1 L_age2
+1 -1         1  0.72     NA     NA   1.23   5.42
+2  0         0 -0.28     NA     NA   5.42   9.29
+3  1        -1 -1.28     NA     NA   9.29  12.86
+4  2        -2 -2.28     NA     NA  12.86  16.15
+
+> cat("contrast", gp$contrast, "\n")
+contrast 1.488517 
+
+> print(round(gp$profile$dLL, 1))
+ [1] -1.1 -1.0 -0.9 -0.8 -0.8 -0.7 -0.6 -0.5 -0.4 -0.3 -0.2 -0.1 -0.1  0.0  0.0
+[16]  0.0  0.0  0.0  0.0 -0.1 -0.1 -0.2 -0.2 -0.3 -0.4 -0.4 -0.5 -0.6 -0.7 -0.8
+[31] -0.9 -1.0 -1.1 -1.1 -1.2 -1.3 -1.3 -1.4 -1.4 -1.4 -1.5 -1.5 -1.5 -1.5 -1.4
+[46] -1.4 -1.3 -1.3 -1.2 -1.1
+
+> ggplot2::ggsave(file.path(od, "growth_phase.png"), 
++     plot_growth_phase(gp), width = 6, height = 4, dpi = 90)
+
+> ggplot2::ggsave(file.path(od, "growth_lfd.png"), plot_growth_lfd(gp), 
++     width = 9, height = 7, dpi = 90)
+
+> gpk <- growth_phase_flicc(fit, k = c(0.06, 0.07, 0.08, 
++     0.09, 0.1, 0.12), phase = seq(0, 0.9, 0.1))
+growth_phase_flicc(): the profile is flat (all phases within dLL > -1.92): the compositions carry no information on the phase or t0.
+
+> print(gpk$best)
+     k phase   logLik dLL
+7 0.06   0.1 -14785.1   0
+
+> ggplot2::ggsave(file.path(od, "growth_phase_k.png"), 
++     plot_growth_phase(gpk), width = 6, height = 4, dpi = 90)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
