@@ -50,9 +50,11 @@ likelihood (the profile interval is approximate).}
 }
 \value{
 A list of class \code{"flicc_growth_phase"}: \code{profile} (k, phase,
-logLik, dLL), \code{best} (k, phase, logLik), \code{t0} (candidates with lengths at
-age 1 and 2), the inputs, and \code{contrast} (largest minus smallest logLik of
-the profile; near zero means no information on the phase).
+logLik, dLL), \code{best} (k, phase, logLik), \code{t0} (candidates: \code{m},
+\code{age_first}, \code{t0} with interval, lengths at age 1 and 2),
+\code{phase_interval} (approximate 95\%, \code{NA} if the profile is flat),
+\code{informative} (\code{FALSE} when all phases lie within the interval), the
+inputs, and \code{contrast} (largest minus smallest logLik of the profile).
 }
 \description{
 Fits the length compositions as mixtures of age components whose mean
@@ -75,11 +77,16 @@ values the profile is two-dimensional and checks the growth rate as well
 
 \strong{From phase to t0.} With the compositions sampled \eqn{\tau} years after
 spawning (\code{sample - spawn}, as fractions of the year),
-\eqn{t_0 = \tau - \phi - m}. The integer \eqn{m} is not identified by the
-lengths alone (is the first mode age 0 or age 1?); the candidates
-\eqn{m = -1, 0, 1} are returned with the implied lengths at age 1 and 2, to be
-chosen with knowledge of the biology. In SS3 terms, the length at age 1 (or
-at \code{Amin}) and CVL as the CV of the young fish.
+\eqn{t_0 = \tau - \phi - m}. The lengths fix the phase only within a
+year: whether the smallest age component holds fish of the year or one-year
+olds is not identified. The integer \eqn{m} labels this choice;
+\code{age_first} is the true age at sampling of the first age component
+(\eqn{\tau - m}; a negative value means that component is not yet born and
+holds no fish, so the first mode is the next one). The candidates \eqn{m = -1, \dots, 2} are returned with
+their t0, its approximate 95\% interval (from the phase interval) and the
+implied lengths at age 1 and 2, to be chosen with knowledge of the biology
+(e.g. the length of fish in their first year). In SS3 terms, the length at
+age 1 (or at \code{Amin}) and CVL as the CV of the young fish.
 
 Partly selected small fish shift the first mode upwards; exclude them with
 \code{Lmin}. Compositions pooled over months smear the modes; use compositions

@@ -1,5 +1,89 @@
 # Length-based indicators
 
+Length-based indicators (LBIs) summarise each length composition in a few
+numbers that can be compared with reference levels or followed over time. The
+empirical indicators need no model fit and only Linf and L50 (for some, also
+M/k), so they can be computed at the start of an assessment and by analysts
+without modelling experience. The model-based indicators (`LBIspr`, `LBImean`)
+use the fitted selectivity and growth.
+
+## Empirical indicators (no model)
+
+`lbi_flicc()` computes, for each gear and year, the indicators of ICES WKLIFE
+and of Froese (2004), the reference lengths, and a Beverton-Holt estimate of
+total mortality from the mean length:
+
+| Indicator | Definition | Reference (green) | Limit (red below) | Property |
+|---|---|---|---|---|
+| Lc/L50, L25/L50 | length at half the modal abundance; 25th percentile | 1 | 0.75 | conservation of immatures |
+| Lmax5/Linf, L95/Linf | mean of the largest 5%; 95th percentile | 0.8 | 0.7 | conservation of large fish |
+| Pmega | proportion above 1.1 Lopt | 0.3 | 0.15 | conservation of large fish |
+| LmaxY/Lopt, Lmean/Lopt | class of maximum catch biomass; mean length above Lc | 0.9 | 0.75 | optimal yield |
+| Lmean/LFM | LFM = 0.75 Lc + 0.25 Linf, the mean length at F = M | 1 | 0.9 | MSY proxy |
+| Pobj (Cope-Punt) | Pmat + Popt + Pmega, with a decision tree | see below | – | spawning biomass vs 0.4 B0 |
+
+The traffic light has three colours: green at or above the ICES reference level,
+orange between the limit and the reference level, red below the limit. The
+limits are pragmatic choices (10-25% below the reference level, half of it for
+Pmega) that separate a clear departure from a marginal one; they can be changed
+with `limits`, e.g. `limits = c("Lmean/LFM" = 0.85)`.
+
+with $L_{opt} = 2/3\,L_\infty$ (or $L_\infty\,3/(3 + M/k)$ with `Lopt = "mk"`),
+and the proportions of mature fish (`Pmat`), of fish around Lopt (`Popt`) and
+their sum `Pobj`. Cope and Punt (2009) use `Pobj` to identify the selectivity
+pattern of the fishery (below 1: mainly small and immature fish; between 1 and 2:
+selection close to the maturity ogive; 2: only mature fish of optimal size and
+larger), and then `Pmat` or `Popt` to judge whether spawning biomass is at or above
+the target of 0.4 B0 (`cp_selectivity`, `cp_test`, `cp_status`). A fishery that
+takes only fish of optimal size gives no information on status. `pool = TRUE` adds the gears pooled into
+one composition, as gear `"pooled"`: the length frequency of each gear is raised
+to catch numbers with its relative catch (`catch_by_gear`, in weight by default,
+`catch_units = "numbers"` otherwise) and the gears are summed (`combine_lfd()`).
+Each gear then contributes in proportion to its catch, not to how many fish were
+measured. For a fit, the fit's catch by gear is used by default:
+
+```{r lbi-empirical, fig.height = 8}
+lbi <- lbi_flicc(lfd, lhpar, pool = TRUE, catch_by_gear = c(Trawl = 0.95, Gillnet = 0.05))
+lbi$values[lbi$values$year == 2024, c("gear", "Lc", "Lmean", "LFM", "L95", "Lmax5", "Pmat", "Pmega", "Z")]
+lbi$values[lbi$values$year == 2024, c("gear", "Pobj", "cp_selectivity", "cp_test", "cp_status")]
+plot_lbi(lbi)
+```
+
+```{r lbi-trend, fig.height = 6}
+plot_lbi(lbi, type = "trend")
+```
+
+How to read them:
+
+- The trawl catches mainly immature fish (Lc/L50 about 0.6), so the indicators
+  for immatures and large fish are below their reference levels in every year;
+  for this gear they describe its selectivity as much as the stock. The gillnet
+  catches the larger fish and meets most reference levels. Indicators are
+  therefore read **by gear**, and against each gear's own history.
+- By the Cope-Punt tree, the gillnet selects close to the maturity ogive, and
+  the proportion mature is mostly below the threshold for SB at or above 0.4 B0;
+  the trawl takes mainly small fish with too few mature fish. Both point to SB
+  below the target, in line with the SPR of the model (about 0.2).
+  The tree has a threshold at Pobj = 1: in 2013-2014 the gillnet's Pobj is just
+  below 1, the weaker test on Pmat then applies, and the status switches to
+  "SB >= target". Near the branch points, read the tree's result with caution.
+- The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
+  best; those of the left limb (Lc, L25) also respond to recruitment (Kell et al.
+  2022).
+- Indicators follow **trends** better than they classify status: the reference
+  levels depend on Linf, L50 and M/k. Where a period is known when the stock was
+  in a good state, indicators relative to that period avoid this dependence
+  (Kell and Sharma 2025):
+
+```{r lbi-relative, fig.height = 6}
+lbi_ref <- lbi_flicc(lfd, lhpar, ref_years = 2013:2015)
+plot_lbi(lbi_ref, type = "relative")
+```
+
+Here the large-fish indicators and the proportion mature have increased since
+2013-2015 and the mean-length estimate of Z has decreased: the size structure has
+improved over the period, in line with the decrease in F estimated by the model.
+
 ## LBIspr
 
 For each gear, `LBIspr()` compares the observed proportion of large fish with
