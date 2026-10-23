@@ -36,4 +36,12 @@ print(cp)
 stopifnot(cp$cp_status == c("SB < target", "SB >= target", "SB < target", "SB >= target",
                             "SB >= target", "no information"))
 print(table(x$values$gear, x$values$cp_status))
+# three-colour status consistent with reference and limit
+rr2 <- x$ratios[is.finite(x$ratios$ref), ]
+stopifnot(all(rr2$status[rr2$value >= rr2$ref] == "green"),
+          all(rr2$status[rr2$value < rr2$lim] == "red"),
+          all(rr2$status[rr2$value >= rr2$lim & rr2$value < rr2$ref] == "orange"))
+xl <- lbi_flicc(lfd, lhpar, limits = c("Lmean/LFM" = 0.95))
+stopifnot(all(xl$ratios$lim[xl$ratios$indicator == "Lmean/LFM"] == 0.95))
+print(table(x$ratios$indicator, x$ratios$status))
 cat("lbi tests passed\n")

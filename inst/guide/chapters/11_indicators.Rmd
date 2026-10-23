@@ -13,14 +13,20 @@ use the fitted selectivity and growth.
 and of Froese (2004), the reference lengths, and a Beverton-Holt estimate of
 total mortality from the mean length:
 
-| Indicator | Definition | Reference level | Property |
-|---|---|---|---|
-| Lc/L50, L25/L50 | length at half the modal abundance; 25th percentile | > 1 | conservation of immatures |
-| Lmax5/Linf, L95/Linf | mean of the largest 5%; 95th percentile | > 0.8 | conservation of large fish |
-| Pmega | proportion above 1.1 Lopt | > 0.3 | conservation of large fish |
-| LmaxY/Lopt, Lmean/Lopt | class of maximum catch biomass; mean length above Lc | > 0.9 | optimal yield |
-| Lmean/LFM | LFM = 0.75 Lc + 0.25 Linf, the mean length at F = M | $\ge$ 1 | MSY proxy |
-| Pobj (Cope-Punt) | Pmat + Popt + Pmega, with a decision tree | see below | spawning biomass vs 0.4 B0 |
+| Indicator | Definition | Reference (green) | Limit (red below) | Property |
+|---|---|---|---|---|
+| Lc/L50, L25/L50 | length at half the modal abundance; 25th percentile | 1 | 0.75 | conservation of immatures |
+| Lmax5/Linf, L95/Linf | mean of the largest 5%; 95th percentile | 0.8 | 0.7 | conservation of large fish |
+| Pmega | proportion above 1.1 Lopt | 0.3 | 0.15 | conservation of large fish |
+| LmaxY/Lopt, Lmean/Lopt | class of maximum catch biomass; mean length above Lc | 0.9 | 0.75 | optimal yield |
+| Lmean/LFM | LFM = 0.75 Lc + 0.25 Linf, the mean length at F = M | 1 | 0.9 | MSY proxy |
+| Pobj (Cope-Punt) | Pmat + Popt + Pmega, with a decision tree | see below | – | spawning biomass vs 0.4 B0 |
+
+The traffic light has three colours: green at or above the ICES reference level,
+orange between the limit and the reference level, red below the limit. The
+limits are pragmatic choices (10-25% below the reference level, half of it for
+Pmega) that separate a clear departure from a marginal one; they can be changed
+with `limits`, e.g. `limits = c("Lmean/LFM" = 0.85)`.
 
 with $L_{opt} = 2/3\,L_\infty$ (or $L_\infty\,3/(3 + M/k)$ with `Lopt = "mk"`),
 and the proportions of mature fish (`Pmat`), of fish around Lopt (`Popt`) and

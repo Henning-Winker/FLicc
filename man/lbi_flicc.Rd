@@ -11,7 +11,8 @@ lbi_flicc(
   years = NULL,
   catch_by_gear = NULL,
   ref_years = NULL,
-  Lopt = c("wklife", "mk")
+  Lopt = c("wklife", "mk"),
+  limits = NULL
 )
 }
 \arguments{
@@ -31,10 +32,14 @@ pooled into one composition raised by catch (\code{\link[=combine_lfd]{combine_l
 historical reference period.}
 
 \item{Lopt}{\code{"wklife"} (2/3 Linf, default) or \code{"mk"} (Linf 3/(3 + M/k)).}
+
+\item{limits}{Optional named numeric vector replacing limits (orange/red
+boundary) by ratio name, e.g. \code{c("Lmean/LFM" = 0.85, Pmega = 0.1)}.}
 }
 \value{
 A list of class \code{"flicc_lbi"}: \code{values} (one row per gear and year),
-\code{ratios} (long format: gear, year, indicator, value, ref, pass, property),
+\code{ratios} (long format: gear, year, indicator, value, ref, lim, status, pass,
+property),
 \code{relative} (with \code{ref_years}), and the inputs.
 }
 \description{
@@ -70,16 +75,23 @@ with \eqn{\bar L} the mean length above \eqn{L'}, the lower bound of the Lc clas
 (assumes equilibrium and knife-edge selection at \eqn{L'}).
 }
 
-Ratios and reference levels (\verb{$ratios}, with \code{pass} = meets the reference
-level):\tabular{lll}{
-   Ratio \tab Reference \tab Property \cr
-   Lc/L50, L25/L50 \tab > 1 \tab conservation of immatures \cr
-   Lmax5/Linf, L95/Linf \tab > 0.8 \tab conservation of large fish \cr
-   Pmega \tab > 0.3 \tab conservation of large fish \cr
-   LmaxY/Lopt, Lmean/Lopt \tab > 0.9 \tab optimal yield \cr
-   Lmean/LFM \tab \eqn{\ge} 1 \tab MSY proxy \cr
+Ratios, reference levels and limits (\verb{$ratios}): \code{status} is green at or
+above the reference level (ICES WKLIFE), orange between the limit and the
+reference level, red below the limit; \code{pass} = green.\tabular{llll}{
+   Ratio \tab Reference (green) \tab Limit (red below) \tab Property \cr
+   Lc/L50, L25/L50 \tab 1 \tab 0.75 \tab conservation of immatures \cr
+   Lmax5/Linf, L95/Linf \tab 0.8 \tab 0.7 \tab conservation of large fish \cr
+   Pmega \tab 0.3 \tab 0.15 \tab conservation of large fish \cr
+   LmaxY/Lopt, Lmean/Lopt \tab 0.9 \tab 0.75 \tab optimal yield \cr
+   Lmean/LFM \tab 1 \tab 0.9 \tab MSY proxy \cr
 }
 
+
+The reference levels are those of ICES; the limits are pragmatic choices
+(about 10-25\% below the reference, half the reference for Pmega) that mark
+a clear departure rather than a marginal one, and can be changed with
+\code{limits}. For Lmean/LFM, 0.9 corresponds to a mean length about 10\% below
+the length expected at F = M. The Cope-Punt row has only two colours.
 
 The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
 best; those of the left limb (Lc, L25) are sensitive to recruitment

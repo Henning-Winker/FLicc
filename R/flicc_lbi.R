@@ -84,6 +84,7 @@ lbi_table_def <- function() {
     num = c("Lc", "L25", "Lmax5", "L95", "Pmega", "LmaxY", "Lmean", "Lmean"),
     den = c("L50", "L50", "Linf", "Linf", NA, "Lopt", "Lopt", "LFM"),
     ref = c(1, 1, 0.8, 0.8, 0.3, 0.9, 0.9, 1),
+    lim = c(0.75, 0.75, 0.7, 0.7, 0.15, 0.75, 0.75, 0.9),
     property = c("Conservation (immatures)", "Conservation (immatures)",
                  "Conservation (large fish)", "Conservation (large fish)", "Conservation (large fish)",
                  "Optimal yield", "Optimal yield", "MSY proxy"),
@@ -122,16 +123,23 @@ lbi_table_def <- function() {
 #'   with \eqn{\bar L} the mean length above \eqn{L'}, the lower bound of the Lc class
 #'   (assumes equilibrium and knife-edge selection at \eqn{L'}).
 #'
-#' Ratios and reference levels (`$ratios`, with `pass` = meets the reference
-#' level):
+#' Ratios, reference levels and limits (`$ratios`): `status` is green at or
+#' above the reference level (ICES WKLIFE), orange between the limit and the
+#' reference level, red below the limit; `pass` = green.
 #'
-#' | Ratio | Reference | Property |
-#' |---|---|---|
-#' | Lc/L50, L25/L50 | > 1 | conservation of immatures |
-#' | Lmax5/Linf, L95/Linf | > 0.8 | conservation of large fish |
-#' | Pmega | > 0.3 | conservation of large fish |
-#' | LmaxY/Lopt, Lmean/Lopt | > 0.9 | optimal yield |
-#' | Lmean/LFM | \eqn{\ge} 1 | MSY proxy |
+#' | Ratio | Reference (green) | Limit (red below) | Property |
+#' |---|---|---|---|
+#' | Lc/L50, L25/L50 | 1 | 0.75 | conservation of immatures |
+#' | Lmax5/Linf, L95/Linf | 0.8 | 0.7 | conservation of large fish |
+#' | Pmega | 0.3 | 0.15 | conservation of large fish |
+#' | LmaxY/Lopt, Lmean/Lopt | 0.9 | 0.75 | optimal yield |
+#' | Lmean/LFM | 1 | 0.9 | MSY proxy |
+#'
+#' The reference levels are those of ICES; the limits are pragmatic choices
+#' (about 10-25% below the reference, half the reference for Pmega) that mark
+#' a clear departure rather than a marginal one, and can be changed with
+#' `limits`. For Lmean/LFM, 0.9 corresponds to a mean length about 10% below
+#' the length expected at F = M. The Cope-Punt row has only two colours.
 #'
 #' The indicators of the upper tail (Lmax5, L95, Pmega) identify overfishing
 #' best; those of the left limb (Lc, L25) are sensitive to recruitment
@@ -154,8 +162,11 @@ lbi_table_def <- function() {
 #' @param ref_years Optional reference years for indicators relative to a
 #'   historical reference period.
 #' @param Lopt `"wklife"` (2/3 Linf, default) or `"mk"` (Linf 3/(3 + M/k)).
+#' @param limits Optional named numeric vector replacing limits (orange/red
+#'   boundary) by ratio name, e.g. `c("Lmean/LFM" = 0.85, Pmega = 0.1)`.
 #' @return A list of class `"flicc_lbi"`: `values` (one row per gear and year),
-#'   `ratios` (long format: gear, year, indicator, value, ref, pass, property),
+#'   `ratios` (long format: gear, year, indicator, value, ref, lim, status, pass,
+#'   property),
 #'   `relative` (with `ref_years`), and the inputs.
 #' @references
 #' Cope, J.M. and Punt, A.E. (2009). Length-based reference points for
@@ -184,7 +195,7 @@ lbi_table_def <- function() {
 #' }
 #' @export
 lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear = NULL,
-                      ref_years = NULL, Lopt = c("wklife", "mk")) {
+                      ref_years = NULL, Lopt = c("wklife", "mk"), limits = NULL) {
   Lopt <- match.arg(Lopt)
   if (is.list(x) && !is.null(x$tmb_data) && !is.null(x$report)) {
     lfd <- x$report$obslen
@@ -227,15 +238,23 @@ lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, catch_by_gear 
   vals$cp_test <- cp$cp_test
   vals$cp_status <- cp$cp_status
   def <- lbi_table_def()
+  if (!is.null(limits)) {
+    bad <- setdiff(names(limits), def$indicator)
+    if (length(bad)) stop("Unknown indicator(s) in limits: ", paste(bad, collapse = ", "))
+    def$lim[match(names(limits), def$indicator)] <- as.numeric(limits)
+  }
   rat <- do.call(rbind, lapply(seq_len(nrow(def)), function(i) {
     v <- vals[[def$num[i]]] / (if (is.na(def$den[i])) 1 else vals[[def$den[i]]])
+    st <- ifelse(v >= def$ref[i], "green", ifelse(v >= def$lim[i], "orange", "red"))
     data.frame(gear = vals$gear, year = vals$year, indicator = def$indicator[i], value = v,
-               ref = def$ref[i], pass = v >= def$ref[i], property = def$property[i])
+               ref = def$ref[i], lim = def$lim[i], status = st, pass = st == "green",
+               property = def$property[i])
   }))
+  cp_ok <- ifelse(vals$cp_status == "no information", NA, vals$cp_status == "SB >= target")
   rat <- rbind(rat, data.frame(gear = vals$gear, year = vals$year, indicator = "Pobj (Cope-Punt)",
-                               value = vals$Pobj, ref = NA_real_,
-                               pass = ifelse(vals$cp_status == "no information", NA, vals$cp_status == "SB >= target"),
-                               property = "Spawning biomass vs 0.4 B0"))
+                               value = vals$Pobj, ref = NA_real_, lim = NA_real_,
+                               status = ifelse(is.na(cp_ok), NA, ifelse(cp_ok, "green", "red")),
+                               pass = cp_ok, property = "Spawning biomass vs 0.4 B0"))
   rat$indicator <- factor(rat$indicator, levels = c(def$indicator, "Pobj (Cope-Punt)"))
   rel <- NULL
   if (!is.null(ref_years)) {
@@ -274,12 +293,14 @@ plot_lbi <- function(x, type = c("traffic", "trend", "relative"), indicators = N
   if (type == "traffic") {
     r$lab <- formatC(r$value, digits = 2, format = "f")
     r$indicator <- factor(r$indicator, levels = rev(levels(droplevels(r$indicator))))
-    return(ggplot2::ggplot(r, ggplot2::aes(factor(year), indicator, fill = pass)) +
+    r$status <- factor(r$status, levels = c("green", "orange", "red"))
+    return(ggplot2::ggplot(r, ggplot2::aes(factor(year), indicator, fill = status)) +
              ggplot2::geom_tile(colour = "white") +
              ggplot2::geom_text(ggplot2::aes(label = lab), size = 2.6) +
-             ggplot2::scale_fill_manual(values = c(`TRUE` = "#7FBF7B", `FALSE` = "#EF8A62"),
-                                        labels = c(`TRUE` = "meets reference", `FALSE` = "below reference"),
-                                        name = NULL, na.value = "grey85") +
+             ggplot2::scale_fill_manual(values = c(green = "#7FBF7B", orange = "#FDB863", red = "#EF8A62"),
+                                        labels = c(green = "meets reference level", orange = "between limit and reference",
+                                                   red = "below limit"),
+                                        name = NULL, na.value = "grey85", drop = FALSE) +
              ggplot2::facet_wrap(~gear, ncol = 1) +
              ggplot2::labs(x = "Year", y = NULL, title = "Length-based indicators") +
              ggplot2::theme_bw() +
@@ -291,8 +312,12 @@ plot_lbi <- function(x, type = c("traffic", "trend", "relative"), indicators = N
     refs <- refs[is.finite(refs$ref), ]
     if ("Pobj (Cope-Punt)" %in% r$indicator)
       refs <- rbind(refs, data.frame(indicator = "Pobj (Cope-Punt)", ref = c(1, 2)))
+    lims <- unique(r[is.finite(r$lim), c("indicator", "lim")])
     return(ggplot2::ggplot(r, ggplot2::aes(year, value, colour = gear)) +
-             ggplot2::geom_hline(data = refs, ggplot2::aes(yintercept = ref), linetype = "dashed") +
+             ggplot2::geom_hline(data = refs, ggplot2::aes(yintercept = ref), linetype = "dashed",
+                                 colour = "darkgreen") +
+             ggplot2::geom_hline(data = lims, ggplot2::aes(yintercept = lim), linetype = "dotted",
+                                 colour = "red") +
              ggplot2::geom_line() + ggplot2::geom_point(size = 1.2) +
              ggplot2::facet_wrap(~indicator, scales = "free_y") + year_axis_flicc() +
              ggplot2::labs(x = "Year", y = "Indicator ratio", colour = "Gear",
