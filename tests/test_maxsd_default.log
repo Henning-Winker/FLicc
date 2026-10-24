@@ -1,0 +1,127 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-24 20:45:19 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, 
++     c("len", "year", "data", "qname")]), unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> f_def <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> stopifnot(f_def$tmb_data$ngtg == 13, length(f_def$tmb_data$gtg_z) == 
++     13, max(f_def$tmb_data$gtg_z) == 3)
+
+> time_fit <- function(set, se = TRUE, n = 3) {
++     t <- numeric(n)
++     for (i in seq_len(n)) t[i] <- system.time(f <- fiticc(lfd, 
++         stklen, sel_fun = sf, catch_by_gear = cbg, settings = set, 
++         se = se))[["elapsed"]]
++     list(fit = f, time = median(t))
++ }
+
+> res <- list(sd2_13 = time_fit(list(maxsd = 2, ngtg = 13)), 
++     sd3_19 = time_fit(list(maxsd = 3, ngtg = 19)), sd3_13 = time_fit(list(maxsd = 3, 
++         ngtg = 13)), sd3_15 = time_fit(list(maxsd = 3, ngtg = 15)), 
++     sd2_13_noSE = time_fit(list(maxsd = 2, ngtg = 13), se = FALSE), 
++     sd .... [TRUNCATED] 
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> tab <- data.frame(run = names(res), time_s = sapply(res, 
++     `[[`, "time"), SPR = sapply(res, function(r) sprcur_flicc(r$fit)), 
++     nll = sapply(res, function(r) r$fit$opt$objective), conv = sapply(res, 
++         function(r) paste(flicc_convergence(r$fit)$passed, collapse = ",")))
+
+> print(tab, row.names = FALSE)
+         run time_s       SPR      nll                           conv
+      sd2_13  0.473 0.2249357 36977.19  TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+      sd3_19  0.555 0.2176265 36978.92  TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+      sd3_13  0.444 0.2174741 36978.97  TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+      sd3_15  0.467 0.2175371 36978.95  TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ sd2_13_noSE  0.390 0.2249357 36977.19 TRUE,FALSE,TRUE,TRUE,TRUE,TRUE
+ sd3_19_noSE  0.460 0.2176265 36978.92 TRUE,FALSE,TRUE,TRUE,TRUE,TRUE
+
+> tab$time_rel <- round(tab$time_s/tab$time_s[1], 2)
+
+> print(tab[, c("run", "time_rel", "SPR", "nll")], row.names = FALSE)
+         run time_rel       SPR      nll
+      sd2_13     1.00 0.2249357 36977.19
+      sd3_19     1.17 0.2176265 36978.92
+      sd3_13     0.94 0.2174741 36978.97
+      sd3_15     0.99 0.2175371 36978.95
+ sd2_13_noSE     0.82 0.2249357 36977.19
+ sd3_19_noSE     0.97 0.2176265 36978.92
+
+> tail_pred <- try(sapply(res[c("sd2_13", "sd3_19", 
++     "sd3_15", "sd3_13")], function(r) {
++     q <- r$fit$report$predlen_gear[[2]]
++     p <- apply(q@.Data, 1, mean)
++     L <- as.numeric(dimnames(q)$len)
++     round(1000 * p[L >= 45 & L <= 62]/sum(p), 3)
++ }))
+
+> print(tail_pred)
+   sd2_13 sd3_19 sd3_15 sd3_13
+45  9.576  9.449  9.448  9.446
+46  7.777  7.677  7.676  7.674
+47  6.269  6.195  6.194  6.194
+48  5.011  4.963  4.962  4.961
+49  3.966  3.942  3.942  3.941
+50  3.105  3.102  3.102  3.103
+51  2.401  2.416  2.417  2.416
+52  1.831  1.860  1.860  1.861
+53  1.374  1.414  1.415  1.416
+54  1.013  1.061  1.061  1.061
+55  0.732  0.783  0.784  0.784
+56  0.517  0.569  0.570  0.571
+57  0.355  0.406  0.407  0.407
+58  0.236  0.285  0.286  0.286
+59  0.151  0.195  0.196  0.197
+60  0.093  0.131  0.132  0.132
+61  0.054  0.086  0.087  0.087
+62  0.029  0.055  0.055  0.056
+
+> stopifnot(abs(tab$SPR[1] - tab$SPR[2]) < 0.05)
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

@@ -1,0 +1,201 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-24 20:45:19 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), 
++     unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> set0 <- list(CVL = 0.1, obs_model = "dm", dm_theta = "saturating")
+
+> fit <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = set0)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> ds <- dome_sens_flicc(fit, gear = "Gillnet")
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> print(ds$table)
+  scenario    rsd conv    logLik      AIC SPR_last   Fspr Fap_last dAIC
+1     base     NA    0 -36978.97 74019.94    0.217 0.0902   0.1632 0.00
+2  rsd1000 1000.0    0 -36983.74 74029.49    0.221 0.0907   0.1616 9.55
+3  rsd47.3   47.3    0 -36983.22 74028.44    0.228 0.0911   0.1583 8.50
+4    rsd39   39.0    0 -36982.95 74027.90    0.231 0.0913   0.1566 7.96
+5  rsd30.6   30.6    0 -36982.37 74026.75    0.238 0.0917   0.1531 6.81
+6  rsd22.3   22.3    0 -36980.81 74023.63    0.258 0.0925   0.1439 3.69
+
+> ens <- ensemble_flicc(ds$fits[-1])
+
+> print(ens$members)
+     name weight      AIC dAIC SPR_last se_log_last
+1 rsd1000    0.2 74029.49 5.86    0.221       0.115
+2 rsd47.3    0.2 74028.44 4.82    0.228       0.118
+3   rsd39    0.2 74027.90 4.27    0.231       0.120
+4 rsd30.6    0.2 74026.75 3.12    0.238       0.123
+5 rsd22.3    0.2 74023.63 0.00    0.258       0.132
+
+> print(tail(ens$table, 3))
+   year       spr       lwr       upr  mean_log sd_within sd_between  sd_total
+10 2022 0.2853989 0.2300639 0.3607083 -1.251390 0.1045086 0.04689888 0.1145493
+11 2023 0.2832496 0.2259621 0.3627846 -1.258567 0.1094489 0.05056356 0.1205642
+12 2024 0.2339311 0.1825955 0.3074677 -1.449380 0.1219105 0.05209324 0.1325740
+    Fap_mean   Fap_min   Fap_max
+10 0.1293471 0.1207643 0.1350031
+11 0.1302913 0.1208619 0.1364959
+12 0.1547012 0.1439218 0.1616199
+
+> ens_aic <- ensemble_flicc(ds$fits[-1], weights = "aic", 
++     s = 0.75)
+
+> print(ens_aic$members)
+     name weight      AIC dAIC SPR_last se_log_last
+1 rsd1000  0.036 74029.49 5.86    0.221       0.115
+2 rsd47.3  0.061 74028.44 4.82    0.228       0.118
+3   rsd39  0.080 74027.90 4.27    0.231       0.120
+4 rsd30.6  0.143 74026.75 3.12    0.238       0.123
+5 rsd22.3  0.680 74023.63 0.00    0.258       0.132
+
+> print(tail(ens_aic$table[, c("year", "spr", "lwr", 
++     "upr", "brel", "brel_lwr", "brel_upr")], 3))
+   year       spr       lwr       upr      brel  brel_lwr  brel_upr
+10 2022 0.3018877 0.2399381 0.3796451 0.6901715 0.4945414 0.9357212
+11 2023 0.3009823 0.2362786 0.3833148 0.6873124 0.4829850 0.9473098
+12 2024 0.2489918 0.1906511 0.3270087 0.5231321 0.3388981 0.7695010
+
+> e1 <- ensemble_flicc(list(a = fit, b = fit))
+
+> ci <- spr_ci_flicc(fit)
+
+> stopifnot(max(abs(e1$table$lwr - ci$lwr)) < 1e-06, 
++     max(abs(e1$table$upr - ci$upr)) < 1e-06, max(e1$table$sd_between) < 
++         1e-10)
+
+> stopifnot(all(ens$table$lwr <= ens$table$spr), all(ens$table$spr <= 
++     ens$table$upr))
+
+> fcut <- fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = c(set0, list(tail_cut = 47)))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> r <- tryCatch(ensemble_flicc(list(a = fit, b = fcut), 
++     weights = "aic"), error = function(e) "refused")
+
+> stopifnot(identical(r, "refused"))
+
+> print(ensemble_flicc(list(no_cut = fit, cut47 = fcut))$members)
+    name weight      AIC dAIC SPR_last se_log_last
+1 no_cut    0.5 74019.94   NA    0.217       0.112
+2  cut47    0.5 72357.22   NA    0.306       0.150
+
+> od <- if (dir.exists("out/tests")) "out/tests" else "."
+
+> ggplot2::ggsave(file.path(od, "ensemble_dome.png"), 
++     plot_ensemble_flicc(ens), width = 8, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "ensemble_dome_brel.png"), 
++     plot_ensemble_flicc(ens_aic, "brel"), width = 8, height = 4, 
++     dpi = 100)
+
+> yrs <- dimnames(lfd[[1]])$year
+
+> y1 <- yrs[which.max(sapply(yrs, function(y) min(sapply(lfd, 
++     function(x) sum(x[, y])))))]
+
+> lfd1 <- FLQuants(lapply(lfd, function(x) x[, y1]))
+
+> st1 <- stocklen(lfd1, lhpar, m_model = "constant")
+
+> f1 <- fiticc(lfd1, st1, sel_fun = sf, catch_by_gear = cbg, 
++     settings = set0)
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> ds1 <- dome_sens_flicc(f1, gear = "Gillnet", rsd = c(1000, 
++     40))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+
+> e1 <- ensemble_flicc(ds1$fits)
+
+> print(e1$table)
+  year       spr       lwr       upr  mean_log sd_within sd_between  sd_total
+1 2013 0.1544017 0.1123277 0.2146373 -1.866712 0.1625576  0.0285099 0.1650387
+   Fap_mean   Fap_min   Fap_max
+1 0.2038542 0.1999805 0.2086967
+
+> ggplot2::ggsave(file.path(od, "ensemble_1yr.png"), 
++     plot_ensemble_flicc(e1), width = 6, height = 4, dpi = 100)
+
+> ggplot2::ggsave(file.path(od, "ensemble_1yr_brel.png"), 
++     plot_ensemble_flicc(ensemble_flicc(ds1$fits, s = 0.75), "brel"), 
++     width = 6, height = 4, dpi = 100)
+
+> fl <- list(zz = ds$fits[[2]], aa = ds$fits[[3]], mm = ds$fits[[1]])
+
+> b <- ggplot2::ggplot_build(plot_spr(fl, ci = TRUE))
+
+> lay <- vapply(b$plot$layers, function(l) class(l$geom)[1], 
++     character(1))
+
+> eb <- b$data[[which(lay == "GeomErrorbar")]]
+
+> pt <- b$data[[which(lay == "GeomPoint")]]
+
+> xe <- tapply(eb$x, eb$colour, mean)
+
+> xp <- tapply(pt$x, pt$colour, mean)
+
+> print(rbind(errorbar = xe, point = xp[names(xe)]))
+         #00BA38  #619CFF  #F8766D
+errorbar  2018.5 2018.617 2018.383
+point     2018.5 2018.617 2018.383
+
+> stopifnot(max(abs(xe - xp[names(xe)])) < 1e-08)
+
+> fs <- fits_summary(ds$fits)
+
+> print(fs)
+      run conv   SPR   lwr   upr    FM   Fap Fspr40 F_Fspr40     AIC dAIC
+1    base   ok 0.217 0.175 0.271 1.007 0.163  0.090    1.809 74019.9  0.0
+2 rsd1000   ok 0.221 0.177 0.277 0.998 0.162  0.091    1.782 74029.5  9.5
+3 rsd47.3   ok 0.228 0.180 0.287 0.977 0.158  0.091    1.737 74028.4  8.5
+4   rsd39   ok 0.231 0.183 0.292 0.967 0.157  0.091    1.715 74027.9  8.0
+5 rsd30.6   ok 0.238 0.187 0.303 0.945 0.153  0.092    1.670 74026.7  6.8
+6 rsd22.3   ok 0.258 0.199 0.334 0.888 0.144  0.093    1.555 74023.6  3.7
+
+> stopifnot(nrow(fs) == length(ds$fits), all(c("run", 
++     "conv", "SPR", "lwr", "upr", "FM", "Fspr40", "AIC") %in% 
++     names(fs)))
+
+> print(fits_summary(fit))
+  run conv   SPR   lwr   upr    FM   Fap Fspr40 F_Fspr40     AIC dAIC
+1 fit   ok 0.217 0.175 0.271 1.007 0.163   0.09    1.809 74019.9    0
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

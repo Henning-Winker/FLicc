@@ -1,0 +1,73 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-24 20:45:19 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, 
++     c("len", "year", "data", "qname")]), unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> stklen <- stocklen(lfd, lhpar, m_model = "constant")
+
+> sf <- c("dsnormal", "logistic")
+
+> cbg <- c(0.7, 0.3)
+
+> show <- function(nm, f) {
++     cc <- flicc_convergence(f)
++     cat(sprintf("%-28s maxgrad %.4g  conv %d  passed %s  SPR %.3f\n", 
++         nm, f$max_gradient, f$opt$convergence, paste(cc$passed, 
++             collapse = ","), sprcur_flicc(f)))
++ }
+
+> show("raw mn default", fiticc(lfd, stklen, sel_fun = sf, 
++     catch_by_gear = cbg))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+raw mn default               maxgrad 4.282e-05  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.217
+
+> show("raw mn n_restart 3", fiticc(lfd, stklen, sel_fun = sf, 
++     catch_by_gear = cbg, n_restart = 3))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+raw mn n_restart 3           maxgrad 4.282e-05  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.217
+
+> show("ess200 mn", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+ess200 mn                    maxgrad 1.273e-06  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.216
+
+> show("ess200 mn n_restart 3", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg, n_restart = 3))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+ess200 mn n_restart 3        maxgrad 1.273e-06  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.216
+
+> show("ess200 dm", fiticc(lfdess(lfd, ess.g = 200), 
++     stklen, sel_fun = sf, catch_by_gear = cbg, settings = list(obs_model = "dm")))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 200, Gillnet 200).
+FLicc: Dirichlet-multinomial precision at its upper bound for Trawl, Gillnet: the compositions show no overdispersion beyond the input sample size, so the likelihood is close to multinomial (n_eff about n) and the precision is set by its prior. Use raw counts or a larger ESS to estimate the overdispersion.
+ess200 dm                    maxgrad 1.273e-06  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.216
+
+> show("raw dm", fiticc(lfd, stklen, sel_fun = sf, catch_by_gear = cbg, 
++     settings = list(obs_model = "dm")))
+FLicc: the Dirichlet-multinomial precision is estimated best from raw counts or an effective sample size of at least 500 per gear and year (median here: Trawl 600, Gillnet 400).
+raw dm                       maxgrad 4.282e-05  conv 0  passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE  SPR 0.217
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 

@@ -1,0 +1,48 @@
+
+
+processing file: preview.Rmd
+1/6                
+2/6 [setup]        
+3/6                
+4/6 [preview-setup]
+5/6                
+6/6 [preview]      
+
+
+processing file: ./chapters/08_fitting.Rmd
+1/31                   
+2/31 [fit]             
+3/31                   
+4/31 [check-conv]      
+5/31                   
+6/31 [check-len]       
+7/31                   
+8/31 [resid]           
+9/31                   
+10/31 [resid-bubble]    
+11/31                   
+12/31 [resid-len-pooled]
+13/31                   
+14/31 [resid-len-years] 
+15/31                   
+16/31 [lmean-resid]     
+17/31                   
+18/31 [ppc]             
+19/31                   
+20/31 [ppc-lfd]         
+21/31                   
+22/31 [ppc-numbers]     
+23/31                   
+24/31 [ppc-lfd-years]   
+25/31                   
+26/31 [ppc-stats]       
+27/31                   
+28/31 [resid-numbers]   
+29/31                   
+30/31 [check-retro]     
+31/31                   
+output file: preview.knit.md
+
+/opt/hostedtoolcache/pandoc/3.8.3/x64/pandoc +RTS -K512m -RTS preview.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output /home/runner/work/FLicc/FLicc/out/html/preview.html --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/latex-div.lua --lua-filter /home/runner/work/_temp/Library/rmarkdown/rmarkdown/lua/table-classes.lua --embed-resources --standalone --variable bs3=TRUE --section-divs --table-of-contents --toc-depth 3 --template /home/runner/work/_temp/Library/rmarkdown/rmd/h/default.html --syntax-highlighting none --variable highlightjs=1 --number-sections --variable theme=bootstrap --mathml --include-in-header /tmp/RtmpTaGRsi/rmarkdown-str1dbe776a448f.html 
+
+Output created: out/html/preview.html

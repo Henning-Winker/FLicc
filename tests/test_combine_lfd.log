@@ -1,0 +1,112 @@
+
+> library(FLicc)
+Loading required package: FLCore
+Loading required package: lattice
+FLCore (Version 2.6.33, packaged: 2026-10-24 20:45:19 UTC)
+Loading required package: ggplot2
+
+Attaching package: ‘ggplot2’
+
+The following object is masked from ‘package:FLCore’:
+
+    %+%
+
+Loading required package: ggplotFL
+Loading required package: doFuture
+Loading required package: foreach
+Loading required package: future
+
+> data("alfonsino")
+
+> lfd <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)[, 
++     c("len", "year", "data", "qname")]), unit = "cm", midL = FALSE)
+
+> lhpar <- FLPar(linf = 55.7, k = 0.08, M = 0.162, L50 = 31.1859, 
++     a = 0.004721956/1000, b = 3.146168)
+
+> print(names(lfd))
+[1] "Trawl"   "Gillnet"
+
+> cf <- combine_lfd(lfd, c(0.7, 0.3), lhpar, ess.n = 500)
+
+> stopifnot(inherits(cf, "FLQuants"), names(cf) == "fleet", 
++     all(abs(apply(cf[[1]]@.Data, 2, sum) - 500) < 1e-06))
+
+> cf1 <- combine_lfd(lfd, c(1, 0), lhpar, ess.n = 500)
+
+> p1 <- lfdess(lfd, 500)[[1]]
+
+> stopifnot(max(abs(cf1[[1]]@.Data - p1@.Data)) < 1e-08)
+
+> cf2 <- combine_lfd(lfd, setNames(c(0.7, 0.3), names(lfd)), 
++     lhpar)
+
+> cq <- FLQuants(lapply(c(0.7, 0.3), function(v) FLQuant(v, 
++     dimnames = list(year = dimnames(lfd[[1]])$year))))
+
+> names(cq) <- names(lfd)
+
+> cf3 <- combine_lfd(lfd, cq, lhpar)
+
+> stopifnot(max(abs(cf2[[1]]@.Data - cf[[1]]@.Data)) < 
++     1e-08, max(abs(cf3[[1]]@.Data - cf[[1]]@.Data)) < 1e-08)
+
+> yr <- tail(dimnames(lfd[[1]])$year, 1)
+
+> lf <- window(cf, start = as.numeric(yr))
+
+> stk <- stocklen(lf, lhpar, m_model = "constant")
+
+> nraw <- sum(window(lfd, start = as.numeric(yr))[[1]]) + 
++     sum(window(lfd, start = as.numeric(yr))[[2]])
+
+> cat("fish measured in", yr, ":", nraw, "\n")
+fish measured in 2024 : 1000 
+
+> lf_raw <- window(combine_lfd(lfd, c(0.7, 0.3), lhpar, 
++     ess.n = nraw), start = as.numeric(yr))
+
+> variants <- list(ess500_dmsat = list(lf = lf, set = list(CVL = 0.1, 
++     FM_max = 10)), ess500_dmfixed = list(lf = lf, set = list(CVL = 0.1, 
++     FM_max = 10, dm_theta = "fixed")), essraw_dmsat = list(lf = lf_raw, 
++     set = list(CVL = 0.1, FM_max = 10)), ess500_mn = list(lf = lf, 
++     set .... [TRUNCATED] 
+
+> for (v in names(variants)) for (sf in c("logistic", 
++     "binormal", "bidsnormal")) {
++     f <- try(fiticc(variants[[v]]$lf, stk, sel_fun = sf, catch_by_gear = 1, 
++         settings = variants[[v]]$set, verbose = FALSE), silent = TRUE)
++     if (inherits(f, "try-error")) {
++         cat(v, sf, .... [TRUNCATED] 
+ess500_dmsat    logistic    SPR 0.250 conv ok      maxgrad 3e-08 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_dmsat    binormal    SPR 0.183 conv ok      maxgrad 0.0021 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_dmsat    bidsnormal  SPR 0.139 conv fail    maxgrad 0.00011 passed TRUE,FALSE,FALSE,FALSE,TRUE,FALSE
+ess500_dmfixed  logistic    SPR 0.247 conv ok      maxgrad 8.7e-10 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_dmfixed  binormal    SPR 0.190 conv ok      maxgrad 5.9e-09 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_dmfixed  bidsnormal  SPR 0.183 conv ok      maxgrad 1e-06 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+An object of class "FLPars"
+[[1]]
+An object of class "FLPar"
+params
+mode1   sd1 mode2  lsd2  rsd2     h 
+22.32  2.99 31.78  3.21 15.30  2.47 
+units:  cm 
+
+Slot "names":
+[1] "fleet"
+
+Slot "desc":
+character(0)
+
+Slot "lock":
+[1] FALSE
+
+essraw_dmsat    logistic    SPR 0.264 conv ok      maxgrad 7.4e-09 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+essraw_dmsat    binormal    SPR 0.172 conv ok      maxgrad 1.3e-07 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+essraw_dmsat    bidsnormal  SPR 0.147 conv ok      maxgrad 1.2e-07 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_mn       logistic    SPR 0.201 conv ok      maxgrad 3.7e-05 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_mn       binormal    SPR 0.183 conv ok      maxgrad 8.2e-08 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+ess500_mn       bidsnormal  SPR 0.139 conv ok      maxgrad 2.4e-06 passed TRUE,TRUE,TRUE,TRUE,TRUE,TRUE
+Warning messages:
+1: replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
+2: In sqrt(diag(object$cov.fixed)) : NaNs produced
