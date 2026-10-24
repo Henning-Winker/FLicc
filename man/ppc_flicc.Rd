@@ -16,10 +16,13 @@ ppc_flicc(fit, nsim = 500, par_draws = FALSE, seed = 1)
 \item{seed}{Random seed.}
 }
 \value{
-A list with \code{table} (gear, year, stat, obs, lo, med, hi, ppp =
-predictive p-value \eqn{P(sim \ge obs)}, outside), \code{coverage} (share of
-observed values outside the 95\% interval by gear and statistic) and
-\code{plot}.
+An object of class \code{flicc_ppc}: a list with \code{table} (gear, year,
+stat, obs, lo, med, hi, ppp = predictive p-value \eqn{P(sim \ge obs)},
+outside), \code{coverage} (share of observed values outside the 95\% interval
+by gear and statistic), \code{coverage_bins} (share of length bins outside
+the 95\% interval by gear), \code{plot} (statistics by year), \code{plot_lfd} (the
+compositions by length bin, see \code{\link[=plot_ppc_lfd]{plot_ppc_lfd()}}) and \code{sims} (the
+simulated counts by gear and year).
 }
 \description{
 Simulates length compositions from the fitted observation model
@@ -45,5 +48,6 @@ systematic misfit (e.g. cohorts).
 pc <- ppc_flicc(fit, nsim = 500)
 pc$coverage
 pc$plot
+plot_ppc_lfd(pc, year = 2024)
 }
 }

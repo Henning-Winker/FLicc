@@ -254,6 +254,26 @@ ppc$coverage
 ppc$plot
 ```
 
+The same simulated data sets also give the predictive distribution of each
+length bin. `plot_ppc_lfd()` shows the observed composition (bars) against it
+(points: median; lines: 95% interval), with bins outside the interval in red.
+About 5% of the bins are expected outside by chance (`ppc$coverage_bins`).
+Red bins clustered on one side of the mode point to selectivity or growth
+misfit. Red bins throughout, above and below the intervals, mean the
+observation model understates the variability of the data. With
+`pool_years = TRUE` the observed and the simulated compositions are pooled
+over years, which shows persistent misfit by gear; `scale = "sqrt"` makes
+the tails visible.
+
+```{r ppc-lfd, fig.height = 3.5}
+ppc$coverage_bins
+plot_ppc_lfd(ppc, pool_years = TRUE)
+```
+
+```{r ppc-lfd-years, fig.height = 7}
+plot_ppc_lfd(ppc, year = tail(seq_along(dimnames(lfd[[1]])$year), 4))
+```
+
 ```{r resid-numbers, include = FALSE}
 osa_sd <- round(sd(res_osa$resid, na.rm = TRUE), 2)
 sdz <- setNames(lmr$runs$sd_z, as.character(lmr$runs$gear))

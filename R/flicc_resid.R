@@ -443,15 +443,19 @@ lmean_resid_flicc <- function(fit) {
 #' @param nsim Number of simulated data sets.
 #' @param par_draws Logical; draw parameters from their normal approximation.
 #' @param seed Random seed.
-#' @return A list with `table` (gear, year, stat, obs, lo, med, hi, ppp =
-#'   predictive p-value \eqn{P(sim \ge obs)}, outside), `coverage` (share of
-#'   observed values outside the 95% interval by gear and statistic) and
-#'   `plot`.
+#' @return An object of class `flicc_ppc`: a list with `table` (gear, year,
+#'   stat, obs, lo, med, hi, ppp = predictive p-value \eqn{P(sim \ge obs)},
+#'   outside), `coverage` (share of observed values outside the 95% interval
+#'   by gear and statistic), `coverage_bins` (share of length bins outside
+#'   the 95% interval by gear), `plot` (statistics by year), `plot_lfd` (the
+#'   compositions by length bin, see [plot_ppc_lfd()]) and `sims` (the
+#'   simulated counts by gear and year).
 #' @examples
 #' \dontrun{
 #' pc <- ppc_flicc(fit, nsim = 500)
 #' pc$coverage
 #' pc$plot
+#' plot_ppc_lfd(pc, year = 2024)
 #' }
 #' @export
 ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
@@ -487,19 +491,22 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
   nkeep <- if (cut > 0 && cut < nlen) cut else nlen
   nb <- if (plus >= 0 && plus < nkeep) plus + 1 else nkeep
   grp <- pmin(seq_len(nkeep), nb)
+  sims_lfd <- list()
   rows <- lapply(cd_list, function(z) {
     gi <- match(z$gear, td$gear_names); yi <- match(z$year, td$year_names)
     n <- z$n; K <- length(z$p)
-    sims <- vapply(seq_len(nsim), function(i) {
+    cnts <- matrix(vapply(seq_len(nsim), function(i) {
       p <- if (is.null(p_draws)) z$p else {
         pp <- as.numeric(tapply(p_draws[[i]][seq_len(nkeep), yi, gi], grp, sum)); pmax(pp / sum(pp), 1e-12)
       }
-      cnt <- switch(om,
+      as.numeric(switch(om,
         nb = stats::rnbinom(K, mu = n * p, size = cd$phi),
         dm = { a <- stats::rgamma(K, shape = z$a0 * p); stats::rmultinom(1, round(n), a / sum(a))[, 1] },
-        stats::rmultinom(1, round(n), p)[, 1])
-      stats_of(cnt, z$lmid, z$len)
-    }, numeric(4))
+        stats::rmultinom(1, round(n), p)[, 1]))
+    }, numeric(K)), nrow = K)
+    sims_lfd[[length(sims_lfd) + 1]] <<- list(gear = z$gear, year = as.character(z$year), len = z$len,
+                                              lmid = z$lmid, obs = z$obs, sim = cnts)
+    sims <- matrix(apply(cnts, 2, stats_of, L = z$lmid, lb = z$len), nrow = 4)
     ob <- stats_of(z$obs, z$lmid, z$len)
     data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), stat = names(ob), obs = ob,
                lo = apply(sims, 1, stats::quantile, 0.025, na.rm = TRUE),
@@ -524,7 +531,148 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
     ggplot2::labs(x = "Year", y = NULL,
                   title = paste0("Posterior predictive check (", if (isTRUE(par_draws)) "with parameter uncertainty" else "plug-in", ")")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
-  list(table = tab, coverage = cov, plot = p)
+  out <- structure(list(table = tab, coverage = cov, plot = p, sims = sims_lfd,
+                        gear_names = td$gear_names, par_draws = isTRUE(par_draws), nsim = nsim),
+                   class = "flicc_ppc")
+  lb <- ppc_lfd_table(out)
+  out$coverage_bins <- stats::aggregate(outside ~ gear, data = lb, FUN = function(v) round(mean(v), 2))
+  names(out$coverage_bins)[2] <- "share_bins_outside_95"
+  out$plot_lfd <- plot_ppc_lfd(out)
+  out
+}
+
+#' @export
+print.flicc_ppc <- function(x, ...) {
+  cat("Posterior predictive check of the length compositions:", x$nsim, "replicates,",
+      if (x$par_draws) "with parameter uncertainty" else "plug-in", "\n\n")
+  cat("Share of observed statistics outside the 95% predictive interval:\n")
+  print(x$coverage, row.names = FALSE)
+  cat("\nShare of length bins outside the 95% predictive interval:\n")
+  print(x$coverage_bins, row.names = FALSE)
+  cat("\nPlots: $plot (statistics by year), $plot_lfd or plot_ppc_lfd() (compositions)\n")
+  invisible(x)
+}
+
+# observed and predictive proportions by length bin, optionally pooled over years
+ppc_lfd_table <- function(x, year = NULL, gear = NULL, pool_years = FALSE) {
+  s <- x$sims
+  yl <- sort(unique(vapply(s, `[[`, "", "year")))
+  gl <- x$gear_names[x$gear_names %in% vapply(s, `[[`, "", "gear")]
+  if (!is.null(year)) {
+    ys <- as.character(year)
+    if (!all(ys %in% yl) && is.numeric(year) && all(year %in% seq_along(yl))) ys <- yl[year]
+    if (!all(ys %in% yl)) stop("Requested 'year' not found: ", paste(setdiff(ys, yl), collapse = ", "))
+    s <- s[vapply(s, `[[`, "", "year") %in% ys]
+  }
+  if (!is.null(gear)) {
+    gs <- if (is.numeric(gear)) gl[gear] else as.character(gear)
+    if (!all(gs %in% gl)) stop("Requested 'gear' not found: ", paste(setdiff(gs, gl), collapse = ", "))
+    s <- s[vapply(s, `[[`, "", "gear") %in% gs]
+    gl <- gs
+  }
+  if (!length(s)) stop("No compositions for the selected years and gears.")
+  if (pool_years) {
+    s <- lapply(split(s, vapply(s, `[[`, "", "gear")), function(v) {
+      z <- v[[1]]; z$year <- "all years"
+      z$obs <- Reduce(`+`, lapply(v, `[[`, "obs")); z$sim <- Reduce(`+`, lapply(v, `[[`, "sim"))
+      z
+    })
+  }
+  d <- do.call(rbind, lapply(s, function(z) {
+    sp <- sweep(z$sim, 2, pmax(colSums(z$sim), 1), "/")
+    q <- apply(sp, 1, stats::quantile, c(0.025, 0.5, 0.975), na.rm = TRUE)
+    data.frame(gear = z$gear, year = z$year, len = z$len, lmid = z$lmid,
+               obs = z$obs / sum(z$obs), lo = q[1, ], med = q[2, ], hi = q[3, ], row.names = NULL)
+  }))
+  d$outside <- d$obs < d$lo | d$obs > d$hi
+  # trim bins empty in the data and in every replicate, at both ends of each gear's range
+  keep <- d$obs > 0 | d$hi > 0
+  rng <- tapply(d$len[keep], d$gear[keep], range)
+  d <- d[d$len >= vapply(as.character(d$gear), function(g) rng[[g]][1], 0) &
+         d$len <= vapply(as.character(d$gear), function(g) rng[[g]][2], 0), ]
+  d$gear <- factor(d$gear, levels = gl)
+  d$year <- factor(d$year, levels = sort(unique(d$year)))
+  d
+}
+
+#' Posterior predictive check of the length compositions by length bin
+#'
+#' Plots the observed length composition (bars, as proportions) against its
+#' predictive distribution from [ppc_flicc()] (points: median; lines: central
+#' 95% interval of the simulated proportions), one panel per year and gear.
+#' This is the distribution view of the predictive check, as in a rootogram:
+#' it shows where along the length axis the fitted model and its observation
+#' model fail to reproduce the data.
+#'
+#' **Reading the plot.** Bars outside the predictive interval are drawn in
+#' red. A few red bins (about 5%) are expected by chance. Clusters of red bins
+#' on one side of the mode point to selectivity or growth misfit; red bins
+#' throughout, with observed bars both above and below the intervals, mean
+#' the observation model or the effective sample size understate the
+#' variability of the data (e.g. cohorts, clustered sampling); intervals
+#' much wider than the scatter of the bars mean it is overstated. Pooling
+#' years (`pool_years = TRUE`) shows persistent misfit; the simulated data
+#' sets are pooled the same way, so the interval stays a valid predictive
+#' interval for the pooled composition.
+#'
+#' @param x Output of [ppc_flicc()] or a fitted FLicc object (then
+#'   `ppc_flicc(x, ...)` is run first).
+#' @param year Optional year selection: `NULL` for all years, year values, or
+#'   indices (as in [plot_len()]).
+#' @param gear Optional gear selection: gear names or indices.
+#' @param pool_years Logical; pool the selected years.
+#' @param scale `"prop"` (default) or `"sqrt"`: square-root axis, which makes
+#'   the tails of the composition visible (as in a rootogram).
+#' @param title Optional plot title.
+#' @param ... Passed to [ppc_flicc()] when `x` is a fit (e.g. `nsim`,
+#'   `par_draws`).
+#' @return A `ggplot` object; the data are in attribute `"data"`.
+#' @references Gelman, A., Meng, X.-L. and Stern, H. (1996) Posterior
+#'   predictive assessment of model fitness via realized discrepancies.
+#'   Statistica Sinica 6: 733-807.
+#'
+#'   Kleiber, C. and Zeileis, A. (2016) Visualizing count data regressions
+#'   using rootograms. The American Statistician 70: 296-303.
+#' @examples
+#' \dontrun{
+#' pc <- ppc_flicc(fit, nsim = 500)
+#' plot_ppc_lfd(pc, year = 2022:2024)           # year x gear panels
+#' plot_ppc_lfd(pc, pool_years = TRUE)          # persistent misfit by gear
+#' plot_ppc_lfd(pc, gear = 1, scale = "sqrt")   # tails visible
+#' }
+#' @export
+plot_ppc_lfd <- function(x, year = NULL, gear = NULL, pool_years = FALSE,
+                         scale = c("prop", "sqrt"), title = NULL, ...) {
+  scale <- match.arg(scale)
+  if (!inherits(x, "flicc_ppc")) x <- ppc_flicc(x, ...)
+  d <- ppc_lfd_table(x, year = year, gear = gear, pool_years = pool_years)
+  bw <- stats::median(diff(sort(unique(d$len))))
+  if (!is.finite(bw)) bw <- 1
+  if (is.null(title))
+    title <- paste0("Predictive check of the length compositions", if (pool_years) ", years pooled" else "")
+  p <- ggplot2::ggplot(d, ggplot2::aes(lmid)) +
+    ggplot2::geom_col(ggplot2::aes(y = obs, fill = outside), width = bw * 0.9, alpha = 0.75) +
+    ggplot2::geom_linerange(ggplot2::aes(ymin = lo, ymax = hi), colour = "grey15", linewidth = 0.4) +
+    ggplot2::geom_point(ggplot2::aes(y = med), colour = "grey15", size = 0.7) +
+    ggplot2::scale_fill_manual(values = c(`FALSE` = "#FDAE6B", `TRUE` = "#D6604D"),
+                               labels = c(`FALSE` = "inside 95%", `TRUE` = "outside 95%"),
+                               name = NULL, drop = FALSE)
+  if (scale == "sqrt") p <- p + ggplot2::scale_y_sqrt()
+  ny <- length(levels(d$year)); ng <- length(levels(d$gear))
+  p <- p + if (ny > 1 && ng > 1) ggplot2::facet_grid(year ~ gear, scales = "free_x")
+           else if (ng > 1) ggplot2::facet_wrap(~gear, scales = "free_x")
+           else if (ny > 1) ggplot2::facet_wrap(~year)
+           else ggplot2::facet_wrap(~gear)
+  p <- p + ggplot2::labs(x = "Length", y = if (scale == "sqrt") "Proportion (square-root scale)" else "Proportion",
+                         title = title,
+                         subtitle = paste0("Bars: observed; points and lines: predictive median and 95% interval (",
+                                           x$nsim, " replicates, ",
+                                           if (x$par_draws) "with parameter uncertainty" else "plug-in", ")")) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(legend.position = "bottom", panel.grid.minor = ggplot2::element_blank(),
+                   strip.background = ggplot2::element_rect(fill = "grey90"))
+  attr(p, "data") <- d
+  p
 }
 
 #' Effective sample sizes of the length compositions

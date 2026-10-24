@@ -73,3 +73,15 @@ stopifnot(all(vapply(L1, function(l) min(l) >= 20 && max(l) < 60, logical(1))),
 ft <- fiticc(lt, stocklen(lt, lhpar, m_model = "constant"), sel_fun = sf, catch_by_gear = cbg,
              settings = list(CVL = 0.1))
 print(ft$diagnostics)
+
+## distribution view of the predictive check
+pl <- plot_ppc_lfd(fdm, nsim = 100, pool_years = TRUE)
+d <- attr(pl, "data")
+stopifnot(inherits(pl, "ggplot"), all(c("obs", "lo", "med", "hi", "outside") %in% names(d)),
+          all(abs(tapply(d$obs, d$gear, sum) - 1) < 1e-8), all(d$lo <= d$hi))
+pc3 <- ppc_flicc(fdm, nsim = 100)
+stopifnot(all(pc3$coverage_bins$share_bins_outside_95 < 0.2), inherits(pc3$plot_lfd, "ggplot"))
+d1 <- attr(plot_ppc_lfd(pc3, year = 1, gear = "Trawl"), "data")
+stopifnot(nlevels(d1$year) == 1, all(d1$gear == "Trawl"))
+ggplot2::ggsave(file.path(od, "ppc_lfd_pooled.png"), pl, width = 8, height = 3.5, dpi = 100)
+cat("plot_ppc_lfd ok\n")
