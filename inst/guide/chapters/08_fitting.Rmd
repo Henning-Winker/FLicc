@@ -241,37 +241,93 @@ lmr$runs
 lmr$plot
 ```
 
-**Posterior predictive checks.** `ppc_flicc()` simulates compositions from the
-fitted model (at the effective sample size and with the observation model of
-the fit) and compares observed statistics with their predictive distribution:
-mean length, 95th percentile, proportion of mature fish and largest length.
-With `par_draws = TRUE` the parameters are also drawn from their estimated
-uncertainty.
+**Posterior predictive checks.** The fitted curve in `plot_len()` never
+matches the bars exactly, because every sample of fish is noisy. The question
+is whether the differences are larger than that noise. A posterior predictive
+check answers it by simulation: if the fitted model were true, what could a
+new sample of the same size look like? `ppc_flicc()` draws 300 such samples
+for every gear and year, from the fitted composition and with the
+observation model and effective sample size of the fit. The spread of these
+samples is what the model expects from sampling alone; the observed data
+should look like one more of them. (With `par_draws = TRUE` the parameters
+are also drawn from their estimated uncertainty, which widens the spread
+slightly.)
 
-```{r ppc, fig.height = 7}
+**Look at the compositions first.** `plot_ppc_lfd()` shows, for each length
+bin, the observed proportion (bar) and the range the model expects for it
+(line: 95% of the simulated samples; point: their median). A bar inside its
+line differs from the fit by no more than sampling noise; a red bar is outside
+it. Start with all years pooled, which shows the average shape the model has
+to reproduce, i.e. selectivity and growth:
+
+```{r ppc}
 ppc <- ppc_flicc(fit, nsim = 300)
-ppc$coverage
-ppc$plot
+ppc
 ```
 
-The same simulated data sets also give the predictive distribution of each
-length bin. `plot_ppc_lfd()` shows the observed composition (bars) against it
-(points: median; lines: 95% interval), with bins outside the interval in red.
-About 5% of the bins are expected outside by chance (`ppc$coverage_bins`).
-Red bins clustered on one side of the mode point to selectivity or growth
-misfit. Red bins throughout, above and below the intervals, mean the
-observation model understates the variability of the data. With
-`pool_years = TRUE` the observed and the simulated compositions are pooled
-over years, which shows persistent misfit by gear; `scale = "sqrt"` makes
-the tails visible.
-
 ```{r ppc-lfd, fig.height = 3.5}
-ppc$coverage_bins
 plot_ppc_lfd(ppc, pool_years = TRUE)
 ```
 
+```{r ppc-numbers, include = FALSE}
+pb <- setNames(round(100 * ppc$coverage_bins$share_bins_outside_95),
+               as.character(ppc$coverage_bins$gear))
+yr4 <- tail(seq_along(dimnames(lfd[[1]])$year), 4)
+dy <- attr(plot_ppc_lfd(ppc, year = yr4), "data")
+red <- aggregate(outside ~ gear + year, data = dy, FUN = sum)
+worst <- red[which.max(red$outside), ]
+rl <- range(dy$len[dy$outside & dy$gear == worst$gear & dy$year == worst$year])
+```
+
+Read the pooled panels in three steps:
+
+1. **Count the red bars.** About 1 bin in 20 is outside its 95% range by
+   chance. Here `r pb[1]`% of the bins are red for `r names(pb)[1]` and
+   `r pb[2]`% for `r names(pb)[2]` (`ppc$coverage_bins`, all years).
+2. **Look at where they are.** Single red bars scattered along the axis are
+   chance. Several neighbouring bars on the same side of the intervals mean
+   the shape is wrong: bars above the intervals on the left of the mode mean
+   more small fish than the selectivity allows (the ascending limb is too
+   steep or too far to the right); bars above the intervals in the right-hand
+   tail mean more large fish than the dome or Linf allow; bars below mean the
+   opposite.
+3. **Compare the scatter with the intervals.** If the bars jump around
+   inside wide intervals, the observation model allows for that noise; if
+   the intervals are narrow and bars fall outside on both sides, the
+   effective sample size is too high and the confidence intervals of the
+   assessment will be too narrow.
+
+Then look at single years. Here, the last four:
+
 ```{r ppc-lfd-years, fig.height = 7}
-plot_ppc_lfd(ppc, year = tail(seq_along(dimnames(lfd[[1]])$year), 4))
+plot_ppc_lfd(ppc, year = yr4)
+```
+
+Red bars in the same place in most years repeat what the pooled plot shows:
+a misfit of selectivity or growth. Red bars concentrated in one year are a
+different matter. In `r worst$year` the `r tolower(worst$gear)` composition
+has `r worst$outside` red bins between `r rl[1]` and `r rl[2]` cm, with bars
+above the intervals next to bars below: that year, more fish fall in some
+length ranges and fewer in others than the model predicts. This is the
+signature of a strong (or weak) year class passing through the fishery. The
+model assumes steady recruitment and cannot follow such pulses; it averages
+over them. When the pooled plot shows few red bars`r if (max(pb) <= 10) ", as here," else ","` the average is
+unbiased and the year-to-year pulses are no reason to change the model.
+
+The plot is the visual counterpart of the residual plots above: the
+residuals give the same misfit as numbers per bin, scaled by the expected
+noise, and the OSA residuals are the formal test. The predictive check shows
+the misfit in the units of the data, which makes it the easiest to explain;
+since the data were also used to fit the model, it detects clear misfit
+rather than subtle departures.
+
+**Summary statistics.** The same simulated samples give the predictive
+distribution of four statistics per gear and year: mean length, 95th
+percentile, proportion of mature fish and largest length (`ppc$coverage`,
+share of years outside the 95% range):
+
+```{r ppc-stats, fig.height = 7}
+ppc$plot
 ```
 
 ```{r resid-numbers, include = FALSE}
