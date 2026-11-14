@@ -26,6 +26,17 @@
 #' still splits the catch by sex from the life history and sex ratio; male
 #' Linf is then not estimable and stays at its input value.
 #'
+#' **Surveys.** Gears named in `settings$surveys` are surveys: their
+#' composition is the population seen through the survey's selectivity, with
+#' no fishing mortality and no share of the catch (`catch_by_gear` is then
+#' given for the fishery gears only). Surveys work in one-sex and
+#' sex-structured fits; sexed survey samples are often the main source of
+#' information on the sex ratio at length (see [plot_sexratio()]).
+#'
+#' **Per-recruit quantities.** Spawning biomass per recruit is female
+#' spawning output and yield per recruit sums both sexes, both per total
+#' recruit; Fspr and SPR therefore refer to females.
+#'
 #' @param lfd Length frequencies (`FLQuants` by gear), sexed or not; used
 #'   for the length classes and years.
 #' @param lhpar Life history by sex: an `FLPar` with a `unit` dimension
@@ -77,6 +88,7 @@ sex_lhpar_flicc <- function(lhpar) {
 # fill the sex-structure data of the template for objects made before it
 # (one-sex model) (internal)
 sex_defaults_tmb_flicc <- function(td) {
+  if (is.null(td$gear_type)) td$gear_type <- rep(0L, td$ngear)
   if (!is.null(td$nsex)) return(td)
   nl <- td$nlen; ny <- td$nyear; ng <- td$ngear
   td$nsex <- 1L
@@ -85,4 +97,88 @@ sex_defaults_tmb_flicc <- function(td) {
   td$sex_ratio <- 1; td$k_ratio <- 1; td$mk_ratio <- 1
   td$Mscaler_m <- td$Mscaler; td$wt_m <- td$wt; td$mat_m <- td$mat
   td
+}
+
+# gear types from settings$surveys (names or indices of survey gears):
+# 0 fishery, 1 survey (internal)
+survey_gears_flicc <- function(surveys, gear_names) {
+  gt <- rep(0L, length(gear_names))
+  if (is.null(surveys) || !length(surveys)) return(gt)
+  idx <- if (is.numeric(surveys)) as.integer(surveys) else match(surveys, gear_names)
+  if (any(is.na(idx)) || any(idx < 1 | idx > length(gear_names)))
+    stop("settings$surveys must name gears of lfd (", paste(gear_names, collapse = ", "), ").")
+  gt[idx] <- 1L
+  gt
+}
+
+#' Observed and predicted sex ratio at length
+#'
+#' For a sex-structured fit, plots the proportion of females at length in the
+#' sexed compositions (points, sized by the number of sexed fish; lines: 95%
+#' binomial intervals) against the model prediction (line), by gear. Only
+#' gear-years with both sexes sampled (SS3 gender code 3) carry information
+#' on the sex ratio and are used. With `by_year = FALSE` (default) years are
+#' pooled: observed counts are summed and the predicted proportions are
+#' weighted by each year's sexed sample size.
+#'
+#' **Reading the plot.** The predicted sex ratio at length follows from the
+#' growth (Linf, k) and natural mortality of each sex and the sex ratio at
+#' recruitment. A rising share of females at large lengths is the usual
+#' signature of females growing larger. Observed proportions systematically
+#' above or below the line over a range of lengths point to male Linf or k,
+#' M by sex, or `settings$sex_ratio`; a misfit only at small lengths often
+#' reflects small fish that could not be sexed (sexing depends on length).
+#'
+#' @param fit A sex-structured FLicc fit.
+#' @param gear Optional gears (names or indices); default: all with sexed data.
+#' @param by_year Logical; one panel per year and gear.
+#' @param years Optional years.
+#' @param min_n Minimum number of sexed fish in a length bin to show the
+#'   observed proportion.
+#' @return A `ggplot` object; the data are in attribute `"data"`.
+#' @export
+plot_sexratio <- function(fit, gear = NULL, by_year = FALSE, years = NULL, min_n = 5) {
+  td <- fit$tmb_data
+  if (is.null(td$nsex) || td$nsex != 2L) stop("plot_sexratio() needs a sex-structured fit (stocklen_sex()).")
+  rp <- fit$obj$report()
+  ps <- rp$plen_sex
+  gn <- td$gear_names; yn <- as.character(td$year_names)
+  L <- td$Lmid
+  sel_g <- seq_along(gn)
+  if (!is.null(gear)) sel_g <- if (is.numeric(gear)) gear else match(gear, gn)
+  sel_y <- seq_along(yn)
+  if (!is.null(years)) sel_y <- which(yn %in% as.character(years))
+  d <- do.call(rbind, lapply(sel_g, function(g) do.call(rbind, lapply(sel_y, function(y) {
+    if (td$sex_type[y, g] != 3L) return(NULL)
+    oF <- td$obs_sex[, y, g, 1]; oM <- td$obs_sex[, y, g, 2]
+    data.frame(gear = gn[g], year = yn[y], len = L, oF = oF, oM = oM, n = sum(oF + oM),
+               pF = ps[, y, g, 1], pM = ps[, y, g, 2])
+  }))))
+  if (is.null(d) || !nrow(d)) stop("No gear-years with both sexes sampled.")
+  grp <- if (by_year) c("gear", "year", "len") else c("gear", "len")
+  # predicted: sum over years of n_y * proportion within the year's sexed composition
+  d$wF <- d$n * d$pF / ave(d$pF + d$pM, d$gear, d$year, FUN = sum)
+  d$wM <- d$n * d$pM / ave(d$pF + d$pM, d$gear, d$year, FUN = sum)
+  a <- stats::aggregate(d[, c("oF", "oM", "wF", "wM")], d[grp], sum)
+  a$nobs <- a$oF + a$oM
+  a$obs <- ifelse(a$nobs >= min_n, a$oF / pmax(a$nobs, 1), NA)
+  a$pred <- a$wF / (a$wF + a$wM)
+  ci <- t(mapply(function(x, n) if (n >= min_n) stats::binom.test(round(x), round(n))$conf.int else c(NA, NA),
+                 a$oF, a$nobs))
+  a$lo <- ci[, 1]; a$hi <- ci[, 2]
+  a$gear <- factor(a$gear, levels = gn)
+  p <- ggplot2::ggplot(a, ggplot2::aes(len)) +
+    ggplot2::geom_hline(yintercept = 0.5, linetype = "dotted", colour = "grey50") +
+    ggplot2::geom_linerange(ggplot2::aes(ymin = lo, ymax = hi), colour = "grey60", na.rm = TRUE) +
+    ggplot2::geom_point(ggplot2::aes(y = obs, size = nobs), colour = "#C2185B", alpha = 0.7, na.rm = TRUE) +
+    ggplot2::geom_line(ggplot2::aes(y = pred), colour = "grey15", linewidth = 0.8, na.rm = TRUE) +
+    ggplot2::scale_size_area(max_size = 3, name = "Sexed fish") +
+    ggplot2::coord_cartesian(ylim = c(0, 1)) +
+    ggplot2::labs(x = "Length", y = "Proportion female",
+                  title = "Sex ratio at length: observed (points, 95% CI) and predicted (line)",
+                  subtitle = if (by_year) NULL else "Years pooled") +
+    ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+  p <- p + if (by_year) ggplot2::facet_grid(year ~ gear) else ggplot2::facet_wrap(~gear)
+  attr(p, "data") <- a
+  p
 }

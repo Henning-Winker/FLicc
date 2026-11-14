@@ -391,6 +391,7 @@ Type objective_function<Type>::operator() ()
   // Sex 1 (female) uses Linf, Mk, wt, mat, Mscaler and is the reference for
   // F/k and SPR; sex 2 (male) has its own Linf, M/k, weight, maturity and M
   // at length. Recruits are split by sex_ratio; F and selectivity are shared.
+  DATA_IVECTOR(gear_type);   // ngear: 0 fishery, 1 survey (selectivity only: no F, no catch share)
   DATA_INTEGER(nsex);
   DATA_ARRAY(obs_sex);       // nlen x nyear x ngear x 2: sexed compositions (F, M); zeros = none
   DATA_IMATRIX(sex_type);    // nyear x ngear, as SS3 gender codes for the sexed part:
@@ -558,10 +559,17 @@ Type objective_function<Type>::operator() ()
       Z(l) = M(l);
 
       for(int g = 0; g < ngear; g++) {
-        F_len(l,g) = Fk(y,g) * Sel(l,g);
+        F_len(l,g) = (gear_type(g) == 1) ? Type(0) : Type(Fk(y,g) * Sel(l,g));
         Z(l) += F_len(l,g);
       }
     }
+
+    // what each gear samples at length: catch rate F(l) for fisheries, the
+    // population through the selectivity curve for surveys
+    matrix<Type> Wsel(nlen, ngear);
+    for(int l = 0; l < nlen; l++)
+      for(int g = 0; g < ngear; g++)
+        Wsel(l,g) = (gear_type(g) == 1) ? Type(Sel(l,g)) : Type(F_len(l,g));
 
     if(pop_model == 1) {
       N = pop_len_glq(node, quad_wt, LLB, Z, Galpha, Gbeta);
@@ -635,9 +643,9 @@ Type objective_function<Type>::operator() ()
     for(int g = 0; g < ngear; g++) {
       for(int l = 0; l < nlen; l++) {
         if(nsex == 2) {
-          Cpred(l,g) = (NobsF(l) + NobsM(l)) * F_len(l,g);
+          Cpred(l,g) = (NobsF(l) + NobsM(l)) * Wsel(l,g);
         } else {
-          Cpred(l,g) = Nobs(l) * F_len(l,g);
+          Cpred(l,g) = Nobs(l) * Wsel(l,g);
         }
         pred_gear(g) += Cpred(l,g);
         obs_gear(g)  += obs(l,y,g);
@@ -650,6 +658,7 @@ Type objective_function<Type>::operator() ()
     vector<Type> pred_share(ngear);
     for(int g = 0; g < ngear; g++) {
       pred_share(g) = Type(0);
+      if(gear_type(g) == 1) continue;          // surveys take no catch
       for(int l = 0; l < nlen; l++)
         if(nsex == 2 && catch_units == 1)
           pred_share(g) += (NobsF(l) * wt(l,y) + NobsM(l) * wt_m(l,y)) * F_len(l,g);
@@ -673,9 +682,10 @@ Type objective_function<Type>::operator() ()
       }
     }
     for(int g = 0; g < ngear; g++) catch_share(y, g) = pred_pgear(g);
-    Type pred_total_n = pred_gear.sum();
+    Type pred_total_n = Type(0);
+    for(int g = 0; g < ngear; g++) if(gear_type(g) == 0) pred_total_n += pred_gear(g);
     for(int g = 0; g < ngear; g++)
-      catch_share_n(y, g) = (pred_total_n > Type(0)) ? Type(pred_gear(g) / pred_total_n) : Type(0);
+      catch_share_n(y, g) = (pred_total_n > Type(0) && gear_type(g) == 0) ? Type(pred_gear(g) / pred_total_n) : Type(0);
 
 
     Type fmax = Type(0);
@@ -733,14 +743,14 @@ Type objective_function<Type>::operator() ()
     // by its predicted catch in numbers
     Type ctot = Type(0);
     for(int g = 0; g < ngear; g++) {
-      ctot += pred_gear(g);
+      if(gear_type(g) == 0) ctot += pred_gear(g);
     }
 
     for(int l = 0; l < nlen; l++) {
       Type ctot_l = Type(0);
 
       for(int g = 0; g < ngear; g++) {
-        ctot_l += Cpred(l,g);
+        if(gear_type(g) == 0) ctot_l += Cpred(l,g);
       }
 
       if(ctot > Type(0)) {
@@ -753,14 +763,18 @@ Type objective_function<Type>::operator() ()
 
 
     // soft constraint on predicted gear shares using relative catch
-    for(int g = 0; g < (ngear - 1); g++) {
+    // (reference: the last fishery gear; surveys have no catch and are skipped)
+    int gref = ngear - 1;
+    while(gref > 0 && gear_type(gref) == 1) gref--;
+    for(int g = 0; g < gref; g++) {
+      if(gear_type(g) == 1) continue;
       if(pred_pgear(g) > Type(0) &&
-         pred_pgear(ngear - 1) > Type(0) &&
+         pred_pgear(gref) > Type(0) &&
          catch_wt(y,g) > Type(0) &&
-         catch_wt(y,ngear - 1) > Type(0)) {
+         catch_wt(y,gref) > Type(0)) {
 
-        Type logratio_pred  = log(pred_pgear(g) / pred_pgear(ngear - 1));
-        Type logratio_catch = log(catch_wt(y,g) / catch_wt(y,ngear - 1));
+        Type logratio_pred  = log(pred_pgear(g) / pred_pgear(gref));
+        Type logratio_catch = log(catch_wt(y,g) / catch_wt(y,gref));
 
         nll -= dnorm(logratio_pred, logratio_catch, catch_sd, true);
       }
@@ -871,7 +885,7 @@ Type objective_function<Type>::operator() ()
       for(int g = 0; g < ngear; g++) {
         for(int sx = 0; sx < 2; sx++)
           for(int l = 0; l < nlen; l++) {
-            Type cs = (sx == 0) ? NobsF(l) * F_len(l, g) : NobsM(l) * F_len(l, g);
+            Type cs = (sx == 0) ? NobsF(l) * Wsel(l, g) : NobsM(l) * Wsel(l, g);
             if(pred_gear(g) > Type(0)) plen_sex(l, y, g, sx) = cs / pred_gear(g);
           }
         int st = sex_type(y, g);
@@ -910,13 +924,16 @@ Type objective_function<Type>::operator() ()
     int ny = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
     int y0 = nyear - ny;
     vector<Type> sA(nlen), Ms(nlen), MA(nlen), matA(nlen), wtA(nlen);
-    sA.setZero(); Ms.setZero(); matA.setZero(); wtA.setZero();
+    vector<Type> Ms_m(nlen), wtA_m(nlen), MA_m(nlen);
+    sA.setZero(); Ms.setZero(); matA.setZero(); wtA.setZero(); Ms_m.setZero(); wtA_m.setZero();
     for(int l = 0; l < nlen; l++) {
       for(int y = y0; y < nyear; y++) {
         sA(l)   += sel_joint(l, y) / Type(ny);
         Ms(l)   += Mscaler(l, y)   / Type(ny);
         matA(l) += mat(l, y)       / Type(ny);
         wtA(l)  += wt(l, y)        / Type(ny);
+        Ms_m(l) += Mscaler_m(l, y) / Type(ny);
+        wtA_m(l) += wt_m(l, y)     / Type(ny);
       }
     }
     Type smax = Type(0);
@@ -924,7 +941,26 @@ Type objective_function<Type>::operator() ()
     for(int l = 0; l < nlen; l++) {
       if(smax > Type(0)) sA(l) = sA(l) / smax;
       MA(l) = Mk * brp_k * Ms(l);
+      MA_m(l) = Mk * mk_ratio * (brp_k / k_ratio) * Ms_m(l);   // male annual M
     }
+
+    // male numbers-at-length per recruit (nsex = 2), on the female time scale
+    // (x k_ratio); same fishing at length as females
+    auto popNm = [&](Type x, vector<Type>& Fl, vector<Type>& Zl) {
+      for(int l = 0; l < nlen; l++) {
+        Fl(l) = (brp_FMscale == 1) ? x * MA(l) * sA(l) : x * sA(l);
+        Zl(l) = MA_m(l) + Fl(l);
+      }
+      matrix<Type> ZK(nlen + 1, ngtg);
+      for(int g = 0; g < ngtg; g++) {
+        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat_m(l, g) * Ms_m(l) + Fl(l) * k_ratio / brp_k;
+        ZK(nlen, g) = MKMat_m(nlen, g) * Ms_m(nlen - 1) + Fl(nlen - 1) * k_ratio / brp_k;
+      }
+      vector<Type> NI = pop_len_gtg(LLB, gtgLinfs_m, ZK, recP);
+      return vector<Type>(NI * k_ratio);
+    };
+    // per total recruit: females sex_ratio, males 1 - sex_ratio (nsex = 1: sex_ratio = 1)
+    Type male_w = (nsex == 2) ? Type(Type(1) - sex_ratio) : Type(0);
 
     // numbers-at-length per recruit (unscaled) for fishing level x
     auto popN = [&](Type x, vector<Type>& Fl, vector<Type>& Zl) {
@@ -955,13 +991,13 @@ Type objective_function<Type>::operator() ()
     Type scale0 = NI0(0);
     Type brp_SBPR0 = Type(0);
     for(int l = 0; l < nlen; l++) {
-      brp_SBPR0 += NI0(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+      brp_SBPR0 += sex_ratio * NI0(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
     }
     auto sbpr = [&](Type x) {
       vector<Type> NI = popN(x, Fl, Zl);
       Type sb = Type(0);
       for(int l = 0; l < nlen; l++) {
-        sb += NI(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+        sb += sex_ratio * NI(l) / scale0 * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
       }
       return sb;
     };
@@ -976,10 +1012,19 @@ Type objective_function<Type>::operator() ()
         Type n = NI(l) / scale0;
         Type c = (Zl(l) > Type(0)) ? n * Fl(l) / Zl(l) * (Type(1) - exp(-Zl(l))) : Type(0);
         brp_N(l, i) = n; brp_C(l, i) = c; brp_Fl(l, i) = Fl(l);
-        sb += n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
-        yp += c * wtA(l);
+        sb += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+        yp += sex_ratio * c * wtA(l);
       }
-      brp_SBPR(i) = sb; brp_YPR(i) = yp;
+      if(nsex == 2) {
+        vector<Type> Flm(nlen), Zlm(nlen);
+        vector<Type> NIm = popNm(brp_F(i), Flm, Zlm);
+        for(int l = 0; l < nlen; l++) {
+          Type n = NIm(l) / scale0;
+          Type c = (Zlm(l) > Type(0)) ? n * Flm(l) / Zlm(l) * (Type(1) - exp(-Zlm(l))) : Type(0);
+          yp += male_w * c * wtA_m(l);
+        }
+      }
+      brp_SBPR(i) = sb; brp_YPR(i) = yp;   // SBPR: females; YPR: both sexes; per total recruit
     }
 
     // Fspr on log F by the Illinois method (bracketed regula falsi; SPR

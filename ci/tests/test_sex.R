@@ -26,6 +26,11 @@ for (om in c("dm", "mn")) {
 lfds <- FLQuants(lapply(lfd, sexq))
 f3 <- fiticc(lfds, stk2, sel_fun = sf, catch_by_gear = cb, settings = list(obs_model = "mn"), verbose = FALSE)
 stopifnot(all(f3$tmb_data$sex_type == 3L), max(abs(f1$opt$par - f3$opt$par)) < 1e-5)
+# per-recruit: same Fspr and YPR per total recruit; female SBPR = sex_ratio x one-sex
+b1 <- FLicc:::brp_tmb_flicc(f1, Fseq = c(0.05, 0.2), spr = c(30, 40))
+b2 <- FLicc:::brp_tmb_flicc(f2, Fseq = c(0.05, 0.2), spr = c(30, 40))
+stopifnot(max(abs(b1$Fspr - b2$Fspr)) < 1e-8, max(abs(b2$YPR / b1$YPR - 1)) < 1e-8,
+          max(abs(b2$SBPR / b1$SBPR - 0.5)) < 1e-8)
 cat("identity ok\n")
 
 ## 2. composition types: females only, males only, combined + sexed in one gear-year
@@ -74,4 +79,36 @@ bias <- function(f) median(f$obj$report()$spr_y / rp$spr_y - 1)
 cat(sprintf("male Linf %.1f (true 45, start 52); SPR bias: sexed %+.2f, unsexed 2-sex %+.2f, 1-sex %+.2f\n",
             fa$obj$report()$Linf_m, bias(fa), bias(fb), bias(fc)))
 stopifnot(abs(fa$obj$report()$Linf_m - 45) < 2.5, abs(bias(fa)) < 0.1, abs(bias(fb)) < 0.1, bias(fc) < -0.15)
+
+## 4. survey gears: selectivity only (no F, no catch share), sexed survey + unsexed fishery
+lfd0 <- FLQuants(trawl = mkq(), survey = mkq())
+st2 <- stocklen_sex(lfd0, list(F = lhF, M = lhM), m_model = "constant")
+set0 <- list(CVL = 0.1, GL = 30, pop_model = "gtg", obs_model = "mn", ngtg = 13, maxsd = 3,
+             sex_ratio = 0.5, surveys = "survey")
+td <- FLicc:::data_tmb_flicc(lfd0, st2$F, c("logistic", "logistic"),
+                             FLQuants(trawl = quantSums(lfd0[[1]]), survey = quantSums(lfd0[[1]]) * 0),
+                             settings = set0, stklen_m = st2$M)
+stopifnot(identical(td$gear_type, c(0L, 1L)))
+td$prior_sigmaF_mean <- log(0.3); td$prior_sigmaF_sd <- 0; td$prior_sigmaF_use <- 0L
+td$FM_min <- 0.05; td$FM_max <- 4; td$FMpen_sd <- 0
+pars <- FLicc:::init_tmb_flicc(td)
+pars$log_Fk[, 1] <- log(seq(1.5, 3, length.out = length(yrs)))
+pars$Sm <- c(log(30 / 60), log(4 / 60), log(12 / 60), log(3 / 60))
+rp <- TMB::MakeADFun(td[setdiff(names(td), drop)], pars, DLL = "FLicc", silent = TRUE)$report()
+stopifnot(all(rp$catch_share[, 2] == 0))
+set.seed(7)
+lfdv <- FLQuants(trawl = mkq("U"), survey = mkq(c("F", "M")))
+for (iy in seq_along(yrs)) {
+  lfdv$trawl[, iy, "U"] <- rmultinom(1, 500, rp$plen[, iy, 1])[, 1]
+  x <- rmultinom(1, 300, c(rp$plen_sex[, iy, 2, 1], rp$plen_sex[, iy, 2, 2]))[, 1]
+  lfdv$survey[, iy, "F"] <- x[seq_along(lens)]; lfdv$survey[, iy, "M"] <- x[length(lens) + seq_along(lens)]
+}
+fs <- fiticc(lfdv, stw, sel_fun = c("logistic", "logistic"), catch_by_gear = 1,
+             settings = list(obs_model = "mn", surveys = "survey", linf_m.sd = 0.5), verbose = FALSE)
+rs <- fs$obj$report()
+cat(sprintf("survey: male Linf %.1f, SPR bias %+.2f\n", rs$Linf_m, median(rs$spr_y / rp$spr_y - 1)))
+stopifnot(fs$opt$convergence == 0, abs(rs$Linf_m - 45) < 2.5, abs(median(rs$spr_y / rp$spr_y - 1)) < 0.1,
+          all(rs$catch_share[, 2] == 0), all(rs$Fk[, 2] < 1e-6))
+p <- plot_sexratio(fs)
+stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
 cat("sex tests passed\n")

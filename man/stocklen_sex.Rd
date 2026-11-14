@@ -47,6 +47,17 @@ and combined and sexed samples together (partly sexed samples). Gears,
 and years within a gear, can differ. With unsexed data only, the model
 still splits the catch by sex from the life history and sex ratio; male
 Linf is then not estimable and stays at its input value.
+
+\strong{Surveys.} Gears named in \code{settings$surveys} are surveys: their
+composition is the population seen through the survey's selectivity, with
+no fishing mortality and no share of the catch (\code{catch_by_gear} is then
+given for the fishery gears only). Surveys work in one-sex and
+sex-structured fits; sexed survey samples are often the main source of
+information on the sex ratio at length (see \code{\link[=plot_sexratio]{plot_sexratio()}}).
+
+\strong{Per-recruit quantities.} Spawning biomass per recruit is female
+spawning output and yield per recruit sums both sexes, both per total
+recruit; Fspr and SPR therefore refer to females.
 }
 \examples{
 \dontrun{

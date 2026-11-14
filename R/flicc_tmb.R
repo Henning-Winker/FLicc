@@ -67,6 +67,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     }
   }
   nsex <- if (!is.null(stklen_m)) 2L else 1L
+  gear_type <- survey_gears_flicc(settings$surveys, gear_names)
   # sexed composition type per gear-year (SS3 gender codes): 1 females only,
   # 2 males only, 3 both sexes (joint length x sex composition), 0 none. A
   # gear-year with sexed counts of one sex only is read as a sample of that sex.
@@ -148,6 +149,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   catch_wt <- if (all(as.character(years) %in% rownames(catch_all)) && nrow(catch_all) != nyear)
     catch_all[as.character(years), , drop = FALSE] else catch_all
 
+  catch_wt[, gear_type == 1L] <- 0              # surveys take no catch
   catch_wt <- catch_wt / rowSums(catch_wt)
 
 
@@ -350,6 +352,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                   else rep(log(10), ngear),
     dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 1,
     pile = if (!is.null(settings$pile)) as.numeric(settings$pile) else 1,
+    gear_type  = as.integer(gear_type),
     nsex       = as.integer(nsex),
     obs_sex    = unname(obs_sex),
     sex_type   = unname(sex_type),
@@ -541,6 +544,7 @@ init_tmb_flicc <- function(tmb_data) {
   )
 
   log_Fk <- log(pmax(Fk_init, 1e-8))
+  if (!is.null(tmb_data$gear_type)) log_Fk[, tmb_data$gear_type == 1L] <- log(1e-8)   # surveys: no F
 
   list(
     log_Linf   = log(tmb_data$Linf_init),
@@ -673,7 +677,8 @@ fiticc_core <- function(lfd, stklen,
     FM_max = 4,
     FMpen_sd = 0.2,
     sex_ratio = 0.5,
-    linf_m.sd = NULL
+    linf_m.sd = NULL,
+    surveys = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -736,6 +741,29 @@ fiticc_core <- function(lfd, stklen,
   }
   years <- as.numeric(years)
 
+  # surveys (settings$surveys) take no catch: catch_by_gear may be given for
+  # the fishery gears only; survey entries are set to zero
+  gtype <- survey_gears_flicc(settings$surveys, names(lfd_i))
+  if (any(gtype == 1L)) {
+    if (all(gtype == 1L)) stop("At least one gear must be a fishery (not in settings$surveys).")
+    if (inherits(catch_by_gear, "FLQuants")) {
+      for (g in names(lfd_i)[gtype == 1L]) {
+        if (is.null(catch_by_gear[[g]])) {
+          z <- catch_by_gear[[1]]; z[] <- 0; catch_by_gear[[g]] <- z
+        }
+      }
+      catch_by_gear <- catch_by_gear[names(lfd_i)]
+    } else {
+      cb <- as.numeric(catch_by_gear)
+      if (length(cb) == sum(gtype == 0L)) {
+        full <- numeric(length(gtype)); full[gtype == 0L] <- cb; catch_by_gear <- full
+      } else if (length(cb) == length(gtype)) {
+        catch_by_gear <- cb
+      } else stop("catch_by_gear needs one value per fishery gear (", sum(gtype == 0L), ") or per gear.")
+      catch_by_gear[gtype == 1L] <- 0
+    }
+  }
+
   if(!inherits(catch_by_gear, "FLQuants")){
 
  catch_by_gear  <-  FLCore::FLQuants(Map(function(x,y){
@@ -795,6 +823,11 @@ fiticc_core <- function(lfd, stklen,
   }
   if (tmb_data$nsex == 1L || is.null(settings$linf_m.sd)) {
     map$log_Linf_m <- factor(NA)
+  }
+  if (any(tmb_data$gear_type == 1L)) {           # surveys: no F to estimate
+    mf <- matrix(seq_along(parameters$log_Fk), nrow(parameters$log_Fk))
+    mf[, tmb_data$gear_type == 1L] <- NA
+    map$log_Fk <- factor(mf)
   }
   # NEW: phi only relevant for NB
   if (settings$obs_model != "nb") {
