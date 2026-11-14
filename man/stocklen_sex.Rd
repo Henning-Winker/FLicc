@@ -48,6 +48,16 @@ and years within a gear, can differ. With unsexed data only, the model
 still splits the catch by sex from the life history and sex ratio; male
 Linf is then not estimable and stays at its input value.
 
+\strong{Life history by sex.} Linf, M/k and CVL are separate parameters for
+each sex. Each is fixed at its input value unless a penalty (prior SD on
+the log scale) is given: \code{linf.sd}, \code{Mk.sd}, \code{CVL.sd} for females and
+\code{linf_m.sd}, \code{Mk_m.sd}, \code{CVL_m.sd} for males (male CVL input
+\code{settings$CVL_m}, default \code{settings$CVL}). One sex can therefore be fixed
+while the other is estimated, or both estimated. Sexed compositions,
+especially joint F + M samples, carry the information (see
+\code{\link[=plot_sexratio]{plot_sexratio()}}); with unsexed data only the male parameters are weakly
+determined and should stay fixed or under informative penalties.
+
 \strong{Surveys.} Gears named in \code{settings$surveys} are surveys: their
 composition is the population seen through the survey's selectivity, with
 no fishing mortality and no share of the catch (\code{catch_by_gear} is then

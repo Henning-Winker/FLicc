@@ -879,6 +879,9 @@ lfd_long_to_wide <- function(df) {
 #'
 #' @return An \code{FLQuants} with the same structure as \code{lfd}, scaled
 #'   so that each year/iteration total over \code{len} equals the gear's ESS.
+#'   With sex in the unit dimension, females and males (`F`, `M`) are scaled
+#'   jointly, so the sex ratio is kept, and an unsexed part (`U`) separately;
+#'   each part gets the ESS.
 #'   Gear-years with no observations stay zero (instead of 0/0 = NaN).
 #'
 #' @examples
@@ -906,6 +909,22 @@ lfdess <- function(lfd, ess.g=100) {
   }
 
   out <- FLQuants(Map(function(x, y) {
+    un <- dimnames(x)$unit
+    if (length(un) > 1 && any(c("F", "M") %in% un)) {
+      # sexed data: females and males are one joint sample (keeps the sex
+      # ratio); an unsexed part (U) is scaled separately; each to the ESS
+      a <- x@.Data; a[!is.finite(a)] <- 0
+      for (part in list(intersect(un, c("F", "M")), setdiff(un, c("F", "M")))) {
+        if (!length(part)) next
+        tot <- apply(a[, , part, , , , drop = FALSE], c(2, 4, 5, 6), sum)
+        f <- y / tot; f[!is.finite(f)] <- 0      # year x season x area x iter
+        for (u in part) {
+          a[, , u, , , ] <- a[, , u, , , , drop = FALSE] * rep(as.vector(f), each = dim(a)[1])
+        }
+      }
+      res <- x; res@.Data[] <- a
+      return(res)
+    }
     res <- x %/% apply(x, 2:6, sum, na.rm = TRUE)
     res[!is.finite(res)] <- 0        # empty gear-years: 0/0 -> 0
     res * y

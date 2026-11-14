@@ -26,6 +26,16 @@
 #' still splits the catch by sex from the life history and sex ratio; male
 #' Linf is then not estimable and stays at its input value.
 #'
+#' **Life history by sex.** Linf, M/k and CVL are separate parameters for
+#' each sex. Each is fixed at its input value unless a penalty (prior SD on
+#' the log scale) is given: `linf.sd`, `Mk.sd`, `CVL.sd` for females and
+#' `linf_m.sd`, `Mk_m.sd`, `CVL_m.sd` for males (male CVL input
+#' `settings$CVL_m`, default `settings$CVL`). One sex can therefore be fixed
+#' while the other is estimated, or both estimated. Sexed compositions,
+#' especially joint F + M samples, carry the information (see
+#' [plot_sexratio()]); with unsexed data only the male parameters are weakly
+#' determined and should stay fixed or under informative penalties.
+#'
 #' **Surveys.** Gears named in `settings$surveys` are surveys: their
 #' composition is the population seen through the survey's selectivity, with
 #' no fishing mortality and no share of the catch (`catch_by_gear` is then

@@ -201,6 +201,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
   # sex structure: male Linf, k and M/k relative to the female reference
   sex_ratio <- 1; k_ratio <- 1; mk_ratio <- 1; Linf_m_init <- Linf_init
+  CVL_m_init <- if (!is.null(settings$CVL_m)) as.numeric(settings$CVL_m) else
+    if (!is.null(settings$CVL)) as.numeric(settings$CVL) else 0.1
   if (nsex == 2L) {
     lhm <- stklen_m@lhpar
     Linf_m_init <- as.numeric(lhm["linf"])
@@ -325,10 +327,21 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_code <- c(prior_code, 2L)
   }
 
+  # life-history penalties by sex (males): Linf, M/k, CVL
   if (nsex == 2L && !is.null(settings$linf_m.sd)) {
     prior_mu   <- c(prior_mu, log(Linf_m_init))
     prior_sd   <- c(prior_sd, as.numeric(settings$linf_m.sd))
     prior_code <- c(prior_code, 5L)
+  }
+  if (nsex == 2L && !is.null(settings$Mk_m.sd)) {
+    prior_mu   <- c(prior_mu, log(Mk_init * mk_ratio))
+    prior_sd   <- c(prior_sd, as.numeric(settings$Mk_m.sd))
+    prior_code <- c(prior_code, 6L)
+  }
+  if (nsex == 2L && !is.null(settings$CVL_m.sd)) {
+    prior_mu   <- c(prior_mu, -2 * log(CVL_m_init))
+    prior_sd   <- c(prior_sd, 2 * as.numeric(settings$CVL_m.sd))
+    prior_code <- c(prior_code, 7L)
   }
 
   list(
@@ -389,6 +402,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_code = as.integer(prior_code),
     Linf_init   = Linf_init,
     Linf_m_init = Linf_m_init,
+    Mk_m_init   = Mk_init * mk_ratio,
+    CVL_m_init  = CVL_m_init,
     Mk_init     = Mk_init,
     CVL_init    = CVL_init,
     Galpha_init = Galpha_init,
@@ -555,7 +570,9 @@ init_tmb_flicc <- function(tmb_data) {
     log_phi    = log(10),
     log_dm     = if (!is.null(tmb_data$dm_prior_mu)) as.numeric(tmb_data$dm_prior_mu) else rep(0, length(tmb_data$gear_names)),
     log_sigmaF = tmb_data$prior_sigmaF_mean,
-    log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init)
+    log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init),
+    log_Mk_m   = log(if (!is.null(tmb_data$Mk_m_init)) tmb_data$Mk_m_init else tmb_data$Mk_init),
+    log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init)
   )
 }
 
@@ -678,6 +695,9 @@ fiticc_core <- function(lfd, stklen,
     FMpen_sd = 0.2,
     sex_ratio = 0.5,
     linf_m.sd = NULL,
+    Mk_m.sd = NULL,
+    CVL_m = NULL,
+    CVL_m.sd = NULL,
     surveys = NULL
   )
   # ---- merge user settings with defaults ----
@@ -821,9 +841,11 @@ fiticc_core <- function(lfd, stklen,
   if (is.null(settings$CVL.sd)) {
     map$log_Galpha <- factor(NA)
   }
-  if (tmb_data$nsex == 1L || is.null(settings$linf_m.sd)) {
-    map$log_Linf_m <- factor(NA)
-  }
+  # male life history: fixed at the input values unless a penalty (prior SD)
+  # is given, independently of the female parameters
+  if (tmb_data$nsex == 1L || is.null(settings$linf_m.sd)) map$log_Linf_m <- factor(NA)
+  if (tmb_data$nsex == 1L || is.null(settings$Mk_m.sd))   map$log_Mk_m <- factor(NA)
+  if (tmb_data$nsex == 1L || is.null(settings$CVL_m.sd))  map$log_Galpha_m <- factor(NA)
   if (any(tmb_data$gear_type == 1L)) {           # surveys: no F to estimate
     mf <- matrix(seq_along(parameters$log_Fk), nrow(parameters$log_Fk))
     mf[, tmb_data$gear_type == 1L] <- NA
@@ -882,7 +904,7 @@ fiticc_core <- function(lfd, stklen,
 
   obj <- TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
-                            c("gear_names", "year_names", "Linf_m_init",
+                            c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
                               "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
     parameters = parameters,
     map = map,

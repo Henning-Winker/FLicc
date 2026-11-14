@@ -411,7 +411,9 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_phi);
   PARAMETER_VECTOR(log_dm);  // DM precision by gear: log theta (linear) or log beta (saturating)
   PARAMETER(log_sigmaF); // random walk F
-  PARAMETER(log_Linf_m); // male Linf (nsex = 2; fixed unless linf_m.sd)
+  PARAMETER(log_Linf_m);   // male Linf   (nsex = 2; fixed unless linf_m.sd)
+  PARAMETER(log_Mk_m);     // male M/k    (nsex = 2; fixed unless Mk_m.sd)
+  PARAMETER(log_Galpha_m); // male 1/CVL^2 (nsex = 2; fixed unless CVL_m.sd)
 
   Type nll = 0.0;
 
@@ -438,15 +440,19 @@ Type objective_function<Type>::operator() ()
     }
   }
 
-  // male growth groups and M/K (nsex = 2): same CVL and growth-group grid
+  // male growth groups and M/K (nsex = 2): own Linf, M/k and CVL, same
+  // growth-group grid. Male parameters are separate from the female ones, so
+  // either sex can be fixed while the other is estimated.
   Type Linf_m = exp(log_Linf_m);
+  Type Mk_m   = exp(log_Mk_m);
+  Type CVL_m  = Type(1) / sqrt(exp(log_Galpha_m));
   vector<Type> gtgLinfs_m(ngtg);
   matrix<Type> MKMat_m(nlen + 1, ngtg);
   if(nsex == 2) {
     if(pop_model != 2) error("Sex structure needs pop_model = gtg");
-    for(int g = 0; g < ngtg; g++) gtgLinfs_m(g) = Linf_m * (Type(1) + CVL * gtg_z(g));
+    for(int g = 0; g < ngtg; g++) gtgLinfs_m(g) = Linf_m * (Type(1) + CVL_m * gtg_z(g));
     for(int l = 0; l < (nlen + 1); l++) {
-      Type mkl = Mk * mk_ratio * pow(Linf_m / LBins_mk(l), Mpow);
+      Type mkl = Mk_m * pow(Linf_m / LBins_mk(l), Mpow);
       for(int g = 0; g < ngtg; g++) MKMat_m(l, g) = mkl;
     }
   } else {
@@ -941,7 +947,7 @@ Type objective_function<Type>::operator() ()
     for(int l = 0; l < nlen; l++) {
       if(smax > Type(0)) sA(l) = sA(l) / smax;
       MA(l) = Mk * brp_k * Ms(l);
-      MA_m(l) = Mk * mk_ratio * (brp_k / k_ratio) * Ms_m(l);   // male annual M
+      MA_m(l) = Mk_m * (brp_k / k_ratio) * Ms_m(l);   // male annual M
     }
 
     // male numbers-at-length per recruit (nsex = 2), on the female time scale
@@ -1116,6 +1122,10 @@ Type objective_function<Type>::operator() ()
       x = log_phi;
     } else if(code == 5) {
       x = log_Linf_m;
+    } else if(code == 6) {
+      x = log_Mk_m;
+    } else if(code == 7) {
+      x = log_Galpha_m;
     } else if(code >= 100 && code < 200) {
       int g = code - 100;
       x = log_Fk(0, g);
@@ -1157,6 +1167,8 @@ Type objective_function<Type>::operator() ()
   REPORT(MKMat);      // (nlen + 1) x ngtg M/K used in GTG survival
   REPORT(nsex);
   REPORT(Linf_m);
+  REPORT(Mk_m);
+  REPORT(CVL_m);
   REPORT(gtgLinfs_m);
   REPORT(plen_sex);   // nlen x nyear x ngear x 2 (nsex = 2)
   REPORT(N_y_m);
@@ -1167,7 +1179,7 @@ Type objective_function<Type>::operator() ()
   ADREPORT(log_Galpha);
   ADREPORT(log_Mk);
   ADREPORT(log_sigmaF);
-  if(nsex == 2) ADREPORT(log_Linf_m);
+  if(nsex == 2) { ADREPORT(log_Linf_m); ADREPORT(log_Mk_m); ADREPORT(log_Galpha_m); }
   ADREPORT(log_spr_y);
   ADREPORT(log_epr_y);
 

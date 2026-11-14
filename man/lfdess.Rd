@@ -17,6 +17,9 @@ if named, otherwise by position, and must have one value per gear.}
 \value{
 An \code{FLQuants} with the same structure as \code{lfd}, scaled
 so that each year/iteration total over \code{len} equals the gear's ESS.
+With sex in the unit dimension, females and males (\code{F}, \code{M}) are scaled
+jointly, so the sex ratio is kept, and an unsexed part (\code{U}) separately;
+each part gets the ESS.
 Gear-years with no observations stay zero (instead of 0/0 = NaN).
 }
 \description{

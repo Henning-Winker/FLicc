@@ -59,7 +59,7 @@ td$prior_sigmaF_mean <- log(0.3); td$prior_sigmaF_sd <- 0; td$prior_sigmaF_use <
 td$FM_min <- 0.05; td$FM_max <- 4; td$FMpen_sd <- 0
 pars <- FLicc:::init_tmb_flicc(td)
 pars$log_Fk[] <- log(seq(1.5, 3, length.out = length(yrs))); pars$Sm <- c(log(25 / 60), log(4 / 60))
-drop <- c("gear_names", "year_names", "Linf_init", "Linf_m_init", "Mk_init", "CVL_init", "Galpha_init")
+drop <- c("gear_names", "year_names", "Linf_init", "Linf_m_init", "Mk_m_init", "CVL_m_init", "Mk_init", "CVL_init", "Galpha_init")
 rp <- TMB::MakeADFun(td[setdiff(names(td), drop)], pars, DLL = "FLicc", silent = TRUE)$report()
 ps <- rp$plen_sex
 sexed <- FLQuants(trawl = mkq(c("F", "M"))); uns <- FLQuants(trawl = mkq("U"))
@@ -109,6 +109,14 @@ rs <- fs$obj$report()
 cat(sprintf("survey: male Linf %.1f, SPR bias %+.2f\n", rs$Linf_m, median(rs$spr_y / rp$spr_y - 1)))
 stopifnot(fs$opt$convergence == 0, abs(rs$Linf_m - 45) < 2.5, abs(median(rs$spr_y / rp$spr_y - 1)) < 0.1,
           all(rs$catch_share[, 2] == 0), all(rs$Fk[, 2] < 1e-6))
+# life history by sex: females fixed, male Linf and M/k estimated from a wrong start
+stw2 <- stocklen_sex(lfd0, list(F = lhF, M = FLPar(linf = 52, k = 0.25, M = 0.4, L50 = 30, a = 1e-5, b = 3)),
+                     m_model = "constant")
+fl <- fiticc(lfdv, stw2, sel_fun = c("logistic", "logistic"), catch_by_gear = 1,
+             settings = list(obs_model = "mn", surveys = "survey", linf_m.sd = 0.5, Mk_m.sd = 0.5), verbose = FALSE)
+rl <- fl$obj$report()
+cat(sprintf("male Linf %.1f, male M/k %.2f (true 45, 1.2); female fixed Linf %.1f\n", rl$Linf_m, rl$Mk_m, rl$Linf))
+stopifnot(abs(rl$Linf_m - 45) < 3, abs(rl$Mk_m - 1.2) < 0.2, abs(rl$Linf - 60) < 1e-8, abs(rl$Mk - 2) < 1e-8)
 p <- plot_sexratio(fs)
 stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
 cat("sex tests passed\n")
