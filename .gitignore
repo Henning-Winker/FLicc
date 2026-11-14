@@ -1,0 +1,4 @@
+ci/tests/*.csv
+ci/tests/*.rds
+ci/tests/*.rda
+ci/tests/*.png
