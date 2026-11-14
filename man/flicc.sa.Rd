@@ -53,7 +53,11 @@ returned unchanged.}
 
 \item{lhpar}{An FLPar of life-history parameters (linf, k, M or Mk, L50,
 a, b, ...) passed to FLicc::stocklen() to build the length-bin/weight/
-maturity/M template. Static across cycles -- pass the OM's own lhpar.}
+maturity/M template. Static across cycles -- pass the OM's own lhpar.
+For a sex-structured estimator give the life history by sex (an FLPar
+with a unit dimension "F", "M", or \code{list(F = , M = )}); the OEM's sexed
+samples (unit "F", "M", "U") are then kept, \code{settings} may carry
+\code{sex_ratio}, \code{surveys} and the penalties by sex (see \code{\link[=stocklen_sex]{stocklen_sex()}}).}
 
 \item{sel_fun}{Character vector of per-gear selectivity function types
 ("logistic"/"normal"/"dsnormal"), matching gear_cfg$type per gear.}

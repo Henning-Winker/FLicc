@@ -176,4 +176,16 @@ stopifnot(inherits(combine_lfd(lfdv, c(1, 1), lhpar = lhF, ess.n = NULL), "FLQua
 stopifnot(inherits(LBIspr(fs, spr = 40, thresh = 0.75), "FLIndices"))
 p <- plot_sexratio(fs)
 stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
+# MSE estimator: flicc.sa() with sexed OEM samples and life history by sex
+# (mse::track<- replaced by a stand-in so the test runs without mse)
+`track<-` <- function(object, quant, year, value) object
+lfd2 <- FLQuants(lapply(lfdv, function(q) propagate(q, 2)))
+stk_oem <- FLQuant(0, dimnames = list(year = yrs)); attr(stk_oem, "lfd") <- lfd2
+attr(stk_oem, "catch_gear") <- FLQuants(trawl = propagate(FLQuant(1, dimnames = list(year = yrs)), 2),
+                                        survey = propagate(FLQuant(0, dimnames = list(year = yrs)), 2))
+sa <- flicc.sa(stk_oem, args = list(it = 2, ay = 2026, dy = 2025), tracking = NULL,
+               lhpar = list(F = lhF, M = lhM), sel_fun = c("logistic", "logistic"),
+               settings = list(CVL = 0.1, GL = 30, pop_model = "gtg", obs_model = "mn", ngtg = 13, maxsd = 3,
+                               surveys = "survey", sex_ratio = 0.5), lbi = "spr", ess.g = NULL)
+stopifnot(all(is.finite(an(sa$ind$SPR))), abs(median(an(sa$ind$SPR[, ac(2025)])) / rp$spr_y[length(yrs)] - 1) < 0.15)
 cat("sex tests passed\n")

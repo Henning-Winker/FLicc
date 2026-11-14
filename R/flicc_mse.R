@@ -521,6 +521,10 @@ hcr_sprlbi <- function(fit, gear,
 #' @param lhpar An FLPar of life-history parameters (linf, k, M or Mk, L50,
 #'   a, b, ...) passed to FLicc::stocklen() to build the length-bin/weight/
 #'   maturity/M template. Static across cycles -- pass the OM's own lhpar.
+#'   For a sex-structured estimator give the life history by sex (an FLPar
+#'   with a unit dimension "F", "M", or `list(F = , M = )`); the OEM's sexed
+#'   samples (unit "F", "M", "U") are then kept, `settings` may carry
+#'   `sex_ratio`, `surveys` and the penalties by sex (see [stocklen_sex()]).
 #' @param sel_fun Character vector of per-gear selectivity function types
 #'   ("logistic"/"normal"/"dsnormal"), matching gear_cfg$type per gear.
 #' @param catch_by_gear Fallback only, used when attr(stk, "catch_gear") is
@@ -639,7 +643,19 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
   if (is.null(lfd))
     stop("attr(stk, 'lfd') is NULL -- flicc.sa() must be paired with a ",
          "length-sampling OEM (e.g. sampling.lfd.oem()) that attaches lfd to stk.")
-  lfd <- FLQuants(lapply(lfd, unitSums))
+  # sex-structured estimator: life history by sex (FLPar with unit F, M, or
+  # list(F = , M = )); the OEM's sexed samples (unit F, M, U) are kept
+  two_sex <- (is.list(lhpar) && !isS4(lhpar) && all(c("F", "M") %in% names(lhpar))) ||
+    ("unit" %in% names(dimnames(lhpar)) && all(c("F", "M") %in% dimnames(lhpar)$unit))
+  if (two_sex) {
+    lfd <- FLQuants(lapply(lfd, function(x) {
+      un <- dimnames(x)$unit
+      if (any(c("F", "M") %in% un)) return(x)
+      z <- unitSums(x); dimnames(z)$unit <- "U"; z
+    }))
+  } else {
+    lfd <- FLQuants(lapply(lfd, unitSums))
+  }
   if (!is.null(ess.g)) lfd <- FLicc::lfdess(lfd, ess.g = ess.g)
 
   # --- Catch split: OEM-sampled shares preferred over static fallback ------
@@ -690,7 +706,8 @@ flicc.sa <- function(stk, idx = NULL, args, tracking,
   if (is.null(settings$tail_warning)) settings$tail_warning <- verbose   # no warnings per iteration and year
   fit_one <- function(i) {
     lfd_i    <- iter(FLQuants(lfd), i)
-    stklen_i <- stocklen(lfd_i, lhpar = lhpar, m_model = m_model)
+    stklen_i <- if (two_sex) stocklen_sex(lfd_i, lhpar, m_model = m_model) else
+      stocklen(lfd_i, lhpar = lhpar, m_model = m_model)
     cbg_i    <- iter(catch_by_gear, i)
 
     do_fit <- function(sf) {
