@@ -28,10 +28,46 @@ comp_data_flicc <- function(fit) {
     p <- pmax(p / sum(p), 1e-12); p <- p / sum(p)
     a0 <- if (!is.null(rp$dm_alpha0) && rp$dm_alpha0[y, g] > 0) rp$dm_alpha0[y, g] else n
     out[[length(out) + 1]] <- list(gear = td$gear_names[g], year = td$year_names[y],
-                                   len = Lb, lmid = Lm, obs = o, p = p, n = n, a0 = a0)
+                                   len = Lb, lmid = Lm, obs = o, p = p, n = n, a0 = a0,
+                                   part = "U", sexcell = NULL)
+  }
+  # sexed compositions (nsex = 2), as in the likelihood: joint F + M (SS3
+  # code 3) or one sex (codes 1, 2); cells carry their sex in 'sexcell'
+  if (!is.null(td$nsex) && td$nsex == 2L) {
+    pl <- tryCatch(fit$obj$env$parList(fit$obj$env$last.par.best), error = function(e) NULL)
+    log_dm <- if (!is.null(pl$log_dm)) pl$log_dm else rep(0, ngear)
+    dmt <- if (!is.null(td$dm_type)) td$dm_type else 0L
+    ps <- rp$plen_sex
+    for (g in seq_len(ngear)) for (y in seq_len(nyear)) {
+      st <- td$sex_type[y, g]
+      if (st == 0L) next
+      sx <- switch(st, 1L, 2L, 1:2)
+      o <- unlist(lapply(sx, function(k) as.numeric(tapply(td$obs_sex[seq_len(nkeep), y, g, k], grp, sum))))
+      p <- unlist(lapply(sx, function(k) as.numeric(tapply(ps[seq_len(nkeep), y, g, k], grp, sum))))
+      n <- sum(o)
+      if (!(n > 0) || !(sum(p) > 0)) next
+      p <- pmax(p / sum(p), 1e-12); p <- p / sum(p)
+      a0 <- switch(as.character(dmt), "1" = exp(log_dm[g]) * n, "2" = exp(log_dm[g]), n)
+      out[[length(out) + 1]] <- list(gear = td$gear_names[g], year = td$year_names[y],
+                                     len = rep(Lb, length(sx)), lmid = rep(Lm, length(sx)),
+                                     obs = o, p = p, n = n, a0 = a0,
+                                     part = c("F", "M", "F+M")[st], sexcell = rep(c("F", "M")[sx], each = nb))
+    }
   }
   phi <- tryCatch(exp(fit$obj$env$parList()$log_phi), error = function(e) NA_real_)
-  list(comp = out, obs_model = fit$obs_model, phi = phi)
+  list(comp = out, obs_model = fit$obs_model, phi = phi,
+       nsex = if (!is.null(td$nsex)) td$nsex else 1L)
+}
+
+# panel labels for sex-structured fits: "gear" for unsexed compositions,
+# "gear F" / "gear M" for the sexed cells (one-sex fits unchanged)
+sex_panels_flicc <- function(d, gear_levels) {
+  if (is.null(d$sex)) return(list(d = d, levels = gear_levels))
+  lab <- ifelse(d$sex == "U", as.character(d$gear), paste(d$gear, d$sex))
+  lev <- unlist(lapply(gear_levels, function(g) c(g, paste(g, "F"), paste(g, "M"))))
+  lev <- lev[lev %in% lab]
+  d$gear <- factor(lab, levels = lev)
+  list(d = d, levels = lev)
 }
 
 # integer year axis
@@ -78,7 +114,9 @@ pbetabinom_flicc <- function(x, N, a, b) {
 #' @param seed Random seed for the randomization of the OSA residuals.
 #' @return A data frame with gear, year, len (lower bound of the bin), lmid,
 #'   obs, exp (expected count n p), n (sample size of the composition) and
-#'   resid.
+#'   resid; for sex-structured fits also `sex` (`"U"` unsexed, `"F"`, `"M"`).
+#'   Sexed compositions are decomposed as in the likelihood: a joint F + M
+#'   composition over its female then male cells.
 #' @examples
 #' \dontrun{
 #' r <- resid_flicc(fit, type = "osa")
@@ -126,8 +164,10 @@ resid_flicc <- function(fit, type = c("pearson", "osa"), seed = 1) {
         }
       }
     }
-    data.frame(gear = z$gear, year = z$year, len = z$len, lmid = z$lmid, obs = o,
-               exp = n * p, n = n, resid = r)
+    d <- data.frame(gear = z$gear, year = z$year, len = z$len, lmid = z$lmid, obs = o,
+                    exp = n * p, n = n, resid = r)
+    if (cd$nsex == 2L) d$sex <- if (is.null(z$sexcell)) "U" else z$sexcell
+    d
   })
   out <- do.call(rbind, rows)
   out$gear <- factor(out$gear, levels = fit$tmb_data$gear_names)
@@ -166,6 +206,7 @@ plot_resid_bubble <- function(x, type = c("pearson", "osa"), cohorts = FALSE, co
   if (!is.data.frame(x)) { fit <- x; x <- resid_flicc(fit, type = type) }
   type <- if (!is.null(attr(x, "type"))) attr(x, "type") else type
   d <- x[is.finite(x$resid), ]
+  d <- sex_panels_flicc(d, if (is.factor(d$gear)) levels(d$gear) else unique(as.character(d$gear)))$d
   d$year <- as.numeric(as.character(d$year))
   d$sign <- factor(ifelse(d$resid >= 0, "positive", "negative"), levels = c("positive", "negative"))
   p <- ggplot2::ggplot(d, ggplot2::aes(year, lmid))
@@ -204,6 +245,7 @@ plot_resid_bubble <- function(x, type = c("pearson", "osa"), cohorts = FALSE, co
 plot_resid_qq <- function(x) {
   if (!is.data.frame(x)) x <- resid_flicc(x, type = "osa")
   d <- x[is.finite(x$resid), ]
+  d <- sex_panels_flicc(d, if (is.factor(d$gear)) levels(d$gear) else unique(as.character(d$gear)))$d
   ggplot2::ggplot(d, ggplot2::aes(sample = resid)) +
     ggplot2::stat_qq(size = 0.8, alpha = 0.5) + ggplot2::stat_qq_line(colour = "#D6604D") +
     ggplot2::facet_wrap(~gear) +
@@ -278,6 +320,11 @@ plot_resid_len <- function(x, type = c("pearson", "osa"), year = NULL, gear = NU
   d$L <- if (!is.null(d$lmid)) as.numeric(d$lmid) else as.numeric(as.character(d$len))
   d$year <- as.character(d$year)
   gear_levels <- if (is.factor(d$gear)) levels(d$gear) else unique(as.character(d$gear))
+  if (!is.null(gear) && !is.null(d$sex)) {
+    gsel <- if (is.numeric(gear)) gear_levels[gear] else as.character(gear)
+    d <- d[d$gear %in% gsel, ]; gear <- NULL
+  }
+  sp <- sex_panels_flicc(d, gear_levels); d <- sp$d; gear_levels <- sp$levels
   d$gear <- as.character(d$gear)
 
   # selection as in plot_len()
@@ -386,10 +433,12 @@ lmean_resid_flicc <- function(fit) {
                 nb = 1 + n * sum(z$p^2 * (L - ex)^2) / max(cd$phi * vl, 1e-12), 1)
     se <- sqrt(vl / n * f)
     ob <- sum(L * z$obs) / n
-    data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), obs = ob, exp = ex, se = se,
-               z = (ob - ex) / se)
+    data.frame(gear = if (z$part == "U") z$gear else paste(z$gear, z$part),
+               year = as.numeric(as.character(z$year)), obs = ob, exp = ex, se = se, z = (ob - ex) / se)
   }))
-  tab$gear <- factor(tab$gear, levels = fit$tmb_data$gear_names)
+  gl <- fit$tmb_data$gear_names
+  gl <- unlist(lapply(gl, function(g) c(g, paste(g, c("F+M", "F", "M")))))
+  tab$gear <- factor(tab$gear, levels = gl[gl %in% tab$gear])
   runs <- do.call(rbind, lapply(split(tab, tab$gear), function(d) {
     if (!nrow(d)) return(NULL)
     pv <- runs_test_flicc(d$z)
@@ -480,7 +529,8 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
     if (is.null(Lc)) stop("Covariance of the parameters is not positive definite.")
     lapply(seq_len(nsim), function(i) {
       th <- est + as.numeric(stats::rnorm(length(est)) %*% Lc)
-      fit$obj$report(th)$plen
+      r <- fit$obj$report(th)
+      list(plen = r$plen, plen_sex = r$plen_sex)
     })
   } else NULL
   cd_list <- cd$comp
@@ -492,23 +542,42 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
   nb <- if (plus >= 0 && plus < nkeep) plus + 1 else nkeep
   grp <- pmin(seq_len(nkeep), nb)
   sims_lfd <- list()
+  glab <- function(z) if (is.null(z$part) || z$part == "U") z$gear else paste(z$gear, z$part)
   rows <- lapply(cd_list, function(z) {
     gi <- match(z$gear, td$gear_names); yi <- match(z$year, td$year_names)
     n <- z$n; K <- length(z$p)
+    sxi <- if (is.null(z$sexcell)) NULL else match(unique(z$sexcell), c("F", "M"))
     cnts <- matrix(vapply(seq_len(nsim), function(i) {
       p <- if (is.null(p_draws)) z$p else {
-        pp <- as.numeric(tapply(p_draws[[i]][seq_len(nkeep), yi, gi], grp, sum)); pmax(pp / sum(pp), 1e-12)
+        pp <- if (is.null(sxi)) as.numeric(tapply(p_draws[[i]]$plen[seq_len(nkeep), yi, gi], grp, sum)) else
+          unlist(lapply(sxi, function(k) as.numeric(tapply(p_draws[[i]]$plen_sex[seq_len(nkeep), yi, gi, k], grp, sum))))
+        pmax(pp / sum(pp), 1e-12)
       }
       as.numeric(switch(om,
         nb = stats::rnbinom(K, mu = n * p, size = cd$phi),
         dm = { a <- stats::rgamma(K, shape = z$a0 * p); stats::rmultinom(1, round(n), a / sum(a))[, 1] },
         stats::rmultinom(1, round(n), p)[, 1]))
     }, numeric(K)), nrow = K)
-    sims_lfd[[length(sims_lfd) + 1]] <<- list(gear = z$gear, year = as.character(z$year), len = z$len,
-                                              lmid = z$lmid, obs = z$obs, sim = cnts)
-    sims <- matrix(apply(cnts, 2, stats_of, L = z$lmid, lb = z$len), nrow = 4)
-    ob <- stats_of(z$obs, z$lmid, z$len)
-    data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), stat = names(ob), obs = ob,
+    if (is.null(z$sexcell)) {
+      sims_lfd[[length(sims_lfd) + 1]] <<- list(gear = z$gear, year = as.character(z$year), len = z$len,
+                                                lmid = z$lmid, obs = z$obs, sim = cnts)
+      Ls <- z$lmid; lbs <- z$len; tot <- function(v) v
+    } else {
+      # sexed composition: the predictive distribution by sex for the plots,
+      # and the statistics on the sexed sample with sexes summed
+      for (sxl in unique(z$sexcell)) {
+        k <- z$sexcell == sxl
+        sims_lfd[[length(sims_lfd) + 1]] <<- list(gear = paste(z$gear, sxl), year = as.character(z$year),
+                                                  len = z$len[k], lmid = z$lmid[k], obs = z$obs[k],
+                                                  sim = cnts[k, , drop = FALSE])
+      }
+      k1 <- z$sexcell == z$sexcell[1]
+      Ls <- z$lmid[k1]; lbs <- z$len[k1]
+      tot <- function(v) as.numeric(tapply(v, rep(seq_len(sum(k1)), length.out = length(v)), sum))
+    }
+    sims <- matrix(apply(cnts, 2, function(v) stats_of(tot(v), L = Ls, lb = lbs)), nrow = 4)
+    ob <- stats_of(tot(z$obs), Ls, lbs)
+    data.frame(gear = glab(z), year = as.numeric(as.character(z$year)), stat = names(ob), obs = ob,
                lo = apply(sims, 1, stats::quantile, 0.025, na.rm = TRUE),
                med = apply(sims, 1, stats::median, na.rm = TRUE),
                hi = apply(sims, 1, stats::quantile, 0.975, na.rm = TRUE),
@@ -517,7 +586,8 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
   tab <- do.call(rbind, rows)
   tab <- tab[is.finite(tab$obs), ]
   tab$outside <- tab$obs < tab$lo | tab$obs > tab$hi
-  tab$gear <- factor(tab$gear, levels = td$gear_names)
+  glev <- unlist(lapply(td$gear_names, function(g) c(g, paste(g, c("F+M", "F", "M")))))
+  tab$gear <- factor(tab$gear, levels = glev[glev %in% tab$gear])
   tab$stat <- factor(tab$stat, levels = c("Lmean", "L95", "Pmat", "Lmax"))
   cov <- stats::aggregate(outside ~ gear + stat, data = tab, FUN = function(v) round(mean(v), 2))
   names(cov)[3] <- "share_outside_95"
@@ -531,8 +601,10 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
     ggplot2::labs(x = "Year", y = NULL,
                   title = paste0("Posterior predictive check (", if (isTRUE(par_draws)) "with parameter uncertainty" else "plug-in", ")")) +
     ggplot2::theme_bw() + ggplot2::theme(legend.position = "bottom")
+  slev <- unlist(lapply(td$gear_names, function(g) c(g, paste(g, c("F", "M")))))
+  slev <- slev[slev %in% vapply(sims_lfd, `[[`, "", "gear")]
   out <- structure(list(table = tab, coverage = cov, plot = p, sims = sims_lfd,
-                        gear_names = td$gear_names, par_draws = isTRUE(par_draws), nsim = nsim),
+                        gear_names = slev, par_draws = isTRUE(par_draws), nsim = nsim),
                    class = "flicc_ppc")
   lb <- ppc_lfd_table(out)
   out$coverage_bins <- stats::aggregate(outside ~ gear, data = lb, FUN = function(v) round(mean(v), 2))

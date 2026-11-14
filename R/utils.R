@@ -169,6 +169,18 @@ as_FLQuants <- function(fit,stklen) {
   }))
   names(out$predlen_gear) <- gears
 
+  # sexed compositions (nsex = 2): observed counts and predicted proportions
+  # by sex (unit F, M); predicted proportions are shares of the gear's catch
+  # (or survey sample) over both sexes
+  if (!is.null(tmb_data$nsex) && tmb_data$nsex == 2L && !is.null(report$plen_sex)) {
+    sexq <- function(a) FLCore::FLQuants(stats::setNames(lapply(seq_along(gears), function(x)
+      FLCore::FLQuant(a[, , x, , drop = TRUE],
+                      dimnames = list(len = lens, year = yrs, unit = c("F", "M"), season = "all",
+                                      area = "unique", iter = "1"), units = "cm")), gears))
+    out$obslen_sex  <- sexq(tmb_data$obs_sex)
+    out$predlen_sex <- sexq(report$plen_sex)
+  }
+
 
 
     dat <- report$plen_all_y

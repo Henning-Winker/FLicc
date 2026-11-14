@@ -357,6 +357,28 @@ plot_len <- function(fit,
   obs_flqs <- fit$report$obslen
   fit_flqs <- fit$report$predlen_gear
 
+  # sex-structured fits, by gear: one panel per gear for the unsexed
+  # composition (if any) and one per sex for the sexed compositions, each a
+  # composition within the panel (sex ratios: plot_sexratio())
+  if (isTRUE(by_gear) && !is.null(fit$report$obslen_sex)) {
+    gsel0 <- names(obs_flqs)
+    if (!is.null(gear)) gsel0 <- if (is.numeric(gear)) gsel0[gear] else as.character(gear)
+    po <- list(); pf <- list()
+    for (g in gsel0) {
+      if (sum(obs_flqs[[g]], na.rm = TRUE) > 0) { po[[g]] <- obs_flqs[[g]]; pf[[g]] <- fit_flqs[[g]] }
+      for (sx in c("F", "M")) {
+        o <- fit$report$obslen_sex[[g]][, , sx]
+        if (!(sum(o, na.rm = TRUE) > 0)) next
+        f <- fit$report$predlen_sex[[g]][, , sx]
+        f <- f %/% apply(f, 2:6, sum); f[!is.finite(f)] <- 0
+        nm <- paste(g, sx)
+        po[[nm]] <- o; pf[[nm]] <- f
+      }
+    }
+    obs_flqs <- FLCore::FLQuants(po); fit_flqs <- FLCore::FLQuants(pf)
+    gear <- NULL
+  }
+
   gear_labels <- names(obs_flqs)
   if (is.null(gear_labels) || any(gear_labels == "")) {
     stop("fit$report$obslen must be a named FLQuants object.")

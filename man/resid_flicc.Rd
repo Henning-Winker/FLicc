@@ -16,7 +16,9 @@ resid_flicc(fit, type = c("pearson", "osa"), seed = 1)
 \value{
 A data frame with gear, year, len (lower bound of the bin), lmid,
 obs, exp (expected count n p), n (sample size of the composition) and
-resid.
+resid; for sex-structured fits also \code{sex} (\code{"U"} unsexed, \code{"F"}, \code{"M"}).
+Sexed compositions are decomposed as in the likelihood: a joint F + M
+composition over its female then male cells.
 }
 \description{
 Computes residuals of the observed length compositions by gear, year and
