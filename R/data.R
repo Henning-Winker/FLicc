@@ -189,3 +189,32 @@ NULL
 #'               settings = list(CVL = 0.1, obs_model = "mn"))
 #' }
 NULL
+
+
+#' Simulated sex-dimorphic stock
+#'
+#' Length frequencies of a simulated stock in which females grow larger and
+#' more slowly than males (female Linf 60, k 0.15; male Linf 45, k 0.25;
+#' M = 0.3 for both; 50% females at recruitment), with fishing mortality
+#' rising over 2011-2025. One trawl fishery with unsexed samples (400 fish a
+#' year, dome-shaped selectivity) and one survey with sexed samples (250 fish
+#' a year from 2016, females and males in the same sample, logistic
+#' selectivity). Simulated from the FLicc sex-structured model
+#' (`inst/extdata/make_sexsim.R`). Used in the guide chapter on sex
+#' structure and in the tests.
+#'
+#' @name sexsim
+#' @docType data
+#' @usage data(sexsim)
+#' @format The dataset loads three objects:
+#' \describe{
+#'   \item{\code{lfd_sexsim}}{`FLQuants` with gears `Trawl` (unit `U`) and
+#'     `Survey` (units `F`, `M`), length classes 2-80 cm (2 cm), 2011-2025.}
+#'   \item{\code{lhpar_sexsim}}{`FLPar` of the true life history by sex
+#'     (params x unit `F`, `M`).}
+#'   \item{\code{truth_sexsim}}{`data.frame` with the true SPR (female
+#'     spawning potential), F/k and F by year.}
+#' }
+#' @source Simulated with FLicc.
+#' @author Henning Winker
+NULL

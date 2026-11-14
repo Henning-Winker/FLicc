@@ -1,0 +1,183 @@
+# Sex structure
+
+Many stocks are sexually dimorphic: in anglerfish, hake or many flatfish, females grow larger and live
+longer than males. A one-sex model fitted to the combined lengths then reads the many small
+males as heavy fishing, and status, which is about female spawning, is biased. FLicc's
+sex-structured option models females and males as two growth-type-group populations that share
+fishing mortality and selectivity, each with its own growth, natural mortality, weight and
+maturity, and fits length samples that are combined, sexed or both, as in Stock Synthesis.
+
+The example is a simulated stock (`data(sexsim)`): females reach Linf 60 cm with k 0.15, males
+45 cm with k 0.25, M = 0.3 for both. A trawl fishery has unsexed samples; a survey has sexed
+samples from 2016.
+
+```{r sex-data}
+data(sexsim)
+lhpar_sexsim
+lapply(lfd_sexsim, function(q) dimnames(q)$unit)
+```
+
+## Length data by sex
+
+Sex is carried in the FLR `unit` dimension of each gear's length frequencies, with levels `F`,
+`M` and `U` (unsexed; `unique` is read as unsexed). For each gear and year FLicc reads which
+sexes have counts and uses the composition in the same way as Stock Synthesis:
+
+| Stock Synthesis gender code | units with counts | compared with |
+|---|---|---|
+| 0 | `U` | the predicted composition of females and males together |
+| 1 | `F` only | the composition within females |
+| 2 | `M` only | the composition within males |
+| 3 | `F` and `M` | one joint composition over length and sex: the sex ratio at length is information |
+
+Combined and sexed samples can sit in the same gear-year (partly sexed samples), and gears and
+years can differ. A long table with a `sex` column (F, M, U; female, male, unsexed; or the SS3
+codes 1, 2, 0) is converted as usual:
+
+```{r sex-long, eval = FALSE}
+lfd <- FLQuantLen(lfd_long_to_wide(df_long_with_sex), unit = "cm")
+```
+
+`lfdess()` rescales females and males of a sample together, so the sex ratio is kept, and
+unsexed fish separately.
+
+## Life history by sex
+
+`stocklen_sex()` builds one stock object per sex from an `FLPar` with a `unit` dimension (as
+returned by `ss3diags2::ss3_lhpar()`) or from `list(F = , M = )`. The female stock is the
+reference: SPR is female spawning potential and F is scaled by the female k.
+
+```{r sex-stock}
+stk_sex <- stocklen_sex(lfd_sexsim, lhpar_sexsim, m_model = "constant")
+plot_growth(stk_sex, sex = "M")
+```
+
+## Fitting
+
+Gears named in `settings$surveys` are surveys: their composition is the population seen through
+the survey's selectivity, with no fishing mortality and no share of the catch, so
+`catch_by_gear` is given for the fishery gears only. `settings$sex_ratio` is the proportion of
+females at recruitment (default 0.5).
+
+Four fits show what the sex structure buys. The first ignores sex (female life history, trawl
+only); the second models both sexes from the unsexed trawl samples; the third adds the sexed
+survey. The fourth starts from a wrong male Linf (52 instead of 45) and estimates it with a
+penalty:
+
+```{r sex-fits}
+sf2 <- c("dsnormal", "logistic")
+lh_F <- FLPar(lhpar_sexsim@.Data[, "F", 1], params = dimnames(lhpar_sexsim)$params)
+lh_Mw <- FLPar(lhpar_sexsim@.Data[, "M", 1], params = dimnames(lhpar_sexsim)$params)
+lh_Mw["linf"] <- 52
+set_s <- list(obs_model = "mn", surveys = "Survey")
+
+trawl_U <- FLQuants(Trawl = lfd_sexsim$Trawl[, , "U"])
+fit_1sex <- fiticc(trawl_U, stocklen(trawl_U, lh_F, m_model = "constant"), sel_fun = "dsnormal",
+                   catch_by_gear = 1, settings = list(obs_model = "mn"))
+fit_2sex_U <- fiticc(FLQuants(Trawl = lfd_sexsim$Trawl), stocklen_sex(trawl_U, lhpar_sexsim, m_model = "constant"),
+                     sel_fun = "dsnormal", catch_by_gear = 1, settings = list(obs_model = "mn"))
+fit_sex <- fiticc(lfd_sexsim, stk_sex, sel_fun = sf2, catch_by_gear = 1, settings = set_s)
+fit_sex_est <- fiticc(lfd_sexsim, stocklen_sex(lfd_sexsim, list(F = lh_F, M = lh_Mw), m_model = "constant"),
+                      sel_fun = sf2, catch_by_gear = 1, settings = modifyList(set_s, list(linf_m.sd = 0.3)))
+
+runs <- list(one_sex = fit_1sex, two_sex_trawl = fit_2sex_U, two_sex_survey = fit_sex,
+             male_Linf_est = fit_sex_est)
+tab <- data.frame(year = truth_sexsim$year, true = round(truth_sexsim$spr, 3),
+                  sapply(runs, function(f) round(as.numeric(f$report$spr), 3)))
+tail(tab, 5)
+fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
+```
+
+The one-sex fit underestimates SPR most, because the small males are read as heavy fishing.
+Modelling both sexes with their life history reduces the bias even from unsexed samples, and the
+sexed survey reduces it further: it informs the selectivity of small fish and the sex ratio at
+length, and with it the male growth, so that the estimated male Linf moves from 52 back to about
+45. All fits are lowest in the last years, where the equilibrium model lags the rising F
+(chapter *Fishing mortality over time*).
+
+**Life-history penalties by sex.** Linf, M/k and CVL are separate parameters for each sex, each
+fixed at its input unless a penalty (prior SD on the log scale) is given:
+
+| | females | males |
+|---|---|---|
+| Linf | `linf.sd` | `linf_m.sd` |
+| M/k | `Mk.sd` | `Mk_m.sd` |
+| CVL | `CVL.sd` | `CVL_m.sd` (input `CVL_m`, default `CVL`) |
+
+One sex can be fixed while the other is estimated. Sexed samples, especially joint female and
+male samples, carry the information; with unsexed data only, the male parameters are weakly
+determined and are best kept fixed or under informative penalties. M/k is usually best fixed.
+
+## Diagnostics by sex
+
+`plot_sexratio()` compares the observed proportion of females at length in the joint samples
+with the prediction. The prediction follows from the growth and M of each sex and the sex ratio
+at recruitment; a rising share of females at large lengths is the usual signature of females
+growing larger. Observed proportions above or below the line over a range of lengths point to
+male growth, M by sex or the sex ratio; misfit only at small lengths often reflects small fish
+that could not be sexed.
+
+```{r sex-ratio, fig.height = 3.5}
+plot_sexratio(fit_sex)
+```
+
+The length fits, residuals and predictive checks include the sexed samples, with one panel per
+gear and sex:
+
+```{r sex-len, fig.height = 6}
+plot_len(fit_sex, by_gear = TRUE, year = 2021:2025)
+plot_resid_bubble(fit_sex, type = "osa")
+```
+
+## Status and reference points
+
+Spawning potential is female spawning output; yield sums both sexes. `eqstklen()`,
+`plot_eqcurves()`, `flicc2FLStockR()` and `flicc_stklen()` return ordinary one-unit FLR objects
+in which catch is that of both sexes and SSB the female spawning biomass (with a catch-weighted
+mean weight and an effective maturity at length), so all FLR tools work unchanged. Contours,
+EPR and the Monte Carlo (`mc_flicc()`, life history of both sexes drawn with the same relative
+deviations) use both sexes as well.
+
+```{r sex-eq, fig.height = 5}
+eq_sex <- eqstklen(fit_sex, s = 0.75)
+attr(eq_sex, "refpts")
+plot_eqcurves(eq_sex)
+```
+
+## Indicators by sex
+
+`lbi_flicc()` computes the empirical indicators for each sex from its own samples and life
+history (`sex = "each"`, the default with sexed data; gears labelled "gear F", "gear M"),
+for one sex, or for all fish together (`sex = "total"`, with pooling by catch):
+
+```{r sex-lbi, fig.height = 5}
+plot_lbi(lbi_flicc(fit_sex))
+```
+
+## Model
+
+For each sex $s$ the growth-type-group recursion of chapter *Model equations* runs with the
+sex's own $L_{\infty,s}$, CVL$_s$ and $M_s/k_s$. Fishing mortality at length is shared,
+$F(L) = \sum_g F_g S_g(L)$; in the units of each sex's growth it is $F(L)/k_s$, i.e. FLicc's
+$F/k$ (female) times $k_F/k_s$. Numbers per recruit in a length class are integrals over the time
+spent in it, so the male numbers are put on the female time scale by $k_F/k_M$, and recruits
+are split by the sex ratio $\rho$ (proportion female):
+$$
+N(L) = \rho\, N_F(L) + (1-\rho)\,\frac{k_F}{k_M}\, N_M(L),
+\qquad C_g(L) = N(L)\, F_g S_g(L).
+$$
+A combined composition is compared with $C_g(L)/\sum_L C_g(L)$; a joint sexed composition with
+the cells $\rho N_F(L) F_g S_g(L)$ and $(1-\rho)(k_F/k_M) N_M(L) F_g S_g(L)$, normalised over
+both sexes; a one-sex composition within that sex. Surveys replace $F_g S_g(L)$ by $S_g(L)$.
+SPR is female: $\sum_L N_F(L)\,m_F(L)\,w_F(L)$ fished over unfished. Yield per recruit sums
+$\rho$ times the female and $1-\rho$ times the male yield.
+
+## Notes and limits
+
+- Fishing mortality and selectivity are shared by the sexes; differences in availability by
+  sex (a selectivity offset) are not modelled yet.
+- The sex structure is available for the growth-type-group model (`pop_model = "gtg"`).
+- Sexing that depends on length (small fish left unsexed) is handled only in so far as the
+  unsexed fish enter as a combined composition; the sexed composition assumes sexing is random
+  within a length class.
+- `flicc.sa()` runs the sex-structured estimator in MSE when `lhpar` is given by sex.
