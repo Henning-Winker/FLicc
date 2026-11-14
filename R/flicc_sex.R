@@ -224,3 +224,15 @@ lfd_from_fit_flicc <- function(fit) {
   })
   FLCore::FLQuants(stats::setNames(out, names(r$obslen)))
 }
+
+# observed length compositions of all fish measured per gear: unsexed plus
+# sexed samples (sexes summed); the one-sex observed compositions otherwise
+# (internal; used by the model-based indicators)
+obslen_all_flicc <- function(fit) {
+  r <- fit$report
+  if (is.null(r$obslen_sex)) return(r$obslen)
+  FLCore::FLQuants(stats::setNames(lapply(names(r$obslen), function(g) {
+    z <- FLCore::unitSums(r$obslen_sex[[g]]); dimnames(z)$unit <- "unique"
+    r$obslen[[g]] + z
+  }), names(r$obslen)))
+}

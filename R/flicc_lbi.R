@@ -173,6 +173,14 @@ lbi_table_def <- function() {
 #' @param ref_years Optional reference years for indicators relative to a
 #'   historical reference period.
 #' @param Lopt `"wklife"` (2/3 Linf, default) or `"mk"` (Linf 3/(3 + M/k)).
+#' @param sex For sexed length data (unit `F`, `M`, `U`; or a sex-structured
+#'   fit): `"each"` (default with sexed data) computes the indicators for each
+#'   sex from its own samples and life history (gears labelled "gear F",
+#'   "gear M"; unsexed samples as "gear" with the female life history);
+#'   `"F"` or `"M"` one sex only; `"total"` all fish together with the female
+#'   life history (and pooling by catch). `lhpar` can then be an `FLPar` with
+#'   a unit dimension or `list(F = , M = )`; with a fit, the female and the
+#'   (fitted) male life history are used.
 #' @param limits Optional named numeric vector replacing limits (orange/red
 #'   boundary) by ratio name, e.g. `c("Lmean/LFM" = 0.85, Pmega = 0.1)`.
 #' @return A list of class `"flicc_lbi"`: `values` (one row per gear and year),
@@ -207,9 +215,61 @@ lbi_table_def <- function() {
 #' @export
 lbi_flicc <- function(x, lhpar = NULL, gear = NULL, years = NULL, pool = !is.null(catch_by_gear),
                       catch_by_gear = NULL, catch_units = NULL,
-                      ref_years = NULL, Lopt = c("wklife", "mk"), limits = NULL) {
+                      ref_years = NULL, Lopt = c("wklife", "mk"), limits = NULL, sex = NULL) {
   Lopt <- match.arg(Lopt)
   is_fit <- is.list(x) && !is.null(x$tmb_data) && !is.null(x$report)
+
+  # ---- sex: sexed samples (unit F/M) by sex with the life history of each sex ----
+  lfd0 <- if (is_fit) lfd_from_fit_flicc(x) else x
+  sexed <- inherits(lfd0, "FLQuants") && any(vapply(lfd0, function(q) any(c("F", "M") %in% dimnames(q)$unit), logical(1)))
+  if (sexed) {
+    lhs <- if (is_fit) {
+      lf <- x$report$lhpar
+      lm <- if (!is.null(x$stklen_m)) x$stklen_m@lhpar else lf
+      if (!is.null(x$report$lhpar_m)) { lm["linf"] <- as.numeric(x$report$lhpar_m["linf"])
+        if ("Mk" %in% dimnames(lm)$params) lm["Mk"] <- as.numeric(x$report$lhpar_m["Mk"]) }
+      list(F = if (is.null(lhpar)) lf else lhpar, M = lm)
+    } else if (is.null(lhpar)) stop("lhpar is needed.") else
+      if ((is.list(lhpar) && !isS4(lhpar)) || "unit" %in% names(dimnames(lhpar))) sex_lhpar_flicc(lhpar) else list(F = lhpar, M = lhpar)
+    if (is.null(sex)) sex <- "each"
+    sex <- match.arg(sex, c("each", "total", "F", "M"))
+    if (is_fit && isTRUE(pool) && is.null(catch_by_gear)) catch_by_gear <- x$report$catch_by_gear
+    if (is_fit && is.null(catch_units)) catch_units <- if (is.null(x$settings$catch_units)) "weight" else x$settings$catch_units
+    pick <- function(u) FLCore::FLQuants(Filter(Negate(is.null), lapply(lfd0, function(q) {
+      un <- dimnames(q)$unit
+      if (u == "U") { uu <- intersect(un, c("U", "unique")); if (!length(uu)) return(NULL); z <- q[, , uu] }
+      else { if (!u %in% un) return(NULL); z <- q[, , u] }
+      if (!(sum(z, na.rm = TRUE) > 0)) return(NULL)
+      dimnames(z)$unit <- "unique"; z })))
+    common <- list(gear = NULL, years = years, catch_units = catch_units, ref_years = ref_years,
+                   Lopt = Lopt, limits = limits, sex = "total")
+    if (sex == "total") {
+      lt <- FLCore::FLQuants(lapply(lfd0, function(q) { z <- FLCore::unitSums(q); dimnames(z)$unit <- "unique"; z }))
+      return(do.call(lbi_flicc, c(list(lt, lhs$F, pool = pool, catch_by_gear = catch_by_gear), common)))
+    }
+    if (isTRUE(pool)) message("lbi_flicc: pooling by catch applies to sex = \"total\"; sexes are not pooled.")
+    parts <- if (sex == "each") list(U = "F", F = "F", M = "M") else stats::setNames(list(sex), sex)
+    res <- Filter(Negate(is.null), lapply(names(parts), function(u) {
+      l <- pick(u); if (!length(l)) return(NULL)
+      if (u != "U") names(l) <- paste(names(l), u)
+      if (!is.null(gear)) l <- l[sub(" [FM]$", "", names(l)) %in% (if (is.numeric(gear)) names(lfd0)[gear] else gear)]
+      if (!length(l)) return(NULL)
+      do.call(lbi_flicc, c(list(l, lhs[[parts[[u]]]], pool = FALSE), common))
+    }))
+    if (!length(res)) stop("No compositions with data.")
+    glev <- unlist(lapply(names(lfd0), function(g) c(g, paste(g, "F"), paste(g, "M"))))
+    out <- res[[1]]
+    for (nm in c("values", "ratios", "relative")) {
+      v <- do.call(rbind, lapply(res, `[[`, nm))
+      if (!is.null(v)) { v$gear <- factor(as.character(v$gear), levels = glev[glev %in% v$gear]) }
+      out[[nm]] <- v
+    }
+    out$Lopt <- vapply(res, `[[`, 0, "Lopt"); out$linf <- vapply(res, `[[`, 0, "linf"); out$L50 <- vapply(res, `[[`, 0, "L50")
+    names(out$Lopt) <- names(out$linf) <- names(out$L50) <- vapply(res, function(r) as.character(r$values$gear[1]), "")
+    out$sex <- sex
+    return(out)
+  }
+
   if (is_fit) {
     lfd <- x$report$obslen
     if (is.null(lhpar)) lhpar <- x$report$lhpar

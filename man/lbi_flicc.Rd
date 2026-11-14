@@ -14,7 +14,8 @@ lbi_flicc(
   catch_units = NULL,
   ref_years = NULL,
   Lopt = c("wklife", "mk"),
-  limits = NULL
+  limits = NULL,
+  sex = NULL
 )
 }
 \arguments{
@@ -50,6 +51,15 @@ historical reference period.}
 
 \item{limits}{Optional named numeric vector replacing limits (orange/red
 boundary) by ratio name, e.g. \code{c("Lmean/LFM" = 0.85, Pmega = 0.1)}.}
+
+\item{sex}{For sexed length data (unit \code{F}, \code{M}, \code{U}; or a sex-structured
+fit): \code{"each"} (default with sexed data) computes the indicators for each
+sex from its own samples and life history (gears labelled "gear F",
+"gear M"; unsexed samples as "gear" with the female life history);
+\code{"F"} or \code{"M"} one sex only; \code{"total"} all fish together with the female
+life history (and pooling by catch). \code{lhpar} can then be an \code{FLPar} with
+a unit dimension or \code{list(F = , M = )}; with a fit, the female and the
+(fitted) male life history are used.}
 }
 \value{
 A list of class \code{"flicc_lbi"}: \code{values} (one row per gear and year),

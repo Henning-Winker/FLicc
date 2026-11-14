@@ -34,8 +34,8 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
     gear <- gear_names
   }
   gear <- as.character(gear)
-  yrs <- dimnames(fit$report$obslen[[1]])$year
-  lens <- dimnames(fit$report$obslen[[1]])$len
+  yrs <- dimnames(obslen_all_flicc(fit)[[1]])$year
+  lens <- dimnames(obslen_all_flicc(fit)[[1]])$len
 
   sel.pattern <- FLQuant(
     dimnames = list(
@@ -77,8 +77,8 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
   pref_out <- numeric(length(gear))
   pobs_out <- numeric(length(gear))
 
-  LFDobs <- fit$report$obslen
-  LFDref <- fit$report$obslen
+  LFDobs <- obslen_all_flicc(fit)
+  LFDref <- obslen_all_flicc(fit)
   Lref <- NULL
 
   for (i in seq_along(gear)) {
@@ -118,7 +118,7 @@ LBIspr<- function(fit, gear = NULL, spr = 40, thresh = 0.75,
 
     for(y in seq(yrs)){
     # observed gear-specific length composition
-    obs_g <- fit$report$obslen[[g]][,y]
+    obs_g <- obslen_all_flicc(fit)[[g]][,y]
 
     if (sum(obs_g[kept, ], na.rm = TRUE) <= 0) {
       next
@@ -213,7 +213,7 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
   if (!all(gear %in% gear_names))
     stop("Unknown gear name(s): ", paste(setdiff(gear, gear_names), collapse = ", "))
 
-  yrs <- dimnames(fit$report$obslen[[1]])$year
+  yrs <- dimnames(obslen_all_flicc(fit)[[1]])$year
 
   ## equilibrium numbers-at-length at the reference F
   Nref <- if (ref == "FM") {
@@ -258,7 +258,7 @@ LBImean <- function(fit, gear = NULL, ref = c("FM", "spr"), FM = 1, spr = 40,
       sum(vref[keep], na.rm = TRUE)
 
     for (y in seq_along(yrs)) {
-      obs <- c(fit$report$obslen[[g]][, y])
+      obs <- c(obslen_all_flicc(fit)[[g]][, y])
       if (sum(obs[keep], na.rm = TRUE) <= 0) next
       Lmean_obs <- sum(mid[keep] * obs[keep], na.rm = TRUE) /
         sum(obs[keep], na.rm = TRUE)

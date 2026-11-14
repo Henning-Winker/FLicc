@@ -809,7 +809,38 @@ FLQuantLen <- function(dat,midL=FALSE,unit="cm",by_len=NULL) {
 
   }))
   names(flqs) <- gear
+  # sexed data (gear labels "gear@F" etc. from lfd_long_to_wide()): one FLQuant
+  # per gear with sex in the unit dimension
+  if (any(grepl("@", gear, fixed = TRUE))) {
+    base <- sub("@.*$", "", gear); sx <- ifelse(grepl("@", gear, fixed = TRUE), sub("^.*@", "", gear), "U")
+    out <- lapply(unique(base), function(g) {
+      qs <- flqs[base == g]; us <- sx[base == g]
+      lens <- sort(unique(unlist(lapply(qs, function(q) as.numeric(dimnames(q)$len)))))
+      yrs <- sort(unique(unlist(lapply(qs, function(q) dimnames(q)$year))))
+      us <- c("U", "F", "M")[c("U", "F", "M") %in% us]
+      z <- FLQuant(0, dimnames = list(len = ac(lens), year = yrs, unit = us), units = "cm")
+      for (i in seq_along(qs)) {
+        q <- qs[[i]]; u <- sx[base == g][i]
+        z[dimnames(q)$len, dimnames(q)$year, u] <- q
+      }
+      z
+    })
+    flqs <- FLQuants(stats::setNames(out, unique(base)))
+  }
   return(flqs)
+}
+
+# sex codes to F, M, U: accepts F/M/U, female/male/unsexed/combined, SS3
+# gender codes 1/2/0 and "unique" (internal)
+sex_code_flicc <- function(x, strict = TRUE) {
+  v <- tolower(trimws(as.character(x)))
+  out <- ifelse(v %in% c("f", "female", "females", "1"), "F",
+         ifelse(v %in% c("m", "male", "males", "2"), "M",
+         ifelse(v %in% c("u", "unsexed", "combined", "both", "0", "unique", "all", "i", "indeterminate"), "U", NA)))
+  if (strict && anyNA(out))
+    stop("Unknown sex codes: ", paste(unique(x[is.na(out)]), collapse = ", "),
+         " (use F, M or U; female, male, unsexed; or SS3 codes 1, 2, 0).")
+  out
 }
 
 
@@ -836,7 +867,10 @@ FLQuantLen <- function(dat,midL=FALSE,unit="cm",by_len=NULL) {
 #' }
 #'
 #' @param df A \code{data.frame} in long format with columns
-#'   \code{len}, \code{year}, \code{data}, and \code{qname}.
+#'   \code{len}, \code{year}, \code{data}, and \code{qname}, and optionally
+#'   \code{sex} (F, M, U; female, male, unsexed; or SS3 codes 1, 2, 0) for
+#'   sex-structured fits. With a sex column, \code{FLQuantLen()} returns one
+#'   \code{FLQuant} per gear with sex in the unit dimension.
 #'
 #' @return A wide \code{data.frame} suitable as input to
 #'   \code{FLQuantLen()}.
@@ -863,6 +897,19 @@ FLQuantLen <- function(dat,midL=FALSE,unit="cm",by_len=NULL) {
 #' @export
 
 lfd_long_to_wide <- function(df) {
+  # sex (optional): a column 'sex' (or 'unit' with sex codes) is carried into
+  # the gear label as "gear@F", "gear@M", "gear@U"; FLQuantLen() turns these
+  # into the unit dimension of each gear
+  sc <- if ("sex" %in% names(df)) "sex" else if ("unit" %in% names(df) &&
+          all(sex_code_flicc(df$unit, strict = FALSE) %in% c("F", "M", "U")) &&
+          any(sex_code_flicc(df$unit, strict = FALSE) %in% c("F", "M"))) "unit" else NULL
+  if (!is.null(sc)) {
+    g0 <- if (is.factor(df$qname)) levels(df$qname) else unique(as.character(df$qname))
+    sx <- sex_code_flicc(df[[sc]])
+    lab <- paste0(as.character(df$qname), "@", sx)
+    lev <- unlist(lapply(g0, function(g) paste0(g, "@", c("U", "F", "M"))))
+    df$qname <- factor(lab, levels = lev[lev %in% lab])      # keep the gear order
+  }
   df <- df[, c("len", "year", "data", "qname")]
 
   gears <- split(df, df$qname)
@@ -1009,6 +1056,12 @@ combine_lfd <- function(lfd, catch_by_gear, lhpar = NULL, ess.n = 500, name = "f
   if (!inherits(lfd, "FLQuants")) stop("lfd must be an FLQuants (one element per gear).")
   gears <- names(lfd)
   if (is.null(gears)) gears <- names(lfd) <- paste0("gear", seq_along(lfd))
+  # sexed samples (unit F, M, U): each gear's sample stands for its whole catch,
+  # so the sexes are summed before raising by catch
+  if (any(vapply(lfd, function(q) dim(q)[3] > 1, logical(1)))) {
+    lfd <- FLQuants(stats::setNames(lapply(lfd, function(q) {
+      if (dim(q)[3] > 1) { z <- FLCore::unitSums(q); dimnames(z)$unit <- "unique"; z } else q }), gears))
+  }
   x1 <- lfd[[1]]
   dn <- dimnames(x1)
   yrs <- dn$year

@@ -8,7 +8,10 @@ lfd_long_to_wide(df)
 }
 \arguments{
 \item{df}{A \code{data.frame} in long format with columns
-\code{len}, \code{year}, \code{data}, and \code{qname}.}
+\code{len}, \code{year}, \code{data}, and \code{qname}, and optionally
+\code{sex} (F, M, U; female, male, unsexed; or SS3 codes 1, 2, 0) for
+sex-structured fits. With a sex column, \code{FLQuantLen()} returns one
+\code{FLQuant} per gear with sex in the unit dimension.}
 }
 \value{
 A wide \code{data.frame} suitable as input to

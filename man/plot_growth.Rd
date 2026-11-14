@@ -12,7 +12,8 @@ plot_growth(
   maxage = NULL,
   t0 = 0,
   lfd = NULL,
-  composition = FALSE
+  composition = FALSE,
+  sex = c("F", "M")
 )
 }
 \arguments{
@@ -32,6 +33,10 @@ fish; for a fit, the fitted data.}
 
 \item{composition}{Logical; add the unfished length composition (needs
 patchwork).}
+
+\item{sex}{For sex-structured inputs (a two-sex fit, \code{stocklen_sex()}
+list or \code{list(F = , M = )} of \code{FLPar}): \code{"F"} (default) or \code{"M"}; with a
+fit, \code{"M"} uses the fitted male Linf, M/k and CVL and the male samples.}
 }
 \value{
 A \code{ggplot} (or a \code{patchwork} with \code{composition = TRUE}).

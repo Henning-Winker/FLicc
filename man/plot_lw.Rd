@@ -7,7 +7,7 @@
 plot_lw(object, nyears = 1, len_by = 5, colours = NULL, line_width = 0.8)
 }
 \arguments{
-\item{object}{An \code{FLStockLen} or \code{FLStocks} object.}
+\item{object}{An \code{FLStockLen} or \code{FLStocks} object, a sex-structured stock list (\code{stocklen_sex()}) or a sex-structured fit (both sexes shown).}
 
 \item{nyears}{Integer number of most recent years over which to average
 \code{catch.wt()}. Default is \code{1}.}

@@ -18,7 +18,8 @@ growth_phase_flicc(
   ess = 200,
   spawn = 0,
   sample = 0,
-  maxage = NULL
+  maxage = NULL,
+  sex = c("F", "M")
 )
 }
 \arguments{
@@ -47,6 +48,9 @@ likelihood (the profile interval is approximate).}
 \item{spawn, sample}{Spawning and sampling time as fractions of the year.}
 
 \item{maxage}{Largest age component (default: age at 0.99 Linf).}
+
+\item{sex}{\code{"F"} or \code{"M"} for sex-structured fits (see \code{\link[=plot_growth]{plot_growth()}}):
+the growth and the samples of that sex.}
 }
 \value{
 A list of class \code{"flicc_growth_phase"}: \code{profile} (k, phase,

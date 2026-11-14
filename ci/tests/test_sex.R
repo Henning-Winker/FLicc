@@ -15,6 +15,17 @@ sexq <- function(x, f = 0.5, units = c("F", "M")) {
   q
 }
 
+## 0. sexed length data from a long table with a sex column (F/M/U, female/male, SS3 codes)
+dl <- as.data.frame(lfd_alfonsino)
+dl2 <- rbind(transform(dl[dl$qname == "Trawl", ], sex = "U"),
+             transform(dl[dl$qname == "Gillnet", ], data = data * 0.6, sex = "female"),
+             transform(dl[dl$qname == "Gillnet", ], data = data * 0.4, sex = 2))
+ls <- FLQuantLen(lfd_long_to_wide(dl2), unit = "cm", midL = FALSE)
+stopifnot(identical(names(ls), c("Trawl", "Gillnet")), identical(dimnames(ls$Gillnet)$unit, c("F", "M")),
+          abs(sum(ls$Gillnet[, , "F"]) / sum(ls$Gillnet) - 0.6) < 1e-8)
+lw <- FLQuantLen(lfd_long_to_wide(as.data.frame(lfd_alfonsino)), unit = "cm", midL = FALSE)
+stopifnot(dimnames(lw[[1]])$unit == "unique")
+
 ## 1. identical sexes reproduce the one-sex fit
 for (om in c("dm", "mn")) {
   f1 <- fiticc(lfd, stk, sel_fun = sf, catch_by_gear = cb, settings = list(obs_model = om), verbose = FALSE)
@@ -156,6 +167,13 @@ stopifnot(identical(FLicc:::gear_state_flicc(fs)$gears, "trawl"))   # surveys no
 mcs <- mc_flicc(fs, nsim = 3, verbose = FALSE)
 stopifnot(sum(mcs$conv == "ok") >= 2)
 stopifnot(inherits(plot_growth(fs, sex = "M"), "ggplot"))
+# indicators by sex, catch curves and pooling with sexed samples
+lb <- lbi_flicc(fs)
+stopifnot(all(c("trawl", "survey F", "survey M") %in% levels(lb$values$gear)),
+          abs(lb$linf[["survey M"]] - as.numeric(fs$report$lhpar_m["linf"])) < 1e-6)
+stopifnot("pooled" %in% levels(lbi_flicc(fs, sex = "total", pool = TRUE)$values$gear))
+stopifnot(inherits(combine_lfd(lfdv, c(1, 1), lhpar = lhF, ess.n = NULL), "FLQuants"))
+stopifnot(inherits(LBIspr(fs, spr = 40, thresh = 0.75), "FLIndices"))
 p <- plot_sexratio(fs)
 stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
 cat("sex tests passed\n")

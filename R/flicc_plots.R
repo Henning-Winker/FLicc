@@ -2119,7 +2119,7 @@ plot_LBIp <- function(fit,
   k <- 1L
 
   for (g in gear) {
-    obs_g_all <- fit$report$obslen[[g]]
+    obs_g_all <- obslen_all_flicc(fit)[[g]]
     sel_g_all <- fit$report$sel_gear[[g]]
 
     yrs_sel <- dimnames(sel_g_all)$year

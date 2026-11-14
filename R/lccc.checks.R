@@ -306,6 +306,9 @@ zlcc_data <- function(lfd,
                       empirical_lc_args = list(),
                       max_rel_linf = 0.999) {
 
+  # sexed data (unit F, M, U): sexes summed; for one sex pass lfd[, , "F"]
+  # with that sex's lhpar
+  if (methods::is(lfd, "FLQuant") && dim(lfd)[3] > 1) lfd <- FLCore::unitSums(lfd)
   linf <- an(lhpar["linf"])
   k <- an(lhpar["k"])
 
