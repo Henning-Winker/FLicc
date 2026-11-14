@@ -398,7 +398,7 @@ Type objective_function<Type>::operator() ()
                              // 0 none, 1 females only, 2 males only, 3 both (joint length x sex)
   DATA_SCALAR(sex_ratio);    // proportion female at recruitment (1 when nsex = 1)
   DATA_SCALAR(k_ratio);      // k_female / k_male: F/k and time scale of male survival
-  DATA_SCALAR(mk_ratio);     // (M/k)_male / (M/k)_female
+  DATA_SCALAR(mk_ratio);     // (M/k)_male / (M/k)_female of the inputs (start value of log_Mk_m; not used in the model)
   DATA_MATRIX(Mscaler_m);    // nlen x nyear, male
   DATA_MATRIX(wt_m);         // nlen x nyear, male
   DATA_MATRIX(mat_m);        // nlen x nyear, male
@@ -912,7 +912,7 @@ Type objective_function<Type>::operator() ()
             if(pred_gear(g) > Type(0)) plen_sex(l, y, g, sx) = cs / pred_gear(g);
           }
         int st = sex_type(y, g);
-        if(st == 0) continue;
+        if(st <= 0 || st > 3) continue;     // 0 none; 1 F, 2 M, 3 joint (SS3 gender codes)
         int s0 = (st == 2) ? 1 : 0;          // first sex in the composition
         int s1 = (st == 1) ? 0 : 1;          // last sex in the composition
         int ns = s1 - s0 + 1;
@@ -1124,6 +1124,7 @@ Type objective_function<Type>::operator() ()
   // the random-effect density when settings$F_re = TRUE (Laplace)
   if(prior_sigmaF_use == 1 && nyear > 1) {
     for(int g = 0; g < ngear; g++) {
+      if(gear_type(g) == 1) continue;      // surveys: no F (fixed), no random walk
       for(int y = 1; y < nyear; y++) {
         nll -= dnorm(log_Fk(y,g), log_Fk(y-1,g), sigmaF, true);
       }
