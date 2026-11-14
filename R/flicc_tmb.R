@@ -10,7 +10,7 @@
 #' @return list for TMB::MakeADFun
 data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                              settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
-                             years = NULL) {
+                             years = NULL, stklen_m = NULL) {
 
   stopifnot(is.list(lfd))
   if (is.null(names(lfd))) {
@@ -34,18 +34,51 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                dim = c(nlen, nyear, ngear),
                dimnames = list(len = lens, year = years, gear = gear_names))
 
+  # sexed compositions: obs_sex[len, year, gear, sex] (F, M). Sex is in the
+  # FLR unit dimension of each gear: "F", "M" (sexed) and "U" or "unique"
+  # (unsexed, compared with the predicted total F + M).
+  obs_sex <- array(0, dim = c(nlen, nyear, ngear, 2),
+                   dimnames = list(len = lens, year = years, gear = gear_names, sex = c("F", "M")))
+  sexed_data <- FALSE
   for (g in seq_len(ngear)) {
     x <- lfd[[g]]
     xyrs <- as.numeric(dimnames(x)$year)
     if (!all(years %in% xyrs)) {
       stop("Not all requested years found in lfd gear: ", gear_names[g])
     }
+    un <- dimnames(x)$unit
+    bad <- setdiff(un, c("unique", "U", "F", "M"))
+    if (length(bad))
+      stop("Unit (sex) levels of lfd gear ", gear_names[g], " must be F, M and/or U (or unique); found: ",
+           paste(bad, collapse = ", "))
+    u_uns <- intersect(un, c("unique", "U"))
+    if (length(u_uns) > 1) stop("lfd gear ", gear_names[g], " has both unit 'unique' and 'U'.")
+    val <- function(q) { v <- as.numeric(as.data.frame(yearMeans(q))$data); v[!is.finite(v)] <- 0; v }
 
     for (iy in seq_along(years)) {
       y <- years[iy]
-      obs[, iy, g] <- as.numeric(as.data.frame(yearMeans(x[, ac(y)]))$data)
+      obs[, iy, g] <- if (length(u_uns)) {
+        if (length(un) == 1) as.numeric(as.data.frame(yearMeans(x[, ac(y)]))$data) else val(x[, ac(y), u_uns])
+      } else 0
+      for (sx in c("F", "M")) if (sx %in% un) {
+        obs_sex[, iy, g, sx] <- val(x[, ac(y), sx])
+        sexed_data <- TRUE
+      }
     }
   }
+  nsex <- if (!is.null(stklen_m)) 2L else 1L
+  # sexed composition type per gear-year (SS3 gender codes): 1 females only,
+  # 2 males only, 3 both sexes (joint length x sex composition), 0 none. A
+  # gear-year with sexed counts of one sex only is read as a sample of that sex.
+  nF <- apply(obs_sex[, , , "F", drop = FALSE], c(2, 3), sum)
+  nM <- apply(obs_sex[, , , "M", drop = FALSE], c(2, 3), sum)
+  sex_type <- matrix(0L, nyear, ngear)
+  sex_type[nF > 0 & nM <= 0] <- 1L
+  sex_type[nF <= 0 & nM > 0] <- 2L
+  sex_type[nF > 0 & nM > 0]  <- 3L
+  if (sexed_data && nsex == 1L)
+    stop("lfd has sexed compositions (unit F/M): give life history by sex, e.g. ",
+         "stklen = stocklen_sex(lfd, lhpar) with lhpar by unit c(\"F\", \"M\").")
 
   # stock years
   stk_years <- as.numeric(dimnames(stklen)$year)
@@ -67,6 +100,20 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
 
   # scale M around annual mean so Mk remains the average level
   Mscaler <- sweep(m_mat, 2, colMeans(m_mat, na.rm = TRUE), "/")
+
+  # male biology (nsex = 2): weight, maturity and M at length; M scaled by the
+  # female annual mean so that the male M level enters through mk_ratio only
+  if (nsex == 2L) {
+    if (!all(years %in% as.numeric(dimnames(stklen_m)$year)))
+      stop("Not all requested years found in the male stklen")
+    stkm <- window(stklen_m, start = min(years), end = max(years))
+    wt_m  <- matrix(as.data.frame(catch.wt(stkm))$data, nrow = nlen, ncol = nyear)
+    mat_m <- matrix(as.data.frame(mat(stkm))$data,      nrow = nlen, ncol = nyear)
+    mm    <- matrix(as.data.frame(m(stkm))$data,        nrow = nlen, ncol = nyear)
+    Mscaler_m <- sweep(mm, 2, colMeans(mm, na.rm = TRUE), "/")
+  } else {
+    wt_m <- wt_mat; mat_m <- mat_mat; Mscaler_m <- Mscaler
+  }
 
   # lengths
   LLB <- lens
@@ -94,7 +141,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   # catch weights by gear
   catch_all <- do.call(
     cbind,
-    lapply(catch_by_gear, function(x) as.numeric(x))
+    lapply(catch_by_gear, function(x) as.numeric(if (dim(x)[3] > 1) FLCore::unitSums(x) else x))
   )
   rownames(catch_all) <- dimnames(catch_by_gear[[1]])$year
   # catch may cover more years than the fitted ones (e.g. fiticc(years = ))
@@ -149,6 +196,21 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   lhpar <- stklen@lhpar
   Linf_init <- as.numeric(lhpar["linf"])
   Mk_init   <- as.numeric(lhpar["Mk"])
+
+  # sex structure: male Linf, k and M/k relative to the female reference
+  sex_ratio <- 1; k_ratio <- 1; mk_ratio <- 1; Linf_m_init <- Linf_init
+  if (nsex == 2L) {
+    lhm <- stklen_m@lhpar
+    Linf_m_init <- as.numeric(lhm["linf"])
+    k_ratio  <- as.numeric(lhpar["k"]) / as.numeric(lhm["k"])
+    mk_ratio <- as.numeric(lhm["Mk"]) / Mk_init
+    sex_ratio <- if (!is.null(settings$sex_ratio)) as.numeric(settings$sex_ratio) else 0.5
+    if (!all(is.finite(c(Linf_m_init, k_ratio, mk_ratio))) || k_ratio <= 0 || mk_ratio <= 0)
+      stop("Male life history needs linf, k and Mk (from M and k).")
+    if (length(sex_ratio) != 1 || !is.finite(sex_ratio) || sex_ratio <= 0 || sex_ratio >= 1)
+      stop("settings$sex_ratio must be a proportion female in (0, 1).")
+    if (pop_model != "gtg") stop("The sex-structured model needs pop_model = \"gtg\".")
+  }
 
   CVL_init <- if (!is.null(settings$CVL)) as.numeric(settings$CVL) else 0.1
   Galpha_init <- 1 / CVL_init^2
@@ -261,6 +323,12 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_code <- c(prior_code, 2L)
   }
 
+  if (nsex == 2L && !is.null(settings$linf_m.sd)) {
+    prior_mu   <- c(prior_mu, log(Linf_m_init))
+    prior_sd   <- c(prior_sd, as.numeric(settings$linf_m.sd))
+    prior_code <- c(prior_code, 5L)
+  }
+
   list(
     nlen       = nlen,
     nyear      = nyear,
@@ -277,10 +345,20 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     obs_model  = as.integer(obs_model_code),
     catch_units = as.integer(catch_units == "weight"),
     dm_type    = as.integer(dm_type),
-    dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE), 2, max), 1))
+    dm_prior_mu = if (dm_type == 2L) log(10 * pmax(apply(apply(obs, c(2, 3), sum, na.rm = TRUE) +
+                                                         apply(obs_sex, c(2, 3), sum), 2, max), 1))
                   else rep(log(10), ngear),
     dm_prior_sd = if (!is.null(settings$dm_prior_sd)) as.numeric(settings$dm_prior_sd) else 1,
     pile = if (!is.null(settings$pile)) as.numeric(settings$pile) else 1,
+    nsex       = as.integer(nsex),
+    obs_sex    = unname(obs_sex),
+    sex_type   = unname(sex_type),
+    sex_ratio  = as.numeric(if (nsex == 2L) sex_ratio else 1),
+    k_ratio    = as.numeric(k_ratio),
+    mk_ratio   = as.numeric(mk_ratio),
+    Mscaler_m  = unname(Mscaler_m),
+    wt_m       = unname(wt_m),
+    mat_m      = unname(mat_m),
     ngtg       = as.integer(ngtg),
     gtg_z      = as.numeric(gtg_z),
     recP       = as.numeric(recP),
@@ -307,6 +385,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_sd   = as.numeric(prior_sd),
     prior_code = as.integer(prior_code),
     Linf_init   = Linf_init,
+    Linf_m_init = Linf_m_init,
     Mk_init     = Mk_init,
     CVL_init    = CVL_init,
     Galpha_init = Galpha_init,
@@ -403,6 +482,7 @@ init_tmb_flicc <- function(tmb_data) {
 
   for (g in seq_len(ngear)) {
     obs_g <- apply(obs[, , g, drop = FALSE], 1, sum, na.rm = TRUE)
+    if (!is.null(tmb_data$obs_sex)) obs_g <- obs_g + apply(tmb_data$obs_sex[, , g, , drop = FALSE], 1, sum)
     mode_g <- Lmid[which.max(obs_g)]
     mode_rel <- max(mode_g / Linf, 1e-4)
 
@@ -470,7 +550,8 @@ init_tmb_flicc <- function(tmb_data) {
     Sm         = Sm,
     log_phi    = log(10),
     log_dm     = if (!is.null(tmb_data$dm_prior_mu)) as.numeric(tmb_data$dm_prior_mu) else rep(0, length(tmb_data$gear_names)),
-    log_sigmaF = tmb_data$prior_sigmaF_mean
+    log_sigmaF = tmb_data$prior_sigmaF_mean,
+    log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init)
   )
 }
 
@@ -555,7 +636,8 @@ fiticc_core <- function(lfd, stklen,
                      control = list(),
                      FLRreport=FALSE,
                      se = TRUE,
-                     newton = 3) {
+                     newton = 3,
+                     stklen_m = NULL) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -589,7 +671,9 @@ fiticc_core <- function(lfd, stklen,
     tail_warning = TRUE,
     FM_min = 0.05,
     FM_max = 4,
-    FMpen_sd = 0.2
+    FMpen_sd = 0.2,
+    sex_ratio = 0.5,
+    linf_m.sd = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -643,8 +727,9 @@ fiticc_core <- function(lfd, stklen,
   }
 
   # subset iter in R; do not loop over iter in TMB
-  lfd_i <- lapply(lfd, function(x) x[, , iter])
-  stk_i <- stklen[, , , iter]
+  lfd_i <- lapply(lfd, function(x) x[, , , , , iter])   # iter is the 6th dimension (unit holds sex)
+  stk_i <- stklen[, , , , , iter]
+  stkm_i <- if (!is.null(stklen_m)) stklen_m[, , , , , iter] else NULL
 
   if (is.null(years)) {
     years <- as.numeric(dimnames(lfd_i[[1]])$year)
@@ -654,7 +739,7 @@ fiticc_core <- function(lfd, stklen,
   if(!inherits(catch_by_gear, "FLQuants")){
 
  catch_by_gear  <-  FLCore::FLQuants(Map(function(x,y){
-    flq = FLCore::quantSums(x)
+    flq = FLCore::quantSums(FLCore::unitSums(x))   # sexes summed
     flq[] <- y
     flq
   },x=lfd_i,y=catch_by_gear))
@@ -667,7 +752,8 @@ fiticc_core <- function(lfd, stklen,
     sel_fun = sel_fun,
     catch_by_gear = catch_by_gear,
     settings = settings,
-    years = years
+    years = years,
+    stklen_m = stkm_i
   )
 
   # Set priors for random walk on F (if nyear > 0)
@@ -706,6 +792,9 @@ fiticc_core <- function(lfd, stklen,
   }
   if (is.null(settings$CVL.sd)) {
     map$log_Galpha <- factor(NA)
+  }
+  if (tmb_data$nsex == 1L || is.null(settings$linf_m.sd)) {
+    map$log_Linf_m <- factor(NA)
   }
   # NEW: phi only relevant for NB
   if (settings$obs_model != "nb") {
@@ -760,7 +849,7 @@ fiticc_core <- function(lfd, stklen,
 
   obj <- TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
-                            c("gear_names", "year_names",
+                            c("gear_names", "year_names", "Linf_m_init",
                               "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
     parameters = parameters,
     map = map,
@@ -929,6 +1018,7 @@ fiticc_core <- function(lfd, stklen,
       par = par_tab,
       report = report,
       stklen= stklen,
+      stklen_m = stklen_m,
       tmb_data = tmb_data
     ),
     class = "flicc_tmb_fit"
@@ -1260,6 +1350,16 @@ fiticc <- function(lfd, stklen,
                    newton = 3,
                    verbose = TRUE) {
 
+  # sex structure: stklen = list(F = , M = ) (e.g. from stocklen_sex()); the
+  # female stock is the reference (SPR, F/k) and is kept as fit$stklen
+  stklen_m <- NULL
+  if (is.list(stklen) && !isS4(stklen)) {
+    if (!all(c("F", "M") %in% names(stklen)))
+      stop("A sex-structured stklen must be a list with elements F and M (see stocklen_sex()).")
+    stklen_m <- stklen$M
+    stklen <- stklen$F
+  }
+
 
      if(by_year){
       if (!is.null(start)) {
@@ -1283,6 +1383,7 @@ fiticc <- function(lfd, stklen,
          fiticc_core(
          lfd = window(lfd,start= y,end=y),
          stklen = window(stklen,start= y,y),
+         stklen_m = if (!is.null(stklen_m)) window(stklen_m, start = y, end = y) else NULL,
          sel_fun = sel_fun,
          catch_by_gear =cbg,
          settings = settings,
@@ -1331,6 +1432,7 @@ fiticc <- function(lfd, stklen,
   fit1 <- fiticc_core(
     lfd = lfd,
     stklen = stklen,
+    stklen_m = stklen_m,
     sel_fun = sel_fun,
     catch_by_gear = catch_by_gear,
     settings = settings,
@@ -1363,6 +1465,7 @@ fiticc <- function(lfd, stklen,
       fiticc_core(
         lfd = lfd,
         stklen = stklen,
+        stklen_m = stklen_m,
         sel_fun = sel_fun,
         catch_by_gear = catch_by_gear,
         settings = settings2,

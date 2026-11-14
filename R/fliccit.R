@@ -609,7 +609,8 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   if (is.null(td$pile)) td$pile <- 1                # fits made before the pile option
   if (is.null(td$dm_prior_mu)) td$dm_prior_mu <- rep(0, length(fit$tmb_data$gear_names))
   if (is.null(td$dm_prior_sd)) td$dm_prior_sd <- 0
-  td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init",
+  td <- sex_defaults_tmb_flicc(td)                   # fits made before the sex structure
+  td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init", "Linf_m_init",
                                 "Mk_init", "CVL_init", "Galpha_init"))]
   # full parameter set at the optimum, including random effects (F_re = TRUE)
   rnd <- fit$obj$env$random
@@ -620,6 +621,7 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
     fit$obj$env$parList(fit$opt$par)
   }
   if (is.null(pl$log_dm)) pl$log_dm <- rep(0, length(fit$tmb_data$gear_names))
+  if (is.null(pl$log_Linf_m)) pl$log_Linf_m <- pl$log_Linf
   # parameters fixed at the estimates (log_phi left free because TMB needs
   # at least one), so almost nothing is recorded on the AD tape and report()
   # runs one double evaluation including the brp block

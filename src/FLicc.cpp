@@ -189,6 +189,42 @@ vector<Type> pop_len_glq(const vector<Type>& node,
 // ---------------------------------------------------------
 // Population recursion (gtg-lbspr)
 // ---------------------------------------------------------
+// ---------------------------------------------------------
+// Negative log-likelihood of one composition o (counts, length x sex cells)
+// given predicted proportions p, for the sexed part of a gear-year. Same
+// observation models as the unsexed compositions in the main template.
+// ---------------------------------------------------------
+template<class Type>
+Type comp_nll_flicc(const vector<Type>& o, const vector<Type>& p, int obs_model,
+                    int dm_type, Type log_dm_g, Type phi)
+{
+  Type nll = Type(0);
+  int nb = o.size();
+  Type o_tot = o.sum();
+  if(o_tot <= Type(0)) return nll;
+  if(obs_model == 1) {
+    for(int k = 0; k < nb; k++) nll -= dnbinom_phi(o(k), o_tot * p(k) + Type(1e-12), phi, 1);
+  } else if(obs_model == 2) {
+    for(int k = 0; k < nb; k++) {
+      Type pp = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
+      nll -= o(k) * log(pp);
+    }
+  } else {
+    Type alpha0 = o_tot;
+    if(dm_type == 1) alpha0 = exp(log_dm_g) * o_tot;
+    if(dm_type == 2) alpha0 = exp(log_dm_g);
+    nll -= lgamma(alpha0);
+    nll += lgamma(o_tot + alpha0);
+    for(int k = 0; k < nb; k++) {
+      Type pp = CppAD::CondExpLt(p(k), Type(1e-12), Type(1e-12), p(k));
+      Type a = alpha0 * pp;
+      nll -= lgamma(o(k) + a);
+      nll += lgamma(a);
+    }
+  }
+  return nll;
+}
+
 template<class Type>
 vector<Type> pop_len_gtg(const vector<Type>& LLB,
                          const vector<Type>& gtgLinfs,
@@ -351,6 +387,21 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(brp_only);    // 1: per-recruit call, skip years before the
                              //    terminal brp_nyears (objective not used)
 
+  // Sex structure (nsex = 2; nsex = 1 is the one-sex model, unchanged).
+  // Sex 1 (female) uses Linf, Mk, wt, mat, Mscaler and is the reference for
+  // F/k and SPR; sex 2 (male) has its own Linf, M/k, weight, maturity and M
+  // at length. Recruits are split by sex_ratio; F and selectivity are shared.
+  DATA_INTEGER(nsex);
+  DATA_ARRAY(obs_sex);       // nlen x nyear x ngear x 2: sexed compositions (F, M); zeros = none
+  DATA_IMATRIX(sex_type);    // nyear x ngear, as SS3 gender codes for the sexed part:
+                             // 0 none, 1 females only, 2 males only, 3 both (joint length x sex)
+  DATA_SCALAR(sex_ratio);    // proportion female at recruitment (1 when nsex = 1)
+  DATA_SCALAR(k_ratio);      // k_female / k_male: F/k and time scale of male survival
+  DATA_SCALAR(mk_ratio);     // (M/k)_male / (M/k)_female
+  DATA_MATRIX(Mscaler_m);    // nlen x nyear, male
+  DATA_MATRIX(wt_m);         // nlen x nyear, male
+  DATA_MATRIX(mat_m);        // nlen x nyear, male
+
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
   PARAMETER(log_Mk);
@@ -359,6 +410,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_phi);
   PARAMETER_VECTOR(log_dm);  // DM precision by gear: log theta (linear) or log beta (saturating)
   PARAMETER(log_sigmaF); // random walk F
+  PARAMETER(log_Linf_m); // male Linf (nsex = 2; fixed unless linf_m.sd)
 
   Type nll = 0.0;
 
@@ -383,6 +435,21 @@ Type objective_function<Type>::operator() ()
     for(int g = 0; g < ngtg; g++) {
       MKMat(l, g) = mkl;
     }
+  }
+
+  // male growth groups and M/K (nsex = 2): same CVL and growth-group grid
+  Type Linf_m = exp(log_Linf_m);
+  vector<Type> gtgLinfs_m(ngtg);
+  matrix<Type> MKMat_m(nlen + 1, ngtg);
+  if(nsex == 2) {
+    if(pop_model != 2) error("Sex structure needs pop_model = gtg");
+    for(int g = 0; g < ngtg; g++) gtgLinfs_m(g) = Linf_m * (Type(1) + CVL * gtg_z(g));
+    for(int l = 0; l < (nlen + 1); l++) {
+      Type mkl = Mk * mk_ratio * pow(Linf_m / LBins_mk(l), Mpow);
+      for(int g = 0; g < ngtg; g++) MKMat_m(l, g) = mkl;
+    }
+  } else {
+    gtgLinfs_m = gtgLinfs; MKMat_m = MKMat;
   }
 
   // --- COMMON SELECTIVITY ---
@@ -441,6 +508,9 @@ Type objective_function<Type>::operator() ()
   dm_alpha0.setZero(); dm_neff.setZero();
   matrix<Type> sel_joint(nlen, nyear);
   matrix<Type> Fk_l(nlen, nyear);
+  array<Type> plen_sex(nlen, nyear, ngear, 2); // predicted joint length x sex proportions within gear
+  matrix<Type> N_y_m(nlen, nyear);             // male numbers per recruit (male k time scale)
+  plen_sex.setZero(); N_y_m.setZero();
 
   sel_joint.setZero();
   epr_y.setZero();
@@ -465,7 +535,8 @@ Type objective_function<Type>::operator() ()
   }
   for(int y = y_first; y < nyear; y++) {
 
-    vector<Type> Z(nlen), N(nlen), Nobs(nlen);
+    vector<Type> Z(nlen), N(nlen), Nobs(nlen), NobsF(nlen), NobsM(nlen);
+    NobsF.setZero(); NobsM.setZero();
     matrix<Type> F_len(nlen, ngear), Cpred(nlen, ngear), mu(nlen, ngear);
 
     vector<Type> obs_gear(ngear);
@@ -515,6 +586,29 @@ Type objective_function<Type>::operator() ()
         Nobs = N;
       }
 
+      if(nsex == 2) {
+        // male survival in male time units: M/K of males, F/k scaled by k_f / k_m
+        matrix<Type> ZKLm(nlen + 1, ngtg);
+        for(int g = 0; g < ngtg; g++) {
+          for(int l = 0; l < nlen; l++)
+            ZKLm(l, g) = MKMat_m(l, g) * Mscaler_m(l, y) + (Z(l) - M(l)) * k_ratio;
+          ZKLm(nlen, g) = MKMat_m(nlen, g) * Mscaler_m(nlen - 1, y) + (Z(nlen - 1) - M(nlen - 1)) * k_ratio;
+        }
+        vector<Type> Nm = pop_len_gtg(LLB, gtgLinfs_m, ZKLm, recP);
+        vector<Type> Nmobs = Nm;
+        if (pile < Type(1)) {
+          vector<Type> Nbm = pop_bound_gtg(LLB, gtgLinfs_m, ZKLm, recP);
+          for(int l = 0; l < nlen; l++) Nmobs(l) = Nbm(l) + pile * (Nm(l) - Nbm(l));
+        }
+        for(int l = 0; l < nlen; l++) {
+          N_y_m(l, y) = Nm(l);
+          // numbers in real time, relative to the female time scale (x k_f / k_m),
+          // and recruitment split by sex
+          NobsF(l) = sex_ratio * Nobs(l);
+          NobsM(l) = (Type(1) - sex_ratio) * k_ratio * Nmobs(l);
+        }
+      }
+
     } else {
       error("Unknown pop_model");
     }
@@ -540,7 +634,11 @@ Type objective_function<Type>::operator() ()
 
     for(int g = 0; g < ngear; g++) {
       for(int l = 0; l < nlen; l++) {
-        Cpred(l,g) = Nobs(l) * F_len(l,g);
+        if(nsex == 2) {
+          Cpred(l,g) = (NobsF(l) + NobsM(l)) * F_len(l,g);
+        } else {
+          Cpred(l,g) = Nobs(l) * F_len(l,g);
+        }
         pred_gear(g) += Cpred(l,g);
         obs_gear(g)  += obs(l,y,g);
       }
@@ -553,7 +651,10 @@ Type objective_function<Type>::operator() ()
     for(int g = 0; g < ngear; g++) {
       pred_share(g) = Type(0);
       for(int l = 0; l < nlen; l++)
-        pred_share(g) += (catch_units == 1) ? Type(Cpred(l,g) * wt(l,y)) : Type(Cpred(l,g));
+        if(nsex == 2 && catch_units == 1)
+          pred_share(g) += (NobsF(l) * wt(l,y) + NobsM(l) * wt_m(l,y)) * F_len(l,g);
+        else
+          pred_share(g) += (catch_units == 1) ? Type(Cpred(l,g) * wt(l,y)) : Type(Cpred(l,g));
     }
     vector<Type> pred_pgear(ngear);
     Type pred_total = Type(0);
@@ -759,6 +860,43 @@ Type objective_function<Type>::operator() ()
       }
     }
 
+    // Sexed compositions (nsex = 2), as SS3 gender codes 1-3:
+    //  3 (both sexes): one joint composition over length x sex, so the sex
+    //    ratio at length is information;
+    //  1 / 2 (one sex sampled): the composition within that sex.
+    // Tail cut and plus group as for the unsexed part, within each sex; same
+    // observation model and DM precision by gear. An unsexed (combined)
+    // composition of the same gear-year enters separately above.
+    if(nsex == 2) {
+      for(int g = 0; g < ngear; g++) {
+        for(int sx = 0; sx < 2; sx++)
+          for(int l = 0; l < nlen; l++) {
+            Type cs = (sx == 0) ? NobsF(l) * F_len(l, g) : NobsM(l) * F_len(l, g);
+            if(pred_gear(g) > Type(0)) plen_sex(l, y, g, sx) = cs / pred_gear(g);
+          }
+        int st = sex_type(y, g);
+        if(st == 0) continue;
+        int s0 = (st == 2) ? 1 : 0;          // first sex in the composition
+        int s1 = (st == 1) ? 0 : 1;          // last sex in the composition
+        int ns = s1 - s0 + 1;
+        vector<Type> o(ns * nb), p(ns * nb);
+        o.setZero(); p.setZero();
+        for(int sx = s0; sx <= s1; sx++) {
+          for(int l = 0; l < nkeep; l++) {
+            int k = (sx - s0) * nb + ((l < nb) ? l : (nb - 1));
+            o(k) += obs_sex(l, y, g, sx);
+            p(k) += plen_sex(l, y, g, sx);
+          }
+        }
+        Type psum = p.sum();
+        if(psum > Type(0)) p = p / psum;
+        if(rob_eps > Type(0)) {
+          for(int k = 0; k < ns * nb; k++) p(k) = (Type(1) - rob_eps) * p(k) + rob_eps / Type(ns * nb);
+        }
+        if(pred_gear(g) > Type(0))
+          nll += comp_nll_flicc(o, p, obs_model, dm_type, log_dm(g), phi);
+      }
+    }
 
   }
 
@@ -931,6 +1069,8 @@ Type objective_function<Type>::operator() ()
       x = log_Mk;
     } else if(code == 4) {
       x = log_phi;
+    } else if(code == 5) {
+      x = log_Linf_m;
     } else if(code >= 100 && code < 200) {
       int g = code - 100;
       x = log_Fk(0, g);
@@ -970,6 +1110,11 @@ Type objective_function<Type>::operator() ()
   REPORT(gtgLinfs);   // GTG Linf groups at the estimates (pop_model = "gtg")
   REPORT(recP);
   REPORT(MKMat);      // (nlen + 1) x ngtg M/K used in GTG survival
+  REPORT(nsex);
+  REPORT(Linf_m);
+  REPORT(gtgLinfs_m);
+  REPORT(plen_sex);   // nlen x nyear x ngear x 2 (nsex = 2)
+  REPORT(N_y_m);
 
 
 
@@ -977,6 +1122,7 @@ Type objective_function<Type>::operator() ()
   ADREPORT(log_Galpha);
   ADREPORT(log_Mk);
   ADREPORT(log_sigmaF);
+  if(nsex == 2) ADREPORT(log_Linf_m);
   ADREPORT(log_spr_y);
   ADREPORT(log_epr_y);
 

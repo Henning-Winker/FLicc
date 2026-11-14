@@ -10,7 +10,8 @@ data_tmb_flicc(
   sel_fun,
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
-  years = NULL
+  years = NULL,
+  stklen_m = NULL
 )
 }
 \arguments{
