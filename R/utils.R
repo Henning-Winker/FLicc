@@ -92,6 +92,22 @@ as_FLQuants <- function(fit,stklen) {
 
   out$w_at_len <- stklen@catch.wt
 
+  # two sexes: numbers by sex per total recruit on the female time scale
+  # (unit F, M), male M, weight and maturity at length, fitted male life history
+  if (!is.null(tmb_data$nsex) && tmb_data$nsex == 2L && !is.null(report$N_y_m)) {
+    sr <- tmb_data$sex_ratio; kr <- tmb_data$k_ratio
+    dn2 <- list(len = lens, year = yrs, unit = c("F", "M"), season = "all", area = "unique", iter = "1")
+    out$N_sex <- FLCore::FLQuant(c(sr * report$N_y, (1 - sr) * kr * report$N_y_m), dimnames = dn2, units = "1000")
+    dn1 <- list(len = lens, year = yrs, unit = "unique", season = "all", area = "unique", iter = "1")
+    k_m <- k / kr
+    out$M_m <- FLCore::FLQuant(as.numeric(report$Mk_m) * k_m * tmb_data$Mscaler_m, dimnames = dn1, units = "m")
+    out$w_at_len_m <- FLCore::FLQuant(tmb_data$wt_m, dimnames = dn1, units = "kg")
+    out$mat_m <- FLCore::FLQuant(tmb_data$mat_m, dimnames = dn1)
+    out$lhpar_m <- FLCore::FLPar(linf = as.numeric(report$Linf_m), k = k_m, Mk = as.numeric(report$Mk_m),
+                                 M = as.numeric(report$Mk_m) * k_m, CVL = as.numeric(report$CVL_m))
+    out$sex_ratio <- sr
+  }
+
 
   # FLQuants
   out$sel_gear<- FLCore::FLQuants(lapply(1:length(gears),function(x){

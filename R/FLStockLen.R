@@ -386,6 +386,29 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
   landings.n(stky) <- catch.n(stky)
   discards.n(stky) <- catch.n(stky) * 0
 
+  # two sexes: numbers and catch of both sexes, each with its own M; one-unit
+  # stock with catch-weighted weight, effective maturity (female spawning) and
+  # numbers-weighted M, so that catch is both sexes and SSB female
+  if (!is.null(rep$N_sex)) {
+    NF <- rep$N_sex[, , "F"]; NM <- rep$N_sex[, , "M"]
+    sc <- R0 / 1000 / c(NF[1, ] + NM[1, ])
+    NF <- NF %*% FLQuant(sc, dimnames = dimnames(NF[1, ])) ; NM <- NM %*% FLQuant(sc, dimnames = dimnames(NM[1, ]))
+    dimnames(NF)$unit <- dimnames(NM)$unit <- "unique"
+    CF <- compute_catch.n(NF, rep$F, rep$M); CM <- compute_catch.n(NM, rep$F, rep$M_m)
+    wF <- catch.wt(stklen); wM <- rep$w_at_len_m
+    Nt <- NF + NM; Ct <- CF + CM
+    w_eff <- (CF * wF + CM * wM) / Ct
+    w_n <- (NF * wF + NM * wM) / Nt
+    w_eff[!is.finite(w_eff)] <- w_n[!is.finite(w_eff)]
+    w_eff[!is.finite(w_eff)] <- wF[!is.finite(w_eff)]
+    mat_eff <- NF * mat(stklen) * wF / (Nt * w_eff); mat_eff[!is.finite(mat_eff)] <- 0
+    M_eff <- (NF * rep$M + NM * rep$M_m) / Nt; M_eff[!is.finite(M_eff)] <- rep$M[!is.finite(M_eff)]
+    stock.n(stky) <- FLQuant(Nt, units = "1000"); catch.n(stky) <- Ct
+    landings.n(stky) <- Ct; discards.n(stky) <- Ct * 0
+    stock.wt(stky) <- catch.wt(stky) <- landings.wt(stky) <- discards.wt(stky) <- w_eff
+    mat(stky) <- mat_eff; m(stky) <- M_eff
+  }
+
   # -----------------------------
   # biomass quantities
   # -----------------------------

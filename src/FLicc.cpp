@@ -458,6 +458,17 @@ Type objective_function<Type>::operator() ()
   } else {
     gtgLinfs_m = gtgLinfs; MKMat_m = MKMat;
   }
+  // male unfished numbers per recruit (male time scale), for EPR
+  vector<Type> N0_m(nlen);
+  N0_m.setZero();
+  if(nsex == 2) {
+    matrix<Type> ZKL0m(nlen + 1, ngtg);
+    for(int g = 0; g < ngtg; g++) {
+      for(int l = 0; l < nlen; l++) ZKL0m(l, g) = MKMat_m(l, g) * Mscaler_m(l, 0);
+      ZKL0m(nlen, g) = MKMat_m(nlen, g) * Mscaler_m(nlen - 1, 0);
+    }
+    N0_m = pop_len_gtg(LLB, gtgLinfs_m, ZKL0m, recP);
+  }
 
   // --- COMMON SELECTIVITY ---
   matrix<Type> Sel(nlen, ngear);
@@ -738,8 +749,14 @@ Type objective_function<Type>::operator() ()
       Type epr0 = Type(0);
       Type eprf = Type(0);
       for(int l = 0; l < nlen; l++) {
-        epr0 += N0(l) * wt(l,y) * sel_joint(l,y);
-        eprf += N(l)  * wt(l,y) * sel_joint(l,y);
+        if(nsex == 2) {
+          // both sexes per total recruit, on the female time scale
+          epr0 += (sex_ratio * N0(l) * wt(l,y) + (Type(1) - sex_ratio) * k_ratio * N0_m(l) * wt_m(l,y)) * sel_joint(l,y);
+          eprf += (sex_ratio * N(l)  * wt(l,y) + (Type(1) - sex_ratio) * k_ratio * N_y_m(l,y) * wt_m(l,y)) * sel_joint(l,y);
+        } else {
+          epr0 += N0(l) * wt(l,y) * sel_joint(l,y);
+          eprf += N(l)  * wt(l,y) * sel_joint(l,y);
+        }
       }
       epr_y(y) = CppAD::CondExpGt(epr0, Type(0), eprf / (epr0 + Type(1e-30)), Type(0));
     }

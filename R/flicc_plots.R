@@ -1719,7 +1719,7 @@ plot_sel <- function(object, year = NULL, gear = NULL,
 #' If a single \code{FLStockLen} object is supplied, it is internally coerced
 #' to an \code{FLStocks} object named \code{M_l}.
 #'
-#' @param object An \code{FLStockLen} or \code{FLStocks} object.
+#' @param object An \code{FLStockLen} or \code{FLStocks} object, a sex-structured stock list (`stocklen_sex()`) or a sex-structured fit (both sexes shown).
 #' @param nyears Integer number of most recent years over which to average
 #'   \code{m()}. Default is \code{1}.
 #' @param len_by Numeric spacing for length-axis tick marks. Default is
@@ -1748,6 +1748,7 @@ plot_m <- function(object, nyears = 1, len_by = 5,
     stop("Package 'ggplot2' is required.")
   }
 
+  object <- sex_stocks_flicc(object)   # two sexes: list(F, M) or a fit -> Female, Male
   if (inherits(object, "FLStockLen")) {
     object <- FLCore::FLStocks(M_l = object)
   }
@@ -1812,7 +1813,7 @@ plot_m <- function(object, nyears = 1, len_by = 5,
 #' If a single \code{FLStockLen} object is supplied, it is internally coerced
 #' to an \code{FLStocks} object named \code{mat_l}.
 #'
-#' @param object An \code{FLStockLen} or \code{FLStocks} object.
+#' @param object An \code{FLStockLen} or \code{FLStocks} object, a sex-structured stock list (`stocklen_sex()`) or a sex-structured fit (both sexes shown).
 #' @param nyears Integer number of most recent years over which to average
 #'   \code{mat()}. Default is \code{1}.
 #' @param len_by Numeric spacing for length-axis tick marks. Default is
@@ -1841,6 +1842,7 @@ plot_mat <- function(object, nyears = 1, len_by = 5,
     stop("Package 'ggplot2' is required.")
   }
 
+  object <- sex_stocks_flicc(object)   # two sexes: list(F, M) or a fit -> Female, Male
   if (inherits(object, "FLStockLen")) {
     object <- FLCore::FLStocks(mat_l = object)
   }
@@ -1904,7 +1906,7 @@ plot_mat <- function(object, nyears = 1, len_by = 5,
 #' If a single \code{FLStockLen} object is supplied, it is internally coerced
 #' to an \code{FLStocks} object named \code{catch.wt_l}.
 #'
-#' @param object An \code{FLStockLen} or \code{FLStocks} object.
+#' @param object An \code{FLStockLen} or \code{FLStocks} object, a sex-structured stock list (`stocklen_sex()`) or a sex-structured fit (both sexes shown).
 #' @param nyears Integer number of most recent years over which to average
 #'   \code{catch.wt()}. Default is \code{1}.
 #' @param len_by Numeric spacing for length-axis tick marks. Default is
@@ -1933,6 +1935,7 @@ plot_lw <- function(object, nyears = 1, len_by = 5,
     stop("Package 'ggplot2' is required.")
   }
 
+  object <- sex_stocks_flicc(object)   # two sexes: list(F, M) or a fit -> Female, Male
   if (inherits(object, "FLStockLen")) {
     object <- FLCore::FLStocks(catch.wt_l = object)
   }

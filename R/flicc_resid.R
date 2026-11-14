@@ -769,8 +769,10 @@ neff_flicc <- function(fit) {
   cd <- comp_data_flicc(fit)
   out <- do.call(rbind, lapply(cd$comp, function(z) {
     a0 <- if (identical(cd$obs_model, "dm")) z$a0 else NA_real_
-    data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), n = z$n, alpha0 = a0,
+    d <- data.frame(gear = z$gear, year = as.numeric(as.character(z$year)), n = z$n, alpha0 = a0,
                neff = if (identical(cd$obs_model, "dm")) z$n * (1 + a0) / (z$n + a0) else z$n)
+    if (cd$nsex == 2L) d$part <- z$part        # "U", or sexed: "F+M", "F", "M"
+    d
   }))
   out$gear <- factor(out$gear, levels = fit$tmb_data$gear_names)
   out

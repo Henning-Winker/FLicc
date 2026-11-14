@@ -274,10 +274,20 @@ fits_summary <- function(fits, spr = 40, level = 0.95, digits = 3) {
     M <- as.numeric(f$stklen@lhpar["M"])
     fs <- tryCatch(as.numeric(fspr_flicc(f, spr = spr))[1], error = function(e) NA_real_)
     aic <- tryCatch(stats::AIC(LLflicc(f)), error = function(e) NA_real_)
-    data.frame(run = nm, conv = if (is.null(tr)) NA_character_ else tr,
+    d <- data.frame(run = nm, conv = if (is.null(tr)) NA_character_ else tr,
                SPR = sp, lwr = lw, upr = up, FM = fap / M, Fap = fap,
                Fspr = fs, F_Fspr = fap / fs, AIC = aic, stringsAsFactors = FALSE)
+    # sex-structured fits: fitted life history of both sexes
+    if (any_sex) {
+      lm <- f$report$lhpar_m
+      d$Linf_F <- as.numeric(f$report$lhpar["linf"]); d$Mk_F <- as.numeric(f$report$lhpar["Mk"])
+      d$Linf_M <- if (!is.null(lm)) as.numeric(lm["linf"]) else NA_real_
+      d$Mk_M <- if (!is.null(lm)) as.numeric(lm["Mk"]) else NA_real_
+      d$CVL_M <- if (!is.null(lm)) as.numeric(lm["CVL"]) else NA_real_
+    }
+    d
   }
+  any_sex <- any(vapply(fits, function(f) !is.null(f$report$lhpar_m), logical(1)))
   out <- do.call(rbind, lapply(names(fits), row))
   out$dAIC <- out$AIC - out$AIC[1]
   names(out)[names(out) == "Fspr"] <- paste0("Fspr", spr)

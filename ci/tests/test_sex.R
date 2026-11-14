@@ -41,6 +41,13 @@ stopifnot(max(abs(an(catch(e2)) / an(catch(e1)) - 1), na.rm = TRUE) < 1e-5,
 eng <- FLicc:::pr_engine_flicc(f2); bb <- FLicc:::brp_tmb_flicc(f2, Fseq = 0.1)
 ee <- eng(0.1 * as.numeric(f2$obj$report(f2$obj$env$last.par.best)$sA))
 stopifnot(abs(ee["SPR"] / (bb$SBPR / bb$SBPR0) - 1) < 1e-6, abs(ee["YPR"] / bb$YPR - 1) < 1e-6)
+# EPR, numbers by sex and the fitted-years stock object (identical sexes)
+stopifnot(max(abs(f1$obj$report()$epr_y - f2$obj$report()$epr_y)) < 1e-6,
+          identical(dimnames(f2$report$N_sex)$unit, c("F", "M")))
+k1 <- flicc_stklen(f1); k2 <- flicc_stklen(f2)
+stopifnot(max(abs(an(catch(k2)) / an(catch(k1)) - 1)) < 1e-6)
+stopifnot(inherits(plot_m(f2), "ggplot"), inherits(plot_mat(stk2), "ggplot"), inherits(plot_lw(f2), "ggplot"))
+stopifnot(all(c("Linf_M", "Mk_M") %in% names(fits_summary(list(a = f2)))))
 cat("identity ok\n")
 
 ## 2. composition types: females only, males only, combined + sexed in one gear-year

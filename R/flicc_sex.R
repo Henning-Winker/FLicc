@@ -192,3 +192,15 @@ plot_sexratio <- function(fit, gear = NULL, by_year = FALSE, years = NULL, min_n
   attr(p, "data") <- a
   p
 }
+
+# life-history plots: a sex-structured stklen (list F, M) or fit becomes
+# FLStocks(Female, Male); anything else is returned unchanged (internal)
+sex_stocks_flicc <- function(object) {
+  if (is.list(object) && !isS4(object) && !is.null(object$tmb_data)) {
+    if (!is.null(object$stklen_m)) return(FLCore::FLStocks(Female = object$stklen, Male = object$stklen_m))
+    return(object$stklen)
+  }
+  if (is.list(object) && !isS4(object) && all(c("F", "M") %in% names(object)))
+    return(FLCore::FLStocks(Female = object$F, Male = object$M))
+  object
+}
