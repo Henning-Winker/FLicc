@@ -827,17 +827,21 @@ plot_mcsprdist <- function(mc, years = NULL, dAIC_cut = 20,
     dens_df <- rbind(dens_df, tmp)
   }
 
+  if (!nrow(dens_df))
+    message("plot_mcsprdist(): fewer than 3 draws with positive weight in every year ",
+            "(weights = \"", weights, "\", dAIC_cut = ", dAIC_cut, "); densities not drawn. ",
+            "Use weights = \"equal\" or a larger dAIC_cut.")
   p <- ggplot2::ggplot() +
     (if (length(ref)) ggplot2::geom_hline(yintercept = ref, linetype = 2,
                         colour = rep(c("darkgreen", "orange", "red"), length.out = length(ref)))) +
-    ggplot2::geom_polygon(
+    (if (nrow(dens_df)) ggplot2::geom_polygon(
       data = dens_df,
       ggplot2::aes(x = x, y = spr, group = year_id),
       fill = "grey70",
       colour = "grey35",
       alpha = 0.75,
       linewidth = 0.3
-    ) +
+    )) +
     ggplot2::geom_linerange(
       data = summ_df,
       ggplot2::aes(x = seq_along(years), ymin = q025, ymax = q975),
