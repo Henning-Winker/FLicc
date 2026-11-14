@@ -152,6 +152,10 @@ stopifnot(max(abs(colSums(bd$C * bd$sex$w_eff) / bd$YPR - 1)) < 1e-8,
 ed <- FLicc:::pr_engine_flicc(fs)(0.3 * as.numeric(fs$obj$report(fs$obj$env$last.par.best)$sA))
 stopifnot(abs(ed["YPR"] / bd$YPR[2] - 1) < 1e-6)
 stopifnot(identical(FLicc:::gear_state_flicc(fs)$gears, "trawl"))   # surveys not in contours
+# Monte Carlo with two sexes; growth plots by sex
+mcs <- mc_flicc(fs, nsim = 3, verbose = FALSE)
+stopifnot(sum(mcs$conv == "ok") >= 2)
+stopifnot(inherits(plot_growth(fs, sex = "M"), "ggplot"))
 p <- plot_sexratio(fs)
 stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
 cat("sex tests passed\n")

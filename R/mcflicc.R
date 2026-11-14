@@ -344,6 +344,14 @@ mc_flicc <- function(
   lhpar <- rbind(lhpar,FLPar(CVL=fit$settings$CVL))
   mc$lhpar <- FLCore::propagate( lhpar, nsim)
 
+  # two sexes: refits with the sexed and unsexed samples and life history by sex
+  two_sex <- !is.null(fit$tmb_data$nsex) && fit$tmb_data$nsex == 2L
+  if (two_sex) {
+    if (is.null(fit$stklen_m)) stop("mc_flicc(): the sex-structured fit lacks its male stock (fit$stklen_m).")
+    lfd_fit <- lfd_from_fit_flicc(fit)
+    lhpar_m <- fit$stklen_m@lhpar
+  }
+
   # 4. Convergence flags
   mc$ok <- rep(FALSE, nsim)
   mc$conv <- rep("error", nsim)
@@ -393,13 +401,25 @@ mc_flicc <- function(
     lh["L95"]  <- draws$L95[i]
     lh["CVL"]  <- draws$CVL[i]
 
-    stk_i <- stocklen(
-      fit$report$obslen,
-      lh,
-      m_model = fit$stklen@m_model
-    )
-
-    attr(stk_i, "lhpar") <- lh
+    if (two_sex) {
+      # males: the same relative deviations as the females (sexes fully
+      # correlated in the draws), applied to the male input life history
+      lhm <- lhpar_m
+      for (nm in intersect(c("linf", "k", "M", "L50", "L95"), dimnames(lhm)$params))
+        if (nm %in% dimnames(lh)$params && is.finite(as.numeric(lhpar[nm])) && as.numeric(lhpar[nm]) != 0)
+          lhm[nm] <- as.numeric(lhm[nm]) * as.numeric(lh[nm]) / as.numeric(lhpar[nm])
+      if ("Mk" %in% dimnames(lhm)$params) lhm["Mk"] <- as.numeric(lhm["M"]) / as.numeric(lhm["k"])
+      stk_i <- stocklen_sex(lfd_fit, list(F = lh[setdiff(dimnames(lh)$params, "CVL")],
+                                         M = lhm[setdiff(dimnames(lhm)$params, "CVL")]),
+                            m_model = fit$stklen@m_model)
+    } else {
+      stk_i <- stocklen(
+        fit$report$obslen,
+        lh,
+        m_model = fit$stklen@m_model
+      )
+      attr(stk_i, "lhpar") <- lh
+    }
 
     settings_i <- modifyList(
       fit$settings,
@@ -409,7 +429,7 @@ mc_flicc <- function(
     sel_fun <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[fit$tmb_data$sel_type]
 
     args_i <- c(list(
-      fit$report$obslen,
+      if (two_sex) lfd_fit else fit$report$obslen,
       stk_i,
       sel_fun = sel_fun,
       catch_by_gear = fit$report$catch_by_gear,

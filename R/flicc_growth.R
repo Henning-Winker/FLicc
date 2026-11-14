@@ -3,7 +3,26 @@
 # length compositions (plot_growth_lfd)
 
 # growth parameters from a fit, an FLStockLen or an FLPar
-growth_pars_flicc <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL) {
+growth_pars_flicc <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, sex = c("F", "M")) {
+  sex <- match.arg(sex)
+  # sex-structured inputs: pick one sex (fit, stock list or lhpar list)
+  if (is.list(x) && !isS4(x) && is.null(x$tmb_data) && all(c("F", "M") %in% names(x))) x <- x[[sex]]
+  if (sex == "M" && is.list(x) && !is.null(x$tmb_data)) {
+    if (is.null(x$report$lhpar_m)) stop("sex = \"M\" needs a sex-structured fit.")
+    lm <- x$report$lhpar_m
+    lh <- x$report$lhpar
+    pn <- dimnames(lm)$params
+    lh2 <- FLCore::FLPar(linf = as.numeric(lm["linf"]), k = as.numeric(lm["k"]), Mk = as.numeric(lm["Mk"]),
+                         M = as.numeric(lm["M"]),
+                         L50 = if (!is.null(x$stklen_m)) as.numeric(x$stklen_m@lhpar["L50"]) else NA_real_)
+    gp <- growth_pars_flicc(lh2, CVL = if (is.null(CVL)) as.numeric(lm["CVL"]) else CVL,
+                            maxsd = if (is.null(maxsd)) max(abs(x$tmb_data$gtg_z)) else maxsd,
+                            ngtg = if (is.null(ngtg)) length(x$tmb_data$gtg_z) else ngtg)
+    lf <- x$report$obslen_sex
+    gp$lfd <- if (!is.null(lf)) FLCore::FLQuants(lapply(lf, function(q) q[, , "M"])) else NULL
+    gp$sex <- "M"
+    return(gp)
+  }
   getp <- function(lh, nm) {
     pn <- dimnames(lh)[[1]]
     if (nm %in% pn) as.numeric(lh[nm]) else NA_real_
@@ -22,6 +41,8 @@ growth_pars_flicc <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL) {
       z <- if (ng == 1) 0 else seq(-ms, ms, length.out = ng)
     }
     lfd <- x$report$obslen
+    if (!is.null(x$report$obslen_sex))        # two sexes: the female samples
+      lfd <- FLCore::FLQuants(lapply(x$report$obslen_sex, function(q) q[, , "F"]))
   } else {
     lh <- if (methods::is(x, "FLStockLen")) x@lhpar else x
     if (!methods::is(lh, "FLPar")) stop("x must be a fitted FLicc object, an FLStockLen or an FLPar.")
@@ -87,6 +108,9 @@ max_len_flicc <- function(lfd) {
 #' @param t0 Age at length zero (only shifts the age axis; FLicc does not need it).
 #' @param lfd Optional `FLQuants` of length frequencies for the largest observed
 #'   fish; for a fit, the fitted data.
+#' @param sex For sex-structured inputs (a two-sex fit, `stocklen_sex()`
+#'   list or `list(F = , M = )` of `FLPar`): `"F"` (default) or `"M"`; with a
+#'   fit, `"M"` uses the fitted male Linf, M/k and CVL and the male samples.
 #' @param composition Logical; add the unfished length composition (needs
 #'   patchwork).
 #' @return A `ggplot` (or a `patchwork` with `composition = TRUE`).
@@ -102,8 +126,9 @@ max_len_flicc <- function(lfd) {
 #' }
 #' @export
 plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL, t0 = 0,
-                        lfd = NULL, composition = FALSE) {
-  gp <- growth_pars_flicc(x, CVL, maxsd, ngtg)
+                        lfd = NULL, composition = FALSE, sex = c("F", "M")) {
+  sex <- match.arg(sex)
+  gp <- growth_pars_flicc(x, CVL, maxsd, ngtg, sex = sex)
   if (is.null(lfd)) lfd <- gp$lfd
   if (is.null(maxage)) maxage <- t0 + log(20) / gp$k
   age <- seq(0, maxage, length.out = 200)
@@ -137,7 +162,8 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
     ggplot2::scale_alpha(range = c(0.2, 1), guide = "none") +
     ggplot2::coord_cartesian(ylim = c(0, ymax)) +
     ggplot2::labs(x = "Age (years)", y = "Length",
-                  title = sprintf("Growth-type groups: Linf %.1f, k %.3f, CVL %.2f, %d groups over +/- %.1f SD",
+                  title = sprintf("%sGrowth-type groups: Linf %.1f, k %.3f, CVL %.2f, %d groups over +/- %.1f SD",
+                                  if (identical(gp$sex, "M")) "Males. " else "",
                                   gp$linf, gp$k, gp$CVL, ng, max(abs(gp$z)))) +
     ggplot2::theme_bw() + ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
                                          plot.title = ggplot2::element_text(size = 10))
@@ -214,6 +240,8 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
 #'   likelihood (the profile interval is approximate).
 #' @param spawn,sample Spawning and sampling time as fractions of the year.
 #' @param maxage Largest age component (default: age at 0.99 Linf).
+#' @param sex `"F"` or `"M"` for sex-structured fits (see [plot_growth()]):
+#'   the growth and the samples of that sex.
 #' @return A list of class `"flicc_growth_phase"`: `profile` (k, phase,
 #'   logLik, dLL), `best` (k, phase, logLik), `t0` (candidates: `m`,
 #'   `age_first`, `t0` with interval, lengths at age 1 and 2),
@@ -235,8 +263,9 @@ plot_growth <- function(x, CVL = NULL, maxsd = NULL, ngtg = NULL, maxage = NULL,
 growth_phase_flicc <- function(x, lfd = NULL, CVL = NULL, maxsd = NULL, k = NULL,
                                phase = seq(0, 0.98, by = 0.02), sd0 = NULL,
                                years = NULL, gear = NULL, Lmin = NULL, ess = 200,
-                               spawn = 0, sample = 0, maxage = NULL) {
-  gp <- growth_pars_flicc(x, CVL, maxsd)
+                               spawn = 0, sample = 0, maxage = NULL, sex = c("F", "M")) {
+  sex <- match.arg(sex)
+  gp <- growth_pars_flicc(x, CVL, maxsd, sex = sex)
   if (is.null(lfd)) lfd <- gp$lfd
   if (is.null(lfd)) stop("lfd is needed (FLQuants of length frequencies).")
   gears <- if (is.null(gear)) names(lfd) else if (is.numeric(gear)) names(lfd)[gear] else gear

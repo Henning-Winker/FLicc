@@ -204,3 +204,23 @@ sex_stocks_flicc <- function(object) {
     return(FLCore::FLStocks(Female = object$F, Male = object$M))
   object
 }
+
+# length frequencies of a fit with the sex units used in the likelihood:
+# unsexed counts as "U" (or "unique" for one-sex fits) and sexed counts as "F",
+# "M"; units without data are dropped (internal)
+lfd_from_fit_flicc <- function(fit) {
+  r <- fit$report
+  if (is.null(r$obslen_sex)) return(r$obslen)
+  out <- lapply(names(r$obslen), function(g) {
+    u <- r$obslen[[g]]; sx <- r$obslen_sex[[g]]
+    keep <- c(U = sum(u, na.rm = TRUE) > 0, F = sum(sx[, , "F"], na.rm = TRUE) > 0,
+              M = sum(sx[, , "M"], na.rm = TRUE) > 0)
+    if (!any(keep)) keep["U"] <- TRUE
+    d <- dimnames(u); d$unit <- names(keep)[keep]
+    q <- FLCore::FLQuant(0, dimnames = d, units = units(u))
+    if (keep["U"]) q[, , "U"] <- u
+    for (s in c("F", "M")) if (keep[s]) q[, , s] <- sx[, , s]
+    q
+  })
+  FLCore::FLQuants(stats::setNames(out, names(r$obslen)))
+}
