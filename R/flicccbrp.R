@@ -300,6 +300,13 @@ prbrp_flicc <- function(fit, nyears = 1, Fseq = NULL,
   mat[] <- mat(fit$stklen)[, ref$year]
   m <- FLQuant(wl,unit="m")
   m[] <- m(fit$stklen)[, ref$year]
+  if (!is.null(b) && !is.null(b$sex)) {
+    # two sexes (see brp_tmb_flicc()): effective weight, maturity and M by F,
+    # so that catch is both sexes and SSB female spawning biomass
+    wl[]  <- unname(b$sex$w_eff)
+    mat[] <- unname(b$sex$mat_eff)
+    m[]   <- unname(b$sex$M_eff)
+  }
 
 
   fap <- FLQuant(Fseq,quant="len",unit="f")

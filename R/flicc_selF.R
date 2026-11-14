@@ -30,12 +30,29 @@ pr_engine_flicc <- function(fit, nyears = 1) {
     lr <- log(lnum / lden)                                  # nlen x ngtg, independent of F
     MK <- gtg$MKMat * c(Mscale, Mscale[nlen])               # (nlen + 1) x ngtg
     recP <- gtg$recP
-    popN <- function(Fl) {
-      ZK <- MK + c(Fl, Fl[nlen]) / k
+    popN_gtg <- function(Fl, MK, lr, kk) {
+      ZK <- MK + c(Fl, Fl[nlen]) / kk
       lS <- apply(ZK[seq_len(nlen), , drop = FALSE] * lr, 2, cumsum)
       if (!is.matrix(lS)) lS <- matrix(lS, nrow = nlen)
       P <- rbind(recP, sweep(exp(lS), 2, recP, "*"))
       rowSums((P[seq_len(nlen), , drop = FALSE] - P[-1, , drop = FALSE]) / ZK[seq_len(nlen), , drop = FALSE])
+    }
+    popN <- function(Fl) popN_gtg(Fl, MK, lr, k)
+    # males (nsex = 2): own growth groups, M/K, weight; F/k with the male k;
+    # numbers converted to the female time scale (x k_f / k_m)
+    if (!is.null(td$nsex) && td$nsex == 2L) {
+      ro <- fit$obj$report(fit$obj$env$last.par.best)
+      Linfs_m <- as.numeric(ro$gtgLinfs_m)
+      lr_m <- log(outer(LB[-1], Linfs_m, function(L, Li) pmax(Li - L, 1e-12)) /
+                  outer(LB[-(nlen + 1)], Linfs_m, function(L, Li) pmax(Li - L, 1e-12)))
+      ms_m <- td$Mscaler_m
+      Mscale_m <- as.numeric(rowMeans(ms_m[, utils::tail(seq_len(ncol(ms_m)), length(yrs)), drop = FALSE]))
+      MK_m <- ro$MKMat_m * c(Mscale_m, Mscale_m[nlen])
+      k_m <- k / td$k_ratio
+      M_m <- as.numeric(ro$Mk_m) * k_m * Mscale_m
+      w_m <- as.numeric(FLCore::yearMeans(FLCore::catch.wt(fit$stklen_m)[, yrs]))
+      sr <- td$sex_ratio
+      popNm <- function(Fl) popN_gtg(Fl, MK_m, lr_m, k_m) * td$k_ratio
     }
   } else {
     ref <- flicc_refpars(fit, nyears = nyears)
@@ -44,12 +61,21 @@ pr_engine_flicc <- function(fit, nyears = 1) {
   N0 <- popN(rep(0, nlen))
   s0 <- N0[1]
   SB0 <- sum(N0 / s0 * mat * w)
+  two <- exists("popNm", inherits = FALSE)
   function(Fl, detail = FALSE) {
     N <- popN(Fl) / s0
     Z <- M + Fl
     C <- ifelse(Z > 0, N * Fl / Z * (1 - exp(-Z)), 0)
-    out <- c(SPR = sum(N * mat * w) / SB0, YPR = sum(C * w))
-    if (detail) return(list(pr = out, Cw = C * w, Fl = Fl))
+    Cw <- C * w
+    if (two) {
+      # per total recruit: females sex_ratio, males 1 - sex_ratio; SPR female
+      Nm <- popNm(Fl) / s0
+      Zm <- M_m + Fl
+      Cm <- ifelse(Zm > 0, Nm * Fl / Zm * (1 - exp(-Zm)), 0)
+      Cw <- sr * Cw + (1 - sr) * Cm * w_m
+    }
+    out <- c(SPR = sum(N * mat * w) / SB0, YPR = sum(Cw))
+    if (detail) return(list(pr = out, Cw = Cw, Fl = Fl))
     out
   }
 }
@@ -60,6 +86,8 @@ gear_state_flicc <- function(fit, nyears = 1) {
   td <- fit$tmb_data
   gears <- td$gear_names
   type <- c("logistic", "dsnormal", "normal", "binormal", "bidsnormal")[td$sel_type]
+  fish <- if (!is.null(td$gear_type)) td$gear_type == 0L else rep(TRUE, length(gears))
+  gears <- gears[fish]; type <- type[fish]                 # surveys take no catch
   k <- as.numeric(rp$lhpar["k"])
   yrs <- utils::tail(dimnames(rp$N)$year, nyears)
   pars <- lapply(gears, function(g) { p <- rp$selpars[[g]]; stats::setNames(as.list(as.numeric(p)), dimnames(p)[[1]]) })

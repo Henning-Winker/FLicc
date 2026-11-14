@@ -1010,6 +1010,8 @@ Type objective_function<Type>::operator() ()
 
     int nF = brp_F.size();
     matrix<Type> brp_N(nlen, nF), brp_C(nlen, nF), brp_Fl(nlen, nF);
+    matrix<Type> brp_N_m(nlen, nF), brp_C_m(nlen, nF);   // males per male recruit (nsex = 2)
+    brp_N_m.setZero(); brp_C_m.setZero();
     vector<Type> brp_SBPR(nF), brp_YPR(nF);
     for(int i = 0; i < nF; i++) {
       vector<Type> NI = popN(brp_F(i), Fl, Zl);
@@ -1027,6 +1029,7 @@ Type objective_function<Type>::operator() ()
         for(int l = 0; l < nlen; l++) {
           Type n = NIm(l) / scale0;
           Type c = (Zlm(l) > Type(0)) ? n * Flm(l) / Zlm(l) * (Type(1) - exp(-Zlm(l))) : Type(0);
+          brp_N_m(l, i) = n; brp_C_m(l, i) = c;
           yp += male_w * c * wtA_m(l);
         }
       }
@@ -1067,14 +1070,26 @@ Type objective_function<Type>::operator() ()
     }
 
     // numbers-at-length per recruit at each Fspr (reference LFD, LBIspr)
-    matrix<Type> brp_Nspr(nlen, nS);
-    brp_Nspr.setZero();
+    matrix<Type> brp_Nspr(nlen, nS), brp_Nspr_m(nlen, nS);
+    brp_Nspr.setZero(); brp_Nspr_m.setZero();
     for(int j = 0; j < nS; j++) {
       if(brp_Fspr(j) > Type(0)) {
         vector<Type> NI = popN(brp_Fspr(j), Fl, Zl);
         for(int l = 0; l < nlen; l++) brp_Nspr(l, j) = NI(l) / scale0;
+        if(nsex == 2) {
+          vector<Type> Flm(nlen), Zlm(nlen);
+          vector<Type> NIm = popNm(brp_Fspr(j), Flm, Zlm);
+          for(int l = 0; l < nlen; l++) brp_Nspr_m(l, j) = NIm(l) / scale0;
+        }
       }
     }
+    REPORT(brp_Nspr_m);
+    REPORT(brp_N_m);
+    REPORT(brp_C_m);
+    REPORT(MA_m);
+    REPORT(wtA_m);
+    REPORT(wtA);
+    REPORT(matA);
 
     REPORT(brp_Nspr);
     REPORT(brp_SBPR0);
@@ -1170,6 +1185,7 @@ Type objective_function<Type>::operator() ()
   REPORT(Mk_m);
   REPORT(CVL_m);
   REPORT(gtgLinfs_m);
+  REPORT(MKMat_m);
   REPORT(plen_sex);   // nlen x nyear x ngear x 2 (nsex = 2)
   REPORT(N_y_m);
 

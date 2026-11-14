@@ -323,6 +323,10 @@ as_FLQuants <- function(fit,stklen) {
     out$spr_ref <- 100 * as.numeric(tmb_data$brp_spr)
     out$Fspr <- stats::setNames(fs, paste0("Fspr", out$spr_ref))
     out$Nspr <- report$brp_Nspr
+    if (!is.null(tmb_data$nsex) && tmb_data$nsex == 2L && !is.null(report$brp_Nspr_m)) {
+      # both sexes per total recruit (reference composition for LBIspr)
+      out$Nspr <- tmb_data$sex_ratio * report$brp_Nspr + (1 - tmb_data$sex_ratio) * report$brp_Nspr_m
+    }
   }
   if (pop_model == "gtg") {
     # GTG inputs at the estimates, used by nf_from_flicc() and reference points

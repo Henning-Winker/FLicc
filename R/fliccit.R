@@ -634,9 +634,34 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   rep <- obj$report()
   Fspr <- as.numeric(rep$brp_Fspr)
   Fspr[Fspr < 0] <- NA_real_
-  list(F = as.numeric(Fseq), SBPR0 = rep$brp_SBPR0,
+  out <- list(F = as.numeric(Fseq), SBPR0 = rep$brp_SBPR0,
        SBPR = as.numeric(rep$brp_SBPR), YPR = as.numeric(rep$brp_YPR),
        N = rep$brp_N, C = rep$brp_C, Fl = rep$brp_Fl, Fspr = Fspr)
+  # two sexes: numbers and catch at length of both sexes per total recruit,
+  # with an effective weight (catch-weighted mean of the sexes) and an
+  # effective maturity (female spawning only), so that sum(C * w) is the
+  # yield of both sexes and sum(N * mat * w) the female spawning biomass;
+  # M at length weighted by numbers
+  if (!is.null(td$nsex) && td$nsex == 2L) {
+    sr <- td$sex_ratio
+    NF <- sr * rep$brp_N;   NM <- (1 - sr) * rep$brp_N_m
+    CF <- sr * rep$brp_C;   CM <- (1 - sr) * rep$brp_C_m
+    wF <- as.numeric(rep$wtA); wM <- as.numeric(rep$wtA_m); mF <- as.numeric(rep$matA)
+    Nt <- NF + NM; Ct <- CF + CM
+    w_eff <- (CF * wF + CM * wM) / Ct
+    wn <- (NF * wF + NM * wM) / Nt                     # where there is no catch
+    w_eff[!is.finite(w_eff)] <- wn[!is.finite(w_eff)]
+    wFm <- matrix(wF, nrow(w_eff), ncol(w_eff))
+    w_eff[!is.finite(w_eff)] <- wFm[!is.finite(w_eff)]   # no fish of either sex
+    mat_eff <- NF * mF * wF / (Nt * w_eff); mat_eff[!is.finite(mat_eff)] <- 0
+    M_eff <- (NF * as.numeric(rep$MA) + NM * as.numeric(rep$MA_m)) / Nt
+    MAm <- matrix(as.numeric(rep$MA), nrow(M_eff), ncol(M_eff))
+    M_eff[!is.finite(M_eff)] <- MAm[!is.finite(M_eff)]
+    out$N <- Nt; out$C <- Ct
+    out$sex <- list(sex_ratio = sr, N_F = NF, N_M = NM, C_F = CF, C_M = CM,
+                    w_eff = w_eff, mat_eff = mat_eff, M_eff = M_eff)
+  }
+  out
 }
 
 brp_fast_ok <- function(fit, Sel = NULL, scale_sel = TRUE) {
@@ -894,6 +919,9 @@ pr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
     }
   }
 
+  if (!is.null(fit$tmb_data$nsex) && fit$tmb_data$nsex == 2L)
+    stop("pr_flicc() with a user selectivity (Sel) or scale_sel = FALSE is not yet available ",
+         "for sex-structured fits.")
   ref <- flicc_refpars(fit, nyears = nyears, scale_sel = scale_sel)
 
   if (!is.null(Sel)) {

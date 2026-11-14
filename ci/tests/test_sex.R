@@ -31,6 +31,16 @@ b1 <- FLicc:::brp_tmb_flicc(f1, Fseq = c(0.05, 0.2), spr = c(30, 40))
 b2 <- FLicc:::brp_tmb_flicc(f2, Fseq = c(0.05, 0.2), spr = c(30, 40))
 stopifnot(max(abs(b1$Fspr - b2$Fspr)) < 1e-8, max(abs(b2$YPR / b1$YPR - 1)) < 1e-8,
           max(abs(b2$SBPR / b1$SBPR - 0.5)) < 1e-8)
+# equilibrium objects: catch both sexes, SSB female (identical sexes: catch equal, SSB x 0.5)
+e1 <- eqstklen(f1, s = 0.75); e2 <- eqstklen(f2, s = 0.75)
+stopifnot(max(abs(an(catch(e2)) / an(catch(e1)) - 1), na.rm = TRUE) < 1e-5,
+          max(abs(an(ssbl(e2)) / an(ssbl(e1)) - 0.5), na.rm = TRUE) < 1e-6,
+          max(abs(attr(e2, "refpts")[c("Fcur", "Fspr", "Ycur", "SSBcur", "SPRcur")] -
+                  attr(e1, "refpts")[c("Fcur", "Fspr", "Ycur", "SSBcur", "SPRcur")])) < 1e-5)
+# contour engine with two sexes equals the TMB per-recruit block
+eng <- FLicc:::pr_engine_flicc(f2); bb <- FLicc:::brp_tmb_flicc(f2, Fseq = 0.1)
+ee <- eng(0.1 * as.numeric(f2$obj$report(f2$obj$env$last.par.best)$sA))
+stopifnot(abs(ee["SPR"] / (bb$SBPR / bb$SBPR0) - 1) < 1e-6, abs(ee["YPR"] / bb$YPR - 1) < 1e-6)
 cat("identity ok\n")
 
 ## 2. composition types: females only, males only, combined + sexed in one gear-year
@@ -128,6 +138,13 @@ pl <- plot_len(fs, by_gear = TRUE)
 stopifnot(all(c("survey F", "survey M") %in% levels(pl$data$gear)), !is.null(fs$report$obslen_sex))
 # one-sex fits keep their residual columns (no sex column)
 stopifnot(is.null(resid_flicc(f1)$sex))
+# dimorphic: effective weight and maturity reproduce yield and female SBPR
+bd <- FLicc:::brp_tmb_flicc(fs, Fseq = c(0.1, 0.3))
+stopifnot(max(abs(colSums(bd$C * bd$sex$w_eff) / bd$YPR - 1)) < 1e-8,
+          max(abs(colSums(bd$N * bd$sex$mat_eff * bd$sex$w_eff) / bd$SBPR - 1)) < 1e-8)
+ed <- FLicc:::pr_engine_flicc(fs)(0.3 * as.numeric(fs$obj$report(fs$obj$env$last.par.best)$sA))
+stopifnot(abs(ed["YPR"] / bd$YPR[2] - 1) < 1e-6)
+stopifnot(identical(FLicc:::gear_state_flicc(fs)$gears, "trawl"))   # surveys not in contours
 p <- plot_sexratio(fs)
 stopifnot(inherits(p, "ggplot"), all(attr(p, "data")$gear == "survey"))
 cat("sex tests passed\n")
