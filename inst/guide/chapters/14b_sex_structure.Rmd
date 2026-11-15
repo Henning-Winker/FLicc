@@ -108,6 +108,19 @@ tail(tab, 5)
 fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
 ```
 
+`plot_spr()` takes a named list of fits, so the combined-sex model with female life history
+can be compared directly with the sex-structured fits; the dashed line is the true SPR of the
+simulation:
+
+```{r sex-spr-compare, fig.height = 4.5}
+cmp <- list("Combined sex (female LH)" = fit_1sex, "Two-sex, unsexed data" = fit_2sex_U,
+            "Two-sex, + sexed survey" = fit_sex)
+plot_spr(cmp, ci = TRUE, ci_type = "ribbon") +
+  ggplot2::geom_line(data = data.frame(year = truth_sexsim$year, spr = truth_sexsim$spr),
+                     ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.8)
+```
+
 The one-sex fit underestimates SPR most, because the small males are read as heavy fishing.
 Modelling both sexes with their life history reduces the bias even from unsexed samples, and the
 sexed survey reduces it further: it informs the selectivity of small fish and the sex ratio at
