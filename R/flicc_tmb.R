@@ -409,7 +409,8 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     Galpha_init = Galpha_init,
     gear_names  = gear_names,
     year_names  = years
-  )
+  ) -> td
+  spm_defaults_tmb_flicc(td)          # FLicc-SPM off (spm_use = 0); see spm_setup_flicc()
 }
 
 #' Tail cut as a length (internal)
@@ -573,7 +574,8 @@ init_tmb_flicc <- function(tmb_data) {
     log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init),
     log_Mk_m   = log(if (!is.null(tmb_data$Mk_m_init)) tmb_data$Mk_m_init else tmb_data$Mk_init),
     log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init)
-  )
+  ) -> pl
+  spm_par_defaults_flicc(pl, tmb_data)
 }
 
 #' Fit the FLicc model in a single optimizer pass
@@ -698,10 +700,13 @@ fiticc_core <- function(lfd, stklen,
     Mk_m.sd = NULL,
     CVL_m = NULL,
     CVL_m.sd = NULL,
-    surveys = NULL
+    surveys = NULL,
+    spm = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
+  # FLicc-SPM: F as random effects by default (Laplace), with the SPM states
+  if (!is.null(settings$spm) && is.null(settings$F_re)) settings$F_re <- TRUE
 
   if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
 
@@ -893,6 +898,10 @@ fiticc_core <- function(lfd, stklen,
   if (!is.null(fix_res$map_Sm)) {
     map$Sm <- fix_res$map_Sm
   }
+  # FLicc-SPM data, parameters, map and random effects (spm_use = 0 without settings$spm)
+  spm_res <- spm_setup_flicc(settings$spm, tmb_data, parameters, map, random, stklen)
+  tmb_data <- spm_res$tmb_data; parameters <- spm_res$parameters
+  map <- spm_res$map; random <- spm_res$random
   if (length(map) == 0) {
     map <- NULL
   }
@@ -905,13 +914,23 @@ fiticc_core <- function(lfd, stklen,
   obj <- TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
                             c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
-                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
+                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init", "spm_info"))],
     parameters = parameters,
     map = map,
     random = random,
     DLL = dll,
     silent = silent
   )
+  # FLicc-SPM: starting values of K, q and the states from a deterministic
+  # trajectory with r and m of the per-recruit model at the initial values
+  if (isTRUE(tmb_data$spm_use == 1L)) {
+    parameters <- spm_inits_flicc(obj, tmb_data, parameters)
+    obj <- TMB::MakeADFun(
+      data = tmb_data[setdiff(names(tmb_data),
+                              c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
+                                "Linf_init", "Mk_init", "CVL_init", "Galpha_init", "spm_info"))],
+      parameters = parameters, map = map, random = random, DLL = dll, silent = silent)
+  }
 
   # Optional restart from user-supplied starting values.
   # This is useful for reducing gradients by restarting from a previous optimum,

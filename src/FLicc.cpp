@@ -403,6 +403,45 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(wt_m);         // nlen x nyear, male
   DATA_MATRIX(mat_m);        // nlen x nyear, male
 
+  // FLicc-SPM (spm_use = 1): Pella-Tomlinson state-space surplus production
+  // model in spawning biomass (JABBA-Select / JABBA3 Selex state), fitted to
+  // catch and CPUE in the same objective as the length compositions. r and m
+  // come from the per-recruit equilibrium of the gtg model (with the
+  // estimated selectivity) at Fmsy or Fspr; the EB/SB conversion from the
+  // same equilibrium on an F grid; SPR by year is linked to SB/SB0 under
+  // Beverton-Holt steepness. The SPM part is a translation of the subset of
+  // JABBA3::jb3_nll() with constant process error, catch without error and
+  // the production lag. spm_use = 0 leaves FLicc unchanged.
+  DATA_INTEGER(spm_use);
+  DATA_INTEGER(spm_nyear);
+  DATA_VECTOR(spm_catch);      // spm_nyear: catch / mean catch (internal units)
+  DATA_IVECTOR(spm_lfd_t);     // nyear: SPM year (0-based) of each LFD year
+  DATA_INTEGER(spm_nidx);
+  DATA_VECTOR(spm_logI);       // log index observations
+  DATA_IVECTOR(spm_obs_t);     // SPM year (0-based) of each observation
+  DATA_IVECTOR(spm_obs_i);     // index (0-based) of each observation
+  DATA_VECTOR(spm_se2);        // fixed observation variance (JABBA: se^2 + min se^2)
+  DATA_IVECTOR(spm_idx_gear);  // nidx: gear (0-based) whose selectivity defines the index; -1 SB, -2 joint fishery
+  DATA_IVECTOR(spm_idx_units); // nidx: 1 biomass, 0 numbers
+  DATA_SCALAR(spm_h);          // Beverton-Holt steepness
+  DATA_INTEGER(spm_shape);     // source of r and m: 0 Fmsy, 1 Fspr (spm_spr_tgt)
+  DATA_SCALAR(spm_spr_tgt);
+  DATA_SCALAR(spm_r_sd);       // > 0: log r ~ N(log r(theta), spm_r_sd); <= 0: r = r(theta)
+  DATA_SCALAR(spm_m_sd);       // > 0: log m ~ N(log m(theta), spm_m_sd); <= 0: m = m(theta)
+  DATA_INTEGER(spm_link_spr);  // 1: log D_spr,y ~ N(log SB_t/SB0, spm_sigma_link)
+  DATA_SCALAR(spm_sigma_link);
+  DATA_INTEGER(spm_link_F);    // 1: log H_t ~ N(log H_eq(F_y), spm_sigma_Flink)
+  DATA_SCALAR(spm_sigma_Flink);
+  DATA_IVECTOR(spm_lagidx);    // spm_nyear: state (0-based) whose depletion drives production in t (lag)
+  DATA_VECTOR(spm_bk_pr);      // initial depletion SB_1/SB0: median, log sd, on
+  DATA_VECTOR(spm_sdb_pr);     // process error SD: median, log sd, on
+  DATA_VECTOR(spm_K_pr);       // K (internal units): median, log sd, on
+  DATA_VECTOR(spm_xgrid);      // F grid for the EB/SB curves: multiples of M at Linf, first 0
+  DATA_INTEGER(spm_newton_it); // taped Newton iterations for Fmsy / Fspr and m
+  DATA_VECTOR(spm_Pbound);     // soft bounds on SB/SB0 (JABBA: 0.02, 1.3)
+  DATA_VECTOR(spm_selw);       // ngear: fixed weights of the gear selectivities for the per-recruit
+                               // block; all <= 0: F-weighted joint selectivity of the terminal years
+
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
   PARAMETER(log_Mk);
@@ -414,6 +453,14 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_Linf_m);   // male Linf   (nsex = 2; fixed unless linf_m.sd)
   PARAMETER(log_Mk_m);     // male M/k    (nsex = 2; fixed unless Mk_m.sd)
   PARAMETER(log_Galpha_m); // male 1/CVL^2 (nsex = 2; fixed unless CVL_m.sd)
+  PARAMETER(spm_logK);     // FLicc-SPM (mapped off when spm_use = 0)
+  PARAMETER(spm_logr);
+  PARAMETER(spm_logm);
+  PARAMETER(spm_lbk);
+  PARAMETER(spm_logsdb);
+  PARAMETER_VECTOR(spm_logq);
+  PARAMETER_VECTOR(spm_logsdi);
+  PARAMETER_VECTOR(spm_logP);  // log SB_t/SB0 (random effects)
 
   Type nll = 0.0;
 
@@ -529,6 +576,8 @@ Type objective_function<Type>::operator() ()
   array<Type> plen_sex(nlen, nyear, ngear, 2); // predicted joint length x sex proportions within gear
   matrix<Type> N_y_m(nlen, nyear);             // male numbers per recruit (male k time scale)
   plen_sex.setZero(); N_y_m.setZero();
+  vector<Type> fapic_y(nyear);                 // apical F/k by year (joint selectivity), for the SPM F link
+  fapic_y.setZero();
 
   sel_joint.setZero();
   epr_y.setZero();
@@ -722,6 +771,7 @@ Type objective_function<Type>::operator() ()
       M_at_fmax = CppAD::CondExpGt(fsum, fmax, M(l), M_at_fmax);
       fmax      = CppAD::CondExpGt(fsum, fmax, fsum, fmax);
     }
+    fapic_y(y) = fmax;
 
     if (FMpen_sd > Type(0)) {
 
@@ -937,6 +987,290 @@ Type objective_function<Type>::operator() ()
 
   }
 
+
+  // --- FLicc-SPM: surplus production model in the same objective ---
+  if(spm_use == 1 && brp_only == 0) {
+    if(pop_model != 2) error("FLicc-SPM needs pop_model = gtg");
+    // smooth bounds as JABBA3 (.smax, .smin)
+    auto smax_ = [](Type x, Type a, Type eps) { return Type(a + Type(0.5) * ((x - a) + sqrt((x - a) * (x - a) + eps))); };
+    auto smin_ = [](Type x, Type a, Type eps) { return Type(a - Type(0.5) * ((a - x) + sqrt((a - x) * (a - x) + eps))); };
+
+    // per-recruit inputs as the brp block: terminal brp_nyears averages of the
+    // joint selectivity (apical 1), M, maturity and weight; AD-safe
+    int nyb = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
+    int yb0 = nyear - nyb;
+    vector<Type> sA(nlen), Ms(nlen), matA(nlen), wtA(nlen), Ms_m(nlen), wtA_m(nlen), MA(nlen), MA_m(nlen);
+    sA.setZero(); Ms.setZero(); matA.setZero(); wtA.setZero(); Ms_m.setZero(); wtA_m.setZero();
+    bool selw_on = (spm_selw.size() == ngear) && (spm_selw.sum() > Type(0));
+    for(int l = 0; l < nlen; l++) {
+      if(selw_on) for(int g = 0; g < ngear; g++) sA(l) += spm_selw(g) * Sel(l, g);
+      for(int y = yb0; y < nyear; y++) {
+        if(!selw_on) sA(l) += sel_joint(l, y) / Type(nyb);
+        Ms(l)    += Mscaler(l, y)   / Type(nyb);
+        matA(l)  += mat(l, y)       / Type(nyb);
+        wtA(l)   += wt(l, y)        / Type(nyb);
+        Ms_m(l)  += Mscaler_m(l, y) / Type(nyb);
+        wtA_m(l) += wt_m(l, y)      / Type(nyb);
+      }
+    }
+    Type samax = Type(0);
+    for(int l = 0; l < nlen; l++) samax = CppAD::CondExpGt(sA(l), samax, sA(l), samax);
+    for(int l = 0; l < nlen; l++) {
+      sA(l) = sA(l) / (samax + Type(1e-30));
+      MA(l) = Mk * brp_k * Ms(l);                    // annual M at length, female
+      MA_m(l) = Mk_m * (brp_k / k_ratio) * Ms_m(l);  // male
+    }
+    Type male_w = (nsex == 2) ? Type(Type(1) - sex_ratio) : Type(0);
+    Type Mref = Mk * brp_k;                          // annual M at Linf: scale of the F grid
+
+    // numbers at length per recruit at annual apical F x (female; male on the
+    // female time scale), as popN() / popNm() of the brp block
+    auto popF = [&](Type x, vector<Type>& Zl) {
+      matrix<Type> ZK(nlen + 1, ngtg);
+      for(int l = 0; l < nlen; l++) Zl(l) = MA(l) + x * sA(l);
+      for(int g = 0; g < ngtg; g++) {
+        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat(l, g) * Ms(l) + x * sA(l) / brp_k;
+        ZK(nlen, g) = MKMat(nlen, g) * Ms(nlen - 1) + x * sA(nlen - 1) / brp_k;
+      }
+      return pop_len_gtg(LLB, gtgLinfs, ZK, recP);
+    };
+    auto popM = [&](Type x, vector<Type>& Zl) {
+      matrix<Type> ZK(nlen + 1, ngtg);
+      for(int l = 0; l < nlen; l++) Zl(l) = MA_m(l) + x * sA(l);
+      for(int g = 0; g < ngtg; g++) {
+        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat_m(l, g) * Ms_m(l) + x * sA(l) * k_ratio / brp_k;
+        ZK(nlen, g) = MKMat_m(nlen, g) * Ms_m(nlen - 1) + x * sA(nlen - 1) * k_ratio / brp_k;
+      }
+      vector<Type> NI = pop_len_gtg(LLB, gtgLinfs_m, ZK, recP);
+      return vector<Type>(NI * k_ratio);
+    };
+    vector<Type> Zl0(nlen);
+    vector<Type> NI00 = popF(Type(0), Zl0);
+    Type scale0 = NI00(0);
+
+    // per recruit at x: SBPR (female), YPR (both sexes), EBPR of the joint
+    // fishery (both sexes, weight) and of each index (biomass or numbers)
+    int nq_out = 3 + spm_nidx;
+    auto prq = [&](Type x) {
+      vector<Type> out(nq_out);
+      out.setZero();
+      vector<Type> Zl(nlen), Zlm(nlen);
+      vector<Type> NI = popF(x, Zl);
+      vector<Type> NIm(nlen);
+      NIm.setZero();
+      if(nsex == 2) NIm = popM(x, Zlm);
+      for(int l = 0; l < nlen; l++) {
+        Type n = NI(l) / scale0;
+        Type c = n * x * sA(l) / Zl(l) * (Type(1) - exp(-Zl(l)));
+        out(0) += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+        out(1) += sex_ratio * c * wtA(l);
+        out(2) += sex_ratio * n * wtA(l) * sA(l);
+        Type nm = Type(0), cm = Type(0);
+        if(nsex == 2) {
+          nm = NIm(l) / scale0;
+          cm = nm * x * sA(l) / Zlm(l) * (Type(1) - exp(-Zlm(l)));
+          out(1) += male_w * cm * wtA_m(l);
+          out(2) += male_w * nm * wtA_m(l) * sA(l);
+        }
+        for(int i = 0; i < spm_nidx; i++) {
+          int gi = spm_idx_gear(i);
+          if(gi == -1) continue;                         // SB index: filled below
+          Type si = (gi >= 0) ? Type(Sel(l, gi)) : Type(sA(l));
+          if(spm_idx_units(i) == 1) out(3 + i) += (sex_ratio * n * wtA(l) + male_w * nm * wtA_m(l)) * si;
+          else                      out(3 + i) += (sex_ratio * n + male_w * nm) * si;
+        }
+      }
+      for(int i = 0; i < spm_nidx; i++) if(spm_idx_gear(i) == -1) out(3 + i) = out(0);
+      return out;
+    };
+    // Beverton-Holt equilibrium recruitment (R/R0) at SPR
+    auto recbh = [&](Type spr) {
+      Type R = (Type(4) * spm_h * spr - (Type(1) - spm_h)) / ((Type(5) * spm_h - Type(1)) * spr);
+      return smax_(R, Type(1e-6), Type(1e-12));
+    };
+
+    // equilibrium on the F grid: depletion P = SB/SB0 and the EB/SB ratios
+    int nx = spm_xgrid.size();
+    vector<Type> q0 = prq(Type(0));
+    Type SBPR0 = q0(0);
+    vector<Type> Pg(nx), Yg(nx), lxg(nx), sprg(nx);
+    matrix<Type> rhog(nx, 1 + spm_nidx);             // column 0: fishery (removals), 1..: indices
+    for(int j = 0; j < nx; j++) {
+      Type x = spm_xgrid(j) * Mref;
+      vector<Type> q = (j == 0) ? q0 : prq(x);
+      Type spr = q(0) / SBPR0;
+      Type R = recbh(spr);
+      sprg(j) = spr;
+      Pg(j) = R * spr;
+      Yg(j) = R * q(1);
+      lxg(j) = log(x + Type(1e-12));
+      rhog(j, 0) = q(2) / q(0);
+      for(int i = 0; i < spm_nidx; i++) rhog(j, 1 + i) = q(3 + i) / q(0);
+    }
+    // linear interpolation of an EB/SB curve at depletion P (grid P decreases
+    // with F); constant beyond the grid; AD-safe (CondExp)
+    auto rho_at = [&](Type P, int col) {
+      Type res = rhog(nx - 1, col);
+      for(int j = nx - 2; j >= 0; j--) {
+        Type d = Pg(j) - Pg(j + 1);
+        d = CppAD::CondExpLt(d, Type(1e-10), Type(1e-10), d);
+        Type v = rhog(j + 1, col) + (rhog(j, col) - rhog(j + 1, col)) * (P - Pg(j + 1)) / d;
+        res = CppAD::CondExpGt(P, Pg(j + 1), v, res);
+      }
+      return CppAD::CondExpGt(P, Pg(0), Type(rhog(0, col)), res);
+    };
+
+    // reference F: Fmsy (max equilibrium yield) or Fspr, by taped damped
+    // Newton iterations on log F from the best grid node. The iterations are
+    // on the tape (TMB tapes once), so the reference point and its
+    // derivatives follow the parameters; converged, the derivative is the
+    // implicit-function derivative.
+    Type uref;
+    Type dd = Type(1e-3);
+    if(spm_shape == 0) {
+      Type ybest = Yg(1);
+      uref = lxg(1);
+      for(int j = 2; j < nx; j++) {
+        uref  = CppAD::CondExpGt(Yg(j), ybest, lxg(j), uref);
+        ybest = CppAD::CondExpGt(Yg(j), ybest, Yg(j), ybest);
+      }
+      auto Yu = [&](Type u) { vector<Type> q = prq(exp(u)); return Type(recbh(q(0) / SBPR0) * q(1)); };
+      for(int it = 0; it < spm_newton_it; it++) {
+        Type y0 = Yu(uref), yp = Yu(uref + dd), ym = Yu(uref - dd);
+        Type g = (yp - ym) / (Type(2) * dd);
+        Type H = (yp - Type(2) * y0 + ym) / (dd * dd);
+        Type step = CppAD::CondExpLt(H, Type(0), -g / (H - Type(1e-30)),
+                                     CppAD::CondExpGt(g, Type(0), Type(0.5), Type(-0.5)));
+        step = CppAD::CondExpGt(step, Type(0.5), Type(0.5), step);
+        step = CppAD::CondExpLt(step, Type(-0.5), Type(-0.5), step);
+        uref += step;
+      }
+    } else {
+      // largest grid F with SPR above the target, then Newton on log SPR
+      uref = lxg(1);
+      for(int j = 1; j < nx; j++) uref = CppAD::CondExpGt(sprg(j), spm_spr_tgt, lxg(j), uref);
+      Type ltgt = log(spm_spr_tgt);
+      auto gu = [&](Type u) { vector<Type> q = prq(exp(u)); return Type(log(q(0) / SBPR0) - ltgt); };
+      for(int it = 0; it < spm_newton_it; it++) {
+        Type g0 = gu(uref);
+        Type gd = (gu(uref + dd) - gu(uref - dd)) / (Type(2) * dd);
+        Type step = -g0 / CppAD::CondExpLt(gd, Type(-1e-8), gd, Type(-1e-8));
+        step = CppAD::CondExpGt(step, Type(1), Type(1), step);
+        step = CppAD::CondExpLt(step, Type(-1), Type(-1), step);
+        uref += step;
+      }
+    }
+    Type Fref = exp(uref);
+    vector<Type> qr = prq(Fref);
+    Type spr_ref = qr(0) / SBPR0;
+    Type BmsyK_pr = recbh(spr_ref) * spr_ref;          // SB_ref / SB0
+    Type Hmsy_pr = qr(1) / qr(2);                      // yield / exploitable biomass at Fref
+    Type Yref = recbh(spr_ref) * qr(1);                // equilibrium yield per R0 at Fref
+    // Pella-Tomlinson shape from BmsyK = m^(-1/(m-1)): Newton on v = log m
+    Type lbk_ref = log(BmsyK_pr);
+    auto fv = [&](Type v) {
+      Type ev = exp(v) - Type(1);
+      Type av = CppAD::CondExpLt(fabs(v), Type(1e-6), Type(1) - v / Type(2), v / (ev + Type(1e-30)));
+      return Type(lbk_ref + av);
+    };
+    Type vm = log(Type(2));
+    for(int it = 0; it < spm_newton_it; it++) {
+      Type f0 = fv(vm);
+      Type fd = (fv(vm + dd) - fv(vm - dd)) / (Type(2) * dd);
+      Type step = -f0 / CppAD::CondExpLt(fd, Type(-1e-8), fd, Type(-1e-8));
+      step = CppAD::CondExpGt(step, Type(1), Type(1), step);
+      step = CppAD::CondExpLt(step, Type(-1), Type(-1), step);
+      vm += step;
+    }
+    Type m_pr = exp(vm);
+    Type r_pr = m_pr * Hmsy_pr;                        // JABBA3: Hmsy = r / (m - 1) (1 - 1/m)
+
+    // ---- state-space surplus production model (JABBA3 Selex, SB state) ----
+    Type K = exp(spm_logK);
+    Type r, m;
+    if(spm_r_sd > Type(0)) { r = exp(spm_logr); nll -= dnorm(spm_logr, log(r_pr), spm_r_sd, true); } else r = r_pr;
+    if(spm_m_sd > Type(0)) { m = exp(spm_logm); nll -= dnorm(spm_logm, log(m_pr), spm_m_sd, true); } else m = m_pr;
+    if(spm_K_pr(2) > Type(0)) nll -= dnorm(spm_logK, log(spm_K_pr(0)), spm_K_pr(1), true);
+    if(spm_bk_pr(2) > Type(0)) nll -= dnorm(spm_lbk, log(spm_bk_pr(0)), spm_bk_pr(1), true);
+    Type sdb = exp(spm_logsdb);
+    if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);
+    vector<Type> sdi = exp(spm_logsdi);
+    for(int i = 0; i < spm_nidx; i++) {
+      // JABBA: gamma(0.001, 0.001) on 1/sdi^2 (with Jacobian), soft upper bound 1
+      nll -= Type(0.001) * (Type(-2) * spm_logsdi(i)) - Type(0.001) * exp(Type(-2) * spm_logsdi(i));
+      Type pb = smax_(spm_logsdi(i), Type(0), Type(1e-4)) - Type(0);
+      nll += Type(500) * pb * pb;
+    }
+    Type BmsyK_spm = pow(m, Type(-1) / (m - Type(1)));
+    Type Hmsy_spm = r / (m - Type(1)) * (Type(1) - Type(1) / m);
+
+    int NT = spm_nyear;
+    vector<Type> P = exp(spm_logP);
+    vector<Type> rem(NT), Pmean(NT), H(NT);
+    for(int t = 0; t < NT; t++) rem(t) = rho_at(P(t), 0);
+    Pmean(0) = spm_lbk;
+    for(int t = 1; t < NT; t++) {
+      Type Pl = P(spm_lagidx(t - 1));
+      Type pm = P(t - 1) + r / (m - Type(1)) * Pl * (Type(1) - pow(Pl, m - Type(1))) - spm_catch(t - 1) / (K * rem(t - 1));
+      Pmean(t) = log(smax_(pm, Type(0.001), Type(1e-7)));
+    }
+    for(int t = 0; t < NT; t++) {
+      nll -= dnorm(spm_logP(t), Pmean(t), sdb, true);
+      Type pb = smin_(spm_logP(t) - log(spm_Pbound(0)), Type(0), Type(1e-4)) +
+                smax_(spm_logP(t) - log(spm_Pbound(1)), Type(0), Type(1e-4));
+      nll += Type(500) * pb * pb;
+      H(t) = spm_catch(t) / (K * P(t) * rem(t));
+    }
+    vector<Type> procdev = spm_logP - Pmean;
+
+    // indices: log I ~ N(log q + log K + log P + log rho_i(P), sqrt(se^2 + sdi^2))
+    int nobs = spm_logI.size();
+    vector<Type> spm_Imean(nobs);
+    for(int k = 0; k < nobs; k++) {
+      int t = spm_obs_t(k), i = spm_obs_i(k);
+      Type rho_i = (spm_idx_gear(i) == -1) ? Type(1) : Type(rho_at(P(t), 1 + i));
+      spm_Imean(k) = spm_logq(i) + spm_logK + spm_logP(t) + log(rho_i);
+      nll -= dnorm(spm_logI(k), spm_Imean(k), sqrt(spm_se2(k) + sdi(i) * sdi(i)), true);
+    }
+
+    // SPR link: depletion implied by the length model's SPR under steepness
+    vector<Type> D_spr(nyear), Heq_y(nyear);
+    D_spr.setZero(); Heq_y.setZero();
+    for(int y = 0; y < nyear; y++) {
+      Type D = (Type(4) * spm_h * spr_y(y) - (Type(1) - spm_h)) / (Type(5) * spm_h - Type(1));
+      D_spr(y) = smax_(D, Type(1e-3), Type(1e-8));
+      if(spm_link_spr == 1) nll -= dnorm(log(D_spr(y)), spm_logP(spm_lfd_t(y)), spm_sigma_link, true);
+    }
+    // F link: harvest rate of the SPM against the equilibrium harvest rate
+    // (yield / exploitable biomass per recruit) at the length model's apical F
+    if(spm_link_F == 1) {
+      for(int y = 0; y < nyear; y++) {
+        vector<Type> q = prq(fapic_y(y) * brp_k);
+        Heq_y(y) = q(1) / q(2);
+        nll -= dnorm(log(H(spm_lfd_t(y))), log(Heq_y(y)), spm_sigma_Flink, true);
+      }
+    }
+
+    Type MSY_spm = BmsyK_spm * K * Hmsy_spm * rho_at(BmsyK_spm, 0);
+    vector<Type> BBmsy = P / BmsyK_spm;
+    vector<Type> HHmsy = H / Hmsy_spm;
+    vector<Type> spm_logBBmsy = log(BBmsy);
+    vector<Type> spm_logHHmsy = log(HHmsy);
+    vector<Type> spm_logB = spm_logP + spm_logK;
+    Type spm_logMSY = log(MSY_spm);
+    Type spm_r = r, spm_m = m, spm_K = K, spm_sdb = sdb;
+    vector<Type> spm_q = exp(spm_logq);
+    REPORT(Fref); REPORT(Yref); REPORT(spr_ref); REPORT(BmsyK_pr); REPORT(Hmsy_pr); REPORT(m_pr); REPORT(r_pr);
+    vector<Type> spm_sdi = sdi;
+    REPORT(spm_r); REPORT(spm_m); REPORT(spm_K); REPORT(spm_sdb); REPORT(spm_sdi); REPORT(spm_q);
+    REPORT(BmsyK_spm); REPORT(Hmsy_spm); REPORT(MSY_spm);
+    REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
+    REPORT(spm_Imean); REPORT(D_spr); REPORT(Heq_y);
+    vector<Type> spm_sA = sA;
+    REPORT(Pg); REPORT(Yg); REPORT(rhog); REPORT(sprg); REPORT(spm_sA);
+    ADREPORT(spm_logB); ADREPORT(spm_logBBmsy); ADREPORT(spm_logHHmsy); ADREPORT(spm_logMSY);
+    ADREPORT(spm_logP);
+  }
 
   // --- PER-RECRUIT REFERENCE POINTS (double mode only, on request) ---
   // Mirrors the R functions pr_flicc() / spr_flicc(): terminal-year averages
