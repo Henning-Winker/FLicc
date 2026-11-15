@@ -303,6 +303,17 @@ plot_ratio_flicc <- function(fit, what = c("spr", "epr"),
 #' @param fitted_colour Colour for fitted length composition lines.
 #' @param fitted_linewidth Line width for fitted length composition lines.
 #' @param len_by Integer giving the spacing of x-axis tick marks for length.
+#' @param sex For sex-structured fits: `"mirror"` (default) shows one panel
+#'   per year and gear in the style of r4ss, females above the horizontal
+#'   line (red) and males below (blue), with unsexed samples in their own
+#'   column (grey bars, black line); `"panels"` shows a separate panel per
+#'   sex, each a composition within that sex. Sexed compositions are shown as
+#'   compared in the likelihood: where both sexes were sampled, as one joint
+#'   composition over length and sex (the areas above and below the line sum
+#'   to one, so the sex ratio is visible); where one sex was sampled, within
+#'   that sex. Used for all gears whatever `by_gear`.
+#' @param sex_cols Optional named colours replacing the defaults
+#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45")`.
 #'
 #' @details
 #' Observed length frequencies are standardized within each year and gear to
@@ -341,7 +352,11 @@ plot_len <- function(fit,
                       observed_colour = "grey60",
                       fitted_colour = "blue",
                       fitted_linewidth = 1,
-                      len_by = 10) {
+                      len_by = 10,
+                      sex = c("mirror", "panels"),
+                      sex_cols = NULL) {
+
+  sex <- match.arg(sex)
 
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("Package 'ggplot2' is required.")
@@ -356,6 +371,21 @@ plot_len <- function(fit,
 
   obs_flqs <- fit$report$obslen
   fit_flqs <- fit$report$predlen_gear
+
+  # sex-structured fits, mirrored: females above, males below the line
+  if (!is.null(fit$report$obslen_sex) && sex == "mirror") {
+    df <- lenfit_sex_long_flicc(fit)
+    if (!is.null(gear)) {
+      gs <- names(obs_flqs); gs <- if (is.numeric(gear)) gs[gear] else as.character(gear)
+      df <- df[df$gear %in% gs, , drop = FALSE]
+    }
+    if (!is.null(year)) df <- df[df$year %in% as.character(year), , drop = FALSE]
+    if (!nrow(df)) stop("No compositions for the selected years and gears.")
+    if (is.null(title)) title <- "Observed and fitted length compositions"
+    ul <- sort(unique(df$len)); bw <- if (length(ul) > 1) min(diff(ul)) else 1
+    return(plot_sex_mirror_flicc(df, sex_cols_flicc(sex_cols), len_by = len_by * bw,
+                                 title = title, linewidth = fitted_linewidth))
+  }
 
   # sex-structured fits, by gear: one panel per gear for the unsexed
   # composition (if any) and one per sex for the sexed compositions, each a
@@ -734,12 +764,22 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #' \describe{
 #'   \item{"raw"}{Plot observed frequencies (default).}
 #'   \item{"relmax"}{Scale each \code{FLQuant} by its maximum value.}
+#'   \item{"prop"}{Proportions within each gear and year (with \code{sex = TRUE}, females and males jointly).}
 #' }
 #' @param colours Optional named vector of colours corresponding to \code{qname}.
 #' If \code{NULL}, colours are assigned automatically.
 #' @param legend_title Character. Title for the legend.
 #' @param ncol Optional number of columns in facet layout.
 #' @param lwd Numeric. Line width (default = 0.5).
+#' @param sex Logical. If `TRUE`, plots the compositions by gear and sex in
+#'   the style of r4ss: one panel per year and gear, females above the
+#'   horizontal line (red), males below (blue) and unsexed samples in their
+#'   own column (grey). Sex is read from the `unit` dimension (F, M, U or
+#'   unique). The default `NULL` uses the sex view when any gear has F or M
+#'   units. With `sex = TRUE`, `type = "prop"` gives proportions within each
+#'   gear-year (females and males jointly, so the sex ratio is kept).
+#' @param sex_cols Optional named colours replacing the defaults
+#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45")`.
 #'
 #' @details
 #' Length bins are extracted from the \code{FLQuant} dimension names, ensuring
@@ -777,6 +817,10 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #' # Free y-scale for better visual comparison
 #' plot_lfd(lfd_alfonsino, scales = "free_y")
 #'
+#' # By gear and sex (females above, males below the line)
+#' data(sexsim)
+#' plot_lfd(lfd_sexsim, type = "prop")
+#'
 #' # Custom colours
 #' plot_lfd(
 #'   lfd_alfonsino,
@@ -786,7 +830,7 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #'
 #' @export
 plot_lfd <- function(lfd,
-                     type=c("raw","relmax"),
+                     type=c("raw","relmax","prop"),
                      iter = 1,
                      len_by = 10,
                      yticks = NULL,
@@ -794,9 +838,23 @@ plot_lfd <- function(lfd,
                      colours = NULL,
                      legend_title = "Fishery",
                      ncol = NULL,
-                     lwd = 0.5) {
+                     lwd = 0.5,
+                     sex = NULL,
+                     sex_cols = NULL) {
 
   type <- match.arg(type)
+
+  if (is.null(sex))
+    sex <- any(unlist(lapply(lfd, function(q)
+      sex_code_flicc(dimnames(q)$unit, strict = FALSE) %in% c("F", "M"))))
+  if (isTRUE(sex)) {
+    df <- lfd_sex_long_flicc(lfd, scale = type, iter = iter)
+    names(df)[names(df) == "data"] <- "observed"
+    ylab <- c(raw = "Frequency", prop = "Proportion", relmax = "Relative frequency")[type]
+    return(plot_sex_mirror_flicc(df, sex_cols_flicc(sex_cols), len_by = len_by, ylab = ylab,
+                                 scales = if (scales == "fixed") "free_y" else scales,
+                                 ncol_years = ncol))
+  }
 
   L <- as.numeric(dimnames(lfd[[1]])$len)
 
@@ -804,6 +862,10 @@ plot_lfd <- function(lfd,
   if(type=="relmax")
     lfd <- lapply(lfd, function(x){
       x%/%apply(x,2:5,max)
+    })
+  if(type=="prop")
+    lfd <- lapply(lfd, function(x){
+      x%/%apply(x,2:5,sum)
     })
   lfd <- as.data.frame(lfd)
 

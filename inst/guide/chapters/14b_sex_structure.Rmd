@@ -41,6 +41,16 @@ lfd <- FLQuantLen(lfd_long_to_wide(df_long_with_sex), unit = "cm")
 `lfdess()` rescales females and males of a sample together, so the sex ratio is kept, and
 unsexed fish separately.
 
+`plot_lfd()` shows length data with sexes in the style of r4ss: one panel per year and gear,
+females above the horizontal line (red), males below (blue), and unsexed samples in their own
+column (grey). This view is used automatically when any gear has F or M units (`sex = FALSE`
+switches it off). With `type = "prop"` each sexed sample is a proportion over both sexes, so the
+sex ratio at length can be read directly:
+
+```{r sex-lfd, fig.height = 6}
+plot_lfd(FLQuants(lapply(lfd_sexsim, function(q) q[, ac(2021:2025)])), type = "prop")
+```
+
 ## Life history by sex
 
 `stocklen_sex()` builds one stock object per sex from an `FLPar` with a `unit` dimension (as
@@ -121,11 +131,15 @@ that could not be sexed.
 plot_sexratio(fit_sex)
 ```
 
-The length fits, residuals and predictive checks include the sexed samples, with one panel per
-gear and sex:
+`plot_len()` shows the fits in the same mirrored layout: observed proportions as bars and the
+fit as lines, females above and males below the line, unsexed samples in their own column. A
+sample with both sexes is shown as one joint composition over length and sex, as it enters the
+likelihood (the areas above and below the line sum to one), and a sample of one sex as a
+composition within that sex. `sex = "panels"` gives one panel per gear and sex instead. The
+residuals and predictive checks include the sexed samples, with one panel per gear and sex:
 
 ```{r sex-len, fig.height = 6}
-plot_len(fit_sex, by_gear = TRUE, year = 2021:2025)
+plot_len(fit_sex, year = 2021:2025)
 plot_resid_bubble(fit_sex, type = "osa")
 ```
 

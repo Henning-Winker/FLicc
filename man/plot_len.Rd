@@ -14,7 +14,9 @@ plot_len(
   observed_colour = "grey60",
   fitted_colour = "blue",
   fitted_linewidth = 1,
-  len_by = 10
+  len_by = 10,
+  sex = c("mirror", "panels"),
+  sex_cols = NULL
 )
 }
 \arguments{
@@ -41,6 +43,19 @@ in numbers (\code{fit$report$catch_share_n}).}
 \item{fitted_linewidth}{Line width for fitted length composition lines.}
 
 \item{len_by}{Integer giving the spacing of x-axis tick marks for length.}
+
+\item{sex}{For sex-structured fits: \code{"mirror"} (default) shows one panel
+per year and gear in the style of r4ss, females above the horizontal
+line (red) and males below (blue), with unsexed samples in their own
+column (grey bars, black line); \code{"panels"} shows a separate panel per
+sex, each a composition within that sex. Sexed compositions are shown as
+compared in the likelihood: where both sexes were sampled, as one joint
+composition over length and sex (the areas above and below the line sum
+to one, so the sex ratio is visible); where one sex was sampled, within
+that sex. Used for all gears whatever \code{by_gear}.}
+
+\item{sex_cols}{Optional named colours replacing the defaults
+\code{c(F = "#D7191C", M = "#2C7BB6", U = "grey45")}.}
 }
 \value{
 A \code{ggplot} object.

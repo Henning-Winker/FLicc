@@ -6,7 +6,7 @@
 \usage{
 plot_lfd(
   lfd,
-  type = c("raw", "relmax"),
+  type = c("raw", "relmax", "prop"),
   iter = 1,
   len_by = 10,
   yticks = NULL,
@@ -14,7 +14,9 @@ plot_lfd(
   colours = NULL,
   legend_title = "Fishery",
   ncol = NULL,
-  lwd = 0.5
+  lwd = 0.5,
+  sex = NULL,
+  sex_cols = NULL
 )
 }
 \arguments{
@@ -24,6 +26,7 @@ plot_lfd(
 \describe{
 \item{"raw"}{Plot observed frequencies (default).}
 \item{"relmax"}{Scale each \code{FLQuant} by its maximum value.}
+\item{"prop"}{Proportions within each gear and year (with \code{sex = TRUE}, females and males jointly).}
 }}
 
 \item{iter}{Numeric. Iteration to plot (default = 1).}
@@ -42,6 +45,17 @@ If \code{NULL}, colours are assigned automatically.}
 \item{ncol}{Optional number of columns in facet layout.}
 
 \item{lwd}{Numeric. Line width (default = 0.5).}
+
+\item{sex}{Logical. If \code{TRUE}, plots the compositions by gear and sex in
+the style of r4ss: one panel per year and gear, females above the
+horizontal line (red), males below (blue) and unsexed samples in their
+own column (grey). Sex is read from the \code{unit} dimension (F, M, U or
+unique). The default \code{NULL} uses the sex view when any gear has F or M
+units. With \code{sex = TRUE}, \code{type = "prop"} gives proportions within each
+gear-year (females and males jointly, so the sex ratio is kept).}
+
+\item{sex_cols}{Optional named colours replacing the defaults
+\code{c(F = "#D7191C", M = "#2C7BB6", U = "grey45")}.}
 }
 \value{
 A \code{ggplot} object.
@@ -83,6 +97,10 @@ plot_lfd(
 
 # Free y-scale for better visual comparison
 plot_lfd(lfd_alfonsino, scales = "free_y")
+
+# By gear and sex (females above, males below the line)
+data(sexsim)
+plot_lfd(lfd_sexsim, type = "prop")
 
 # Custom colours
 plot_lfd(

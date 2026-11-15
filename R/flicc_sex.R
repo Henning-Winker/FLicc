@@ -236,3 +236,136 @@ obslen_all_flicc <- function(fit) {
     r$obslen[[g]] + z
   }), names(r$obslen)))
 }
+
+
+# ---------------------------------------------------------------------------
+# Mirrored length compositions by sex (r4ss style): females above zero (red),
+# males below (blue), unsexed in their own panel column (grey)
+# ---------------------------------------------------------------------------
+
+# colours used for the sexes in all sex views
+sex_cols_flicc <- function(cols = NULL) {
+  def <- c(F = "#D7191C", M = "#2C7BB6", U = "grey45")
+  if (!is.null(cols)) def[names(cols)] <- cols
+  def
+}
+
+# long table of compositions by gear, year and sex from an FLQuants with units
+# (F, M, U or unique); panel = gear for unsexed, "gear sexed" for F/M
+# scale: "raw" counts, "prop" proportions within panel-year (females and males
+# jointly where both were sampled, so the sex ratio is kept), "relmax" divided
+# by the panel-year maximum
+lfd_sex_long_flicc <- function(lfd, scale = c("raw", "prop", "relmax"), iter = 1) {
+  scale <- match.arg(scale)
+  out <- list()
+  for (g in names(lfd)) {
+    q <- lfd[[g]]
+    if (dim(q)[6] > 1) q <- q[, , , , , iter]
+    sx <- sex_code_flicc(dimnames(q)$unit)
+    df <- as.data.frame(q)
+    df$len <- as.numeric(as.character(df$len))
+    df$year <- as.character(df$year)
+    df$sex <- sx[match(as.character(df$unit), dimnames(q)$unit)]
+    df$data[!is.finite(df$data)] <- 0
+    df <- stats::aggregate(data ~ len + year + sex, data = df, FUN = sum)
+    df$gear <- g
+    df$panel <- ifelse(df$sex == "U", g, paste(g, "sexed"))
+    out[[g]] <- df
+  }
+  df <- do.call(rbind, out)
+  tot <- stats::ave(df$data, df$panel, df$year, FUN = sum)
+  df <- df[tot > 0, , drop = FALSE]
+  if (scale == "prop") {
+    df$data <- df$data / stats::ave(df$data, df$panel, df$year, FUN = sum)
+  } else if (scale == "relmax") {
+    df$data <- df$data / stats::ave(df$data, df$panel, df$year, FUN = max)
+  }
+  df
+}
+
+# observed and predicted compositions of a fit by gear, year and sex, as
+# compared in the likelihood: unsexed within gear; females and males jointly
+# (sum to 1 over both) where both were sampled, within sex where one was
+lenfit_sex_long_flicc <- function(fit) {
+  rp <- fit$report
+  gears <- names(rp$obslen)
+  rows <- list()
+  todf <- function(q, nm) {
+    d <- as.data.frame(q)
+    data.frame(len = as.numeric(as.character(d$len)), year = as.character(d$year),
+               v = d$data, stringsAsFactors = FALSE)
+  }
+  for (g in gears) {
+    o <- todf(rp$obslen[[g]]); p <- todf(rp$predlen_gear[[g]])
+    s <- stats::ave(o$v, o$year, FUN = function(x) sum(x, na.rm = TRUE))
+    keep <- s > 0
+    if (any(keep))
+      rows[[length(rows) + 1]] <- data.frame(gear = g, panel = g, sex = "U",
+        len = o$len[keep], year = o$year[keep], observed = o$v[keep] / s[keep],
+        fitted = p$v[keep], stringsAsFactors = FALSE)
+    if (is.null(rp$obslen_sex)) next
+    oF <- todf(rp$obslen_sex[[g]][, , "F"]); oM <- todf(rp$obslen_sex[[g]][, , "M"])
+    pF <- todf(rp$predlen_sex[[g]][, , "F"]); pM <- todf(rp$predlen_sex[[g]][, , "M"])
+    for (y in unique(oF$year)) {
+      i <- oF$year == y
+      sF <- sum(oF$v[i], na.rm = TRUE); sM <- sum(oM$v[i], na.rm = TRUE)
+      if (!(sF + sM > 0)) next
+      if (sF > 0 && sM > 0) {         # joint length x sex composition
+        dF <- oF$v[i] / (sF + sM); dM <- oM$v[i] / (sF + sM)
+        fF <- pF$v[i]; fM <- pM$v[i]
+      } else {                        # one sex only: within that sex
+        dF <- if (sF > 0) oF$v[i] / sF else NA; dM <- if (sM > 0) oM$v[i] / sM else NA
+        fF <- if (sF > 0) pF$v[i] / sum(pF$v[i]) else NA
+        fM <- if (sM > 0) pM$v[i] / sum(pM$v[i]) else NA
+      }
+      if (sF > 0) rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"),
+        sex = "F", len = oF$len[i], year = y, observed = dF, fitted = fF, stringsAsFactors = FALSE)
+      if (sM > 0) rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"),
+        sex = "M", len = oM$len[i], year = y, observed = dM, fitted = fM, stringsAsFactors = FALSE)
+    }
+  }
+  df <- do.call(rbind, rows)
+  df$fitted[!is.finite(df$fitted)] <- NA
+  df
+}
+
+# the mirrored plot: df with panel, year, sex, len, observed and optionally fitted
+plot_sex_mirror_flicc <- function(df, cols, len_by = 10, ylab = "Proportion",
+                                  title = NULL, ncol_years = NULL, scales = "free_y",
+                                  fitted_U = "black", linewidth = 0.8) {
+  sg <- ifelse(df$sex == "M", -1, 1)
+  df$obs_s <- sg * df$observed
+  if (!is.null(df$fitted)) df$fit_s <- sg * df$fitted
+  df$sex <- factor(df$sex, levels = c("F", "M", "U"))
+  lab <- c(F = "Female", M = "Male", U = "Unsexed")
+  bw <- if (length(unique(df$len)) > 1) min(diff(sort(unique(df$len)))) else 1
+  lens <- sort(unique(df$len))
+  x_breaks <- seq(floor(min(lens) / len_by) * len_by, ceiling(max(lens) / len_by) * len_by, by = len_by)
+  df$year <- factor(df$year, levels = sort(unique(df$year)))
+  df$panel <- factor(df$panel, levels = unique(df$panel))
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = len)) +
+    ggplot2::geom_col(ggplot2::aes(y = obs_s, fill = sex), width = bw, alpha = 0.45,
+                      colour = NA, position = "identity") +
+    ggplot2::geom_hline(yintercept = 0, colour = "grey20", linewidth = 0.3)
+  if (!is.null(df$fitted)) {
+    lcol <- cols; lcol["U"] <- fitted_U
+    p <- p + ggplot2::geom_line(ggplot2::aes(y = fit_s, colour = sex,
+                                             group = interaction(sex, panel, year)),
+                                linewidth = linewidth, na.rm = TRUE) +
+      ggplot2::scale_colour_manual(values = lcol, labels = lab, drop = TRUE, name = "Fitted")
+  }
+  p <- p +
+    ggplot2::scale_fill_manual(values = cols, labels = lab, drop = TRUE, name = "Observed") +
+    ggplot2::scale_x_continuous(breaks = x_breaks) +
+    ggplot2::scale_y_continuous(labels = function(x) format(abs(x), trim = TRUE, drop0trailing = TRUE)) +
+    ggplot2::labs(x = "Length", y = ylab, title = title) +
+    ggplot2::theme_bw() +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank(),
+                   strip.background = ggplot2::element_rect(fill = "grey90"),
+                   plot.title = ggplot2::element_text(hjust = 0.5))
+  if (length(levels(df$panel)) > 1) {
+    p + ggplot2::facet_grid(year ~ panel, scales = scales)
+  } else {
+    p + ggplot2::facet_wrap(~ year, scales = scales, ncol = ncol_years)
+  }
+}

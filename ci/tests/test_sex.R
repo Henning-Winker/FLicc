@@ -152,7 +152,7 @@ stopifnot(inherits(plot_resid_bubble(r), "ggplot"), inherits(plot_resid_len(r, p
 lm <- lmean_resid_flicc(fs); stopifnot("survey F+M" %in% as.character(lm$table$gear))
 pc <- ppc_flicc(fs, nsim = 50)
 stopifnot(all(c("trawl", "survey F", "survey M") %in% pc$gear_names), inherits(plot_ppc_lfd(pc, pool_years = TRUE), "ggplot"))
-pl <- plot_len(fs, by_gear = TRUE)
+pl <- plot_len(fs, by_gear = TRUE, sex = "panels")
 stopifnot(all(c("survey F", "survey M") %in% levels(pl$data$gear)), !is.null(fs$report$obslen_sex))
 # one-sex fits keep their residual columns (no sex column)
 stopifnot(is.null(resid_flicc(f1)$sex))
@@ -189,3 +189,17 @@ sa <- flicc.sa(stk_oem, args = list(it = 2, ay = 2026, dy = 2025), tracking = NU
                                surveys = "survey", sex_ratio = 0.5), lbi = "spr", ess.g = NULL)
 stopifnot(all(is.finite(an(sa$ind$SPR))), abs(median(an(sa$ind$SPR[, ac(2025)])) / rp$spr_y[length(yrs)] - 1) < 0.15)
 cat("sex tests passed\n")
+
+
+# mirrored compositions by sex (females above, males below the line)
+pm <- plot_len(fs)
+stopifnot(inherits(pm, "ggplot"), all(c("F", "M") %in% as.character(pm$data$sex)))
+jm <- pm$data[pm$data$sex %in% c("F", "M"), ]
+sj <- tapply(jm$observed, paste(jm$panel, jm$year), sum)
+stopifnot(all(abs(sj - 1) < 1e-8))            # joint composition sums to 1 over both sexes
+stopifnot(all(pm$data$obs_s[pm$data$sex == "M"] <= 0))
+stopifnot(inherits(plot_len(fs, sex = "panels", by_gear = TRUE), "ggplot"))
+data(sexsim); pl2 <- plot_lfd(lfd_sexsim, type = "prop")
+stopifnot(inherits(pl2, "ggplot"), "U" %in% as.character(pl2$data$sex))
+data(alfonsino); stopifnot(inherits(plot_lfd(lfd_alfonsino, type = "prop"), "ggplot"))
+cat("mirror plots OK\n")
