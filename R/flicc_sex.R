@@ -50,13 +50,22 @@
 #' @param lfd Length frequencies (`FLQuants` by gear), sexed or not; used
 #'   for the length classes and years.
 #' @param lhpar Life history by sex: an `FLPar` with a `unit` dimension
-#'   containing `"F"` and `"M"` (e.g. from `ss3diags2::ss3_lhpar()`), or a
-#'   list `list(F = FLPar, M = FLPar)`. Each needs the parameters used by
-#'   [stocklen()] (`linf`, `k`, `M`, `L50`, `a`, `b`, ...).
+#'   containing `"F"` and `"M"` (e.g. from [lhpar_sex()] or
+#'   `ss3diags2::ss3_lhpar()`), or a list `list(F = FLPar, M = FLPar)`. Each
+#'   needs the parameters used by [stocklen()] (`linf`, `k`, `M`, `L50`, `a`,
+#'   `b`, ...). A one-sex `FLPar` is taken as the female life history, with
+#'   the male values given in `male`.
+#' @param male Optional male values for a one-sex `lhpar`: a named list or
+#'   vector (e.g. `list(linf = 45, k = 0.25)`) or an `FLPar`; parameters not
+#'   given are copied from the females (see [lhpar_sex()]).
 #' @param ... Passed to [stocklen()] (e.g. `m_model`).
 #' @return A list with elements `F` and `M` (`FLStockLen`).
 #' @examples
 #' \dontrun{
+#' # one-sex life history plus the male values that differ
+#' stk <- stocklen_sex(lfd, lhpar, male = list(linf = 78, k = 0.20), m_model = "constant")
+#'
+#' # or a full FLPar by sex
 #' lh <- FLPar(array(c(129, 0.10, 0.32, 65, 1.8e-5, 2.95,
 #'                     78,  0.20, 0.32, 65, 1.8e-5, 2.95), dim = c(6, 2, 1),
 #'                   dimnames = list(params = c("linf", "k", "M", "L50", "a", "b"),
@@ -65,7 +74,8 @@
 #' fit <- fiticc(lfd, stk, sel_fun = c("logistic", "dsnormal"), catch_by_gear = cbg)
 #' }
 #' @export
-stocklen_sex <- function(lfd, lhpar, ...) {
+stocklen_sex <- function(lfd, lhpar, male = NULL, ...) {
+  if (!is.null(male)) lhpar <- lhpar_sex(lhpar, male)
   lh <- sex_lhpar_flicc(lhpar)
   # length classes and years only: sex units collapsed
   if (inherits(lfd, "FLQuants") || is.list(lfd)) {
@@ -75,6 +85,60 @@ stocklen_sex <- function(lfd, lhpar, ...) {
     lfd1 <- if (dim(lfd)[3] > 1) FLCore::unitSums(lfd) else lfd
   }
   list(F = stocklen(lfd1, lh$F, ...), M = stocklen(lfd1, lh$M, ...))
+}
+
+#' Life-history parameters by sex
+#'
+#' Builds the life history by sex for [stocklen_sex()] from a one-sex
+#' `FLPar` (taken as the females) and only the male values that differ:
+#' all other male parameters are copied from the females. The result is an
+#' `FLPar` with a `unit` dimension (`"F"`, `"M"`), the same format as
+#' `ss3diags2::ss3_lhpar()`.
+#'
+#' @param lhpar One-sex `FLPar` of life-history parameters (`linf`, `k`,
+#'   `M`, `L50`, `a`, `b`, ...), used for females; iterations are kept.
+#' @param male Male values that differ: a named list or vector, or an
+#'   `FLPar` (its parameters replace the female values; one value or one per
+#'   iteration). Male-only parameters not in `lhpar` are added (set to `NA`
+#'   for females).
+#' @param ... Male values as named arguments, alternative to `male`
+#'   (e.g. `linf = 45, k = 0.25`).
+#' @return An `FLPar` with dimensions params x unit (F, M) x iter.
+#' @seealso [stocklen_sex()]
+#' @examples
+#' data(alfonsino)
+#' lh <- lhpar_sex(lhpar_alfonsino, linf = 48, k = 0.10)
+#' lh
+#' # same as
+#' lhpar_sex(lhpar_alfonsino, male = list(linf = 48, k = 0.10))
+#' @export
+lhpar_sex <- function(lhpar, male = NULL, ...) {
+  dots <- list(...)
+  if (!is.null(male) && length(dots)) stop("Give the male values in 'male' or as named arguments, not both.")
+  if (is.null(male)) male <- dots
+  if (!is.null(dimnames(lhpar)$unit))
+    stop("lhpar already has a unit dimension; give a one-sex FLPar (used for females).")
+  dn <- dimnames(lhpar)
+  pf <- dn$params; it <- dn$iter; ni <- length(it)
+  if (inherits(male, "FLPar")) {
+    mv <- lapply(dimnames(male)$params, function(p) as.numeric(male[p]))
+    names(mv) <- dimnames(male)$params
+  } else {
+    mv <- as.list(male)
+  }
+  if (length(mv) && (is.null(names(mv)) || any(names(mv) == "")))
+    stop("Male values must be named (e.g. linf = 45).")
+  pars <- union(pf, names(mv))
+  a <- array(NA_real_, dim = c(length(pars), 2, ni),
+             dimnames = list(params = pars, unit = c("F", "M"), iter = it))
+  a[pf, "F", ] <- lhpar@.Data
+  a[pf, "M", ] <- lhpar@.Data
+  for (p in names(mv)) {
+    v <- as.numeric(mv[[p]])
+    if (!(length(v) %in% c(1, ni))) stop("Male value '", p, "' needs 1 or ", ni, " values.")
+    a[p, "M", ] <- rep(v, length.out = ni)
+  }
+  FLCore::FLPar(a, units = "NA")
 }
 
 # split life history by sex into list(F = FLPar, M = FLPar) (internal)

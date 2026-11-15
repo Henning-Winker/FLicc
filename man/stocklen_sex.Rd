@@ -4,16 +4,22 @@
 \alias{stocklen_sex}
 \title{Stock objects by sex for a sex-structured FLicc fit}
 \usage{
-stocklen_sex(lfd, lhpar, ...)
+stocklen_sex(lfd, lhpar, male = NULL, ...)
 }
 \arguments{
 \item{lfd}{Length frequencies (\code{FLQuants} by gear), sexed or not; used
 for the length classes and years.}
 
 \item{lhpar}{Life history by sex: an \code{FLPar} with a \code{unit} dimension
-containing \code{"F"} and \code{"M"} (e.g. from \code{ss3diags2::ss3_lhpar()}), or a
-list \code{list(F = FLPar, M = FLPar)}. Each needs the parameters used by
-\code{\link[=stocklen]{stocklen()}} (\code{linf}, \code{k}, \code{M}, \code{L50}, \code{a}, \code{b}, ...).}
+containing \code{"F"} and \code{"M"} (e.g. from \code{\link[=lhpar_sex]{lhpar_sex()}} or
+\code{ss3diags2::ss3_lhpar()}), or a list \code{list(F = FLPar, M = FLPar)}. Each
+needs the parameters used by \code{\link[=stocklen]{stocklen()}} (\code{linf}, \code{k}, \code{M}, \code{L50}, \code{a},
+\code{b}, ...). A one-sex \code{FLPar} is taken as the female life history, with
+the male values given in \code{male}.}
+
+\item{male}{Optional male values for a one-sex \code{lhpar}: a named list or
+vector (e.g. \code{list(linf = 45, k = 0.25)}) or an \code{FLPar}; parameters not
+given are copied from the females (see \code{\link[=lhpar_sex]{lhpar_sex()}}).}
 
 \item{...}{Passed to \code{\link[=stocklen]{stocklen()}} (e.g. \code{m_model}).}
 }
@@ -71,6 +77,10 @@ recruit; Fspr and SPR therefore refer to females.
 }
 \examples{
 \dontrun{
+# one-sex life history plus the male values that differ
+stk <- stocklen_sex(lfd, lhpar, male = list(linf = 78, k = 0.20), m_model = "constant")
+
+# or a full FLPar by sex
 lh <- FLPar(array(c(129, 0.10, 0.32, 65, 1.8e-5, 2.95,
                     78,  0.20, 0.32, 65, 1.8e-5, 2.95), dim = c(6, 2, 1),
                   dimnames = list(params = c("linf", "k", "M", "L50", "a", "b"),

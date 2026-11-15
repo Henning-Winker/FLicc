@@ -53,9 +53,21 @@ plot_lfd(FLQuants(lapply(lfd_sexsim, function(q) q[, ac(2021:2025)])), type = "p
 
 ## Life history by sex
 
-`stocklen_sex()` builds one stock object per sex from an `FLPar` with a `unit` dimension (as
-returned by `ss3diags2::ss3_lhpar()`) or from `list(F = , M = )`. The female stock is the
-reference: SPR is female spawning potential and F is scaled by the female k.
+`stocklen_sex()` builds one stock object per sex. The female stock is the reference: SPR is
+female spawning potential and F is scaled by the female k. The simplest input is the usual
+one-sex `lhpar` (taken as the females) plus the male values that differ; all other male
+parameters are copied from the females. `lhpar_sex()` makes the same `FLPar` by sex, to check or
+store it:
+
+```{r sex-lhpar}
+lh_F <- FLPar(lhpar_sexsim@.Data[, "F", 1], params = dimnames(lhpar_sexsim)$params)
+lhpar_sex(lh_F, linf = 45, k = 0.25, L50 = 28)
+```
+
+so that `stocklen_sex(lfd, lh_F, male = list(linf = 45, k = 0.25, L50 = 28))` and
+`stocklen_sex(lfd, lhpar_sex(lh_F, linf = 45, k = 0.25, L50 = 28))` are the same. An `FLPar`
+with a `unit` dimension (as returned by `ss3diags2::ss3_lhpar()`) or `list(F = , M = )` is
+accepted as well.
 
 ```{r sex-stock}
 stk_sex <- stocklen_sex(lfd_sexsim, lhpar_sexsim, m_model = "constant")
@@ -76,9 +88,6 @@ penalty:
 
 ```{r sex-fits}
 sf2 <- c("dsnormal", "logistic")
-lh_F <- FLPar(lhpar_sexsim@.Data[, "F", 1], params = dimnames(lhpar_sexsim)$params)
-lh_Mw <- FLPar(lhpar_sexsim@.Data[, "M", 1], params = dimnames(lhpar_sexsim)$params)
-lh_Mw["linf"] <- 52
 set_s <- list(obs_model = "mn", surveys = "Survey")
 
 trawl_U <- FLQuants(Trawl = lfd_sexsim$Trawl[, , "U"])
@@ -87,7 +96,8 @@ fit_1sex <- fiticc(trawl_U, stocklen(trawl_U, lh_F, m_model = "constant"), sel_f
 fit_2sex_U <- fiticc(FLQuants(Trawl = lfd_sexsim$Trawl), stocklen_sex(trawl_U, lhpar_sexsim, m_model = "constant"),
                      sel_fun = "dsnormal", catch_by_gear = 1, settings = list(obs_model = "mn"))
 fit_sex <- fiticc(lfd_sexsim, stk_sex, sel_fun = sf2, catch_by_gear = 1, settings = set_s)
-fit_sex_est <- fiticc(lfd_sexsim, stocklen_sex(lfd_sexsim, list(F = lh_F, M = lh_Mw), m_model = "constant"),
+fit_sex_est <- fiticc(lfd_sexsim, stocklen_sex(lfd_sexsim, lh_F, male = list(linf = 52, k = 0.25, L50 = 28),
+                                              m_model = "constant"),
                       sel_fun = sf2, catch_by_gear = 1, settings = modifyList(set_s, list(linf_m.sd = 0.3)))
 
 runs <- list(one_sex = fit_1sex, two_sex_trawl = fit_2sex_U, two_sex_survey = fit_sex,

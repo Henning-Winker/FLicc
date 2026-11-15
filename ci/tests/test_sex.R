@@ -203,3 +203,12 @@ data(sexsim); pl2 <- plot_lfd(lfd_sexsim, type = "prop")
 stopifnot(inherits(pl2, "ggplot"), "U" %in% as.character(pl2$data$sex))
 data(alfonsino); stopifnot(inherits(plot_lfd(lfd_alfonsino, type = "prop"), "ggplot"))
 cat("mirror plots OK\n")
+
+# life history by sex from a one-sex FLPar plus the male values that differ
+lhF <- FLPar(lhpar_sexsim@.Data[, "F", 1], params = dimnames(lhpar_sexsim)$params)
+stopifnot(isTRUE(all.equal(c(lhpar_sex(lhF, linf = 45, k = 0.25, L50 = 28)@.Data), c(lhpar_sexsim@.Data))))
+s1 <- stocklen_sex(lfd_sexsim, lhF, male = list(linf = 45, k = 0.25, L50 = 28), m_model = "constant")
+s2 <- stocklen_sex(lfd_sexsim, lhpar_sexsim, m_model = "constant")
+stopifnot(isTRUE(all.equal(s1$M, s2$M)), isTRUE(all.equal(s1$F, s2$F)))
+stopifnot(dim(lhpar_sex(propagate(lhF, 3), linf = c(40, 45, 50)))[3] == 3)
+cat("lhpar_sex OK\n")
