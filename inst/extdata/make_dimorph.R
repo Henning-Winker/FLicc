@@ -1,4 +1,4 @@
-# Simulated sex-dimorphic stock for the guide and tests (data(sexsim)).
+# Simulated sex-dimorphic stock for the guide and tests (data(dimorph)).
 # Females grow larger and slower than males; one trawl fishery with unsexed
 # length samples and one survey with sexed samples (females and males in the
 # same sample, from 2016). Simulated from the FLicc sex-structured model itself.
@@ -33,8 +33,8 @@ for (iy in seq_along(yrs)) {
     sv[, iy, "F"] <- x[seq_along(lens)]; sv[, iy, "M"] <- x[length(lens) + seq_along(lens)]
   }
 }
-lfd_sexsim <- FLQuants(Trawl = tr, Survey = sv)
-lhpar_sexsim <- FLPar(array(c(as.numeric(lhF), as.numeric(lhM)), dim = c(6, 2, 1),
+lfd_dimorph <- FLQuants(Trawl = tr, Survey = sv)
+lhpar_dimorph <- FLPar(array(c(as.numeric(lhF), as.numeric(lhM)), dim = c(6, 2, 1),
                             dimnames = list(params = dimnames(lhF)$params, unit = c("F", "M"), iter = 1)))
-truth_sexsim <- data.frame(year = yrs, spr = rp$spr_y, F_k = Fk, F = Fk * 0.15)
-save(lfd_sexsim, lhpar_sexsim, truth_sexsim, file = "data/sexsim.rda", compress = "xz")
+truth_dimorph <- data.frame(year = yrs, spr = rp$spr_y, F_k = Fk, F = Fk * 0.15)
+save(lfd_dimorph, lhpar_dimorph, truth_dimorph, file = "data/dimorph.rda", compress = "xz")

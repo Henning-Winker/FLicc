@@ -818,8 +818,8 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #' plot_lfd(lfd_alfonsino, scales = "free_y")
 #'
 #' # By gear and sex (females above, males below the line)
-#' data(sexsim)
-#' plot_lfd(lfd_sexsim, type = "prop")
+#' data(dimorph)
+#' plot_lfd(lfd_dimorph, type = "prop")
 #'
 #' # Custom colours
 #' plot_lfd(

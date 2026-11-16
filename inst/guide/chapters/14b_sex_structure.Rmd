@@ -7,14 +7,14 @@ sex-structured option models females and males as two growth-type-group populati
 fishing mortality and selectivity, each with its own growth, natural mortality, weight and
 maturity, and fits length samples that are combined, sexed or both, as in Stock Synthesis.
 
-The example is a simulated stock (`data(sexsim)`): females reach Linf 60 cm with k 0.15, males
+The example is a simulated stock (`data(dimorph)`): females reach Linf 60 cm with k 0.15, males
 45 cm with k 0.25, M = 0.3 for both. A trawl fishery has unsexed samples; a survey has sexed
 samples from 2016.
 
 ```{r sex-data}
-data(sexsim)
-lhpar_sexsim
-lapply(lfd_sexsim, function(q) dimnames(q)$unit)
+data(dimorph)
+lhpar_dimorph
+lapply(lfd_dimorph, function(q) dimnames(q)$unit)
 ```
 
 ## Length data by sex
@@ -48,7 +48,7 @@ switches it off). With `type = "prop"` each sexed sample is a proportion over bo
 sex ratio at length can be read directly:
 
 ```{r sex-lfd, fig.height = 6}
-plot_lfd(FLQuants(lapply(lfd_sexsim, function(q) q[, ac(2021:2025)])), type = "prop")
+plot_lfd(FLQuants(lapply(lfd_dimorph, function(q) q[, ac(2021:2025)])), type = "prop")
 ```
 
 ## Life history by sex
@@ -60,7 +60,7 @@ parameters are copied from the females. `lhpar_sex()` makes the same `FLPar` by 
 store it:
 
 ```{r sex-lhpar}
-lh_F <- FLPar(lhpar_sexsim@.Data[, "F", 1], params = dimnames(lhpar_sexsim)$params)
+lh_F <- FLPar(lhpar_dimorph@.Data[, "F", 1], params = dimnames(lhpar_dimorph)$params)
 lhpar_sex(lh_F, linf = 45, k = 0.25, L50 = 28)
 ```
 
@@ -70,7 +70,7 @@ with a `unit` dimension (as returned by `ss3diags2::ss3_lhpar()`) or `list(F = ,
 accepted as well.
 
 ```{r sex-stock}
-stk_sex <- stocklen_sex(lfd_sexsim, lhpar_sexsim, m_model = "constant")
+stk_sex <- stocklen_sex(lfd_dimorph, lhpar_dimorph, m_model = "constant")
 plot_growth(stk_sex, sex = "M")
 ```
 
@@ -90,19 +90,19 @@ penalty:
 sf2 <- c("dsnormal", "logistic")
 set_s <- list(obs_model = "mn", surveys = "Survey")
 
-trawl_U <- FLQuants(Trawl = lfd_sexsim$Trawl[, , "U"])
+trawl_U <- FLQuants(Trawl = lfd_dimorph$Trawl[, , "U"])
 fit_1sex <- fiticc(trawl_U, stocklen(trawl_U, lh_F, m_model = "constant"), sel_fun = "dsnormal",
                    catch_by_gear = 1, settings = list(obs_model = "mn"))
-fit_2sex_U <- fiticc(FLQuants(Trawl = lfd_sexsim$Trawl), stocklen_sex(trawl_U, lhpar_sexsim, m_model = "constant"),
+fit_2sex_U <- fiticc(FLQuants(Trawl = lfd_dimorph$Trawl), stocklen_sex(trawl_U, lhpar_dimorph, m_model = "constant"),
                      sel_fun = "dsnormal", catch_by_gear = 1, settings = list(obs_model = "mn"))
-fit_sex <- fiticc(lfd_sexsim, stk_sex, sel_fun = sf2, catch_by_gear = 1, settings = set_s)
-fit_sex_est <- fiticc(lfd_sexsim, stocklen_sex(lfd_sexsim, lh_F, male = list(linf = 52, k = 0.25, L50 = 28),
+fit_sex <- fiticc(lfd_dimorph, stk_sex, sel_fun = sf2, catch_by_gear = 1, settings = set_s)
+fit_sex_est <- fiticc(lfd_dimorph, stocklen_sex(lfd_dimorph, lh_F, male = list(linf = 52, k = 0.25, L50 = 28),
                                               m_model = "constant"),
                       sel_fun = sf2, catch_by_gear = 1, settings = modifyList(set_s, list(linf_m.sd = 0.3)))
 
 runs <- list(one_sex = fit_1sex, two_sex_trawl = fit_2sex_U, two_sex_survey = fit_sex,
              male_Linf_est = fit_sex_est)
-tab <- data.frame(year = truth_sexsim$year, true = round(truth_sexsim$spr, 3),
+tab <- data.frame(year = truth_dimorph$year, true = round(truth_dimorph$spr, 3),
                   sapply(runs, function(f) round(as.numeric(f$report$spr), 3)))
 tail(tab, 5)
 fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
@@ -116,7 +116,7 @@ simulation:
 cmp <- list("Combined sex (female LH)" = fit_1sex, "Two-sex, unsexed data" = fit_2sex_U,
             "Two-sex, + sexed survey" = fit_sex)
 plot_spr(cmp, ci = TRUE, ci_type = "ribbon") +
-  ggplot2::geom_line(data = data.frame(year = truth_sexsim$year, spr = truth_sexsim$spr),
+  ggplot2::geom_line(data = data.frame(year = truth_dimorph$year, spr = truth_dimorph$spr),
                      ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
                      linetype = 2, linewidth = 0.8)
 ```

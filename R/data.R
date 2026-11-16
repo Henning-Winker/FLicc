@@ -200,19 +200,19 @@ NULL
 #' year, dome-shaped selectivity) and one survey with sexed samples (250 fish
 #' a year from 2016, females and males in the same sample, logistic
 #' selectivity). Simulated from the FLicc sex-structured model
-#' (`inst/extdata/make_sexsim.R`). Used in the guide chapter on sex
+#' (`inst/extdata/make_dimorph.R`). Used in the guide chapter on sex
 #' structure and in the tests.
 #'
-#' @name sexsim
+#' @name dimorph
 #' @docType data
-#' @usage data(sexsim)
+#' @usage data(dimorph)
 #' @format The dataset loads three objects:
 #' \describe{
-#'   \item{\code{lfd_sexsim}}{`FLQuants` with gears `Trawl` (unit `U`) and
+#'   \item{\code{lfd_dimorph}}{`FLQuants` with gears `Trawl` (unit `U`) and
 #'     `Survey` (units `F`, `M`), length classes 2-80 cm (2 cm), 2011-2025.}
-#'   \item{\code{lhpar_sexsim}}{`FLPar` of the true life history by sex
+#'   \item{\code{lhpar_dimorph}}{`FLPar` of the true life history by sex
 #'     (params x unit `F`, `M`).}
-#'   \item{\code{truth_sexsim}}{`data.frame` with the true SPR (female
+#'   \item{\code{truth_dimorph}}{`data.frame` with the true SPR (female
 #'     spawning potential), F/k and F by year.}
 #' }
 #' @source Simulated with FLicc.
