@@ -1190,7 +1190,13 @@ Type objective_function<Type>::operator() ()
     Type r, m;
     if(spm_r_sd > Type(0)) { r = exp(spm_logr); nll -= dnorm(spm_logr, log(r_pr), spm_r_sd, true); } else r = r_pr;
     if(spm_m_sd > Type(0)) { m = exp(spm_logm); nll -= dnorm(spm_logm, log(m_pr), spm_m_sd, true); } else m = m_pr;
-    if(spm_K_pr(2) > Type(0)) nll -= dnorm(spm_logK, log(spm_K_pr(0)), spm_K_pr(1), true);
+    // K prior: on = 1 lognormal; on = 2 one-sided (JABBA3 "half8": flat below the
+    // median, half-normal on log K above)
+    if(spm_K_pr(2) == Type(1)) nll -= dnorm(spm_logK, log(spm_K_pr(0)), spm_K_pr(1), true);
+    if(spm_K_pr(2) == Type(2)) {
+      Type dk = smax_(spm_logK - log(spm_K_pr(0)), Type(0), Type(1e-4)) / spm_K_pr(1);
+      nll += Type(0.5) * dk * dk;
+    }
     if(spm_bk_pr(2) > Type(0)) nll -= dnorm(spm_lbk, log(spm_bk_pr(0)), spm_bk_pr(1), true);
     Type sdb = exp(spm_logsdb);
     if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);

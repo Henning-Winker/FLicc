@@ -38,7 +38,10 @@
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
 #' @param sdb prior on the process error SD: c(median, log sd, on)
-#' @param K prior on K in catch units: c(median, log sd, on) (default off)
+#' @param K prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
+#'   catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
+#'   above, log sd 0.833), or c(median, log sd, on) in catch units (lognormal), or
+#'   \code{NULL} (no prior)
 #' @param xgrid F grid for the EB/SB curves, multiples of M at Linf (first 0)
 #' @param newton.it taped Newton iterations for the reference F and m
 #' @param P.bound soft bounds on SB/SB0
@@ -47,7 +50,7 @@
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
                                index.units = "biomass", h = NULL, shape = c("fmsy", "spr"), spr.tgt = 0.4,
                                r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, sigma.Flink = 0.2,
-                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = c(NA, 1, 0),
+                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "F") {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
@@ -177,7 +180,8 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_link_F = as.integer("F" %in% lk), spm_sigma_Flink = as.numeric(sp$sigma.Flink),
     spm_lagidx = as.integer(pmax(seq_len(NT) - 1L - round(sp$lag), 0L)),
     spm_bk_pr = as.numeric(sp$bkinit), spm_sdb_pr = as.numeric(sp$sdb),
-    spm_K_pr = c(if (is.na(sp$K[1])) 1 else sp$K[1] / mucatch, sp$K[2], if (is.na(sp$K[1])) 0 else sp$K[3]),
+    spm_K_pr = if (is.null(sp$K)) c(1, 1, 0) else if (identical(sp$K, "half8")) c(5.7 * max(catch) / mucatch, 0.833, 2)
+               else c(sp$K[1] / mucatch, sp$K[2], sp$K[3]),
     spm_xgrid = as.numeric(sp$xgrid), spm_newton_it = as.integer(sp$newton.it),
     spm_Pbound = as.numeric(sp$P.bound),
     spm_selw = .spm_selw(sp$sel.weights, tmb_data),

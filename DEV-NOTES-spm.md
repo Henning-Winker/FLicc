@@ -23,7 +23,10 @@ parameters mapped off).
   for removals (fishery), one per index (gear selectivity, joint fishery, or SB).
 - **SPM**: translation of the subset of `JABBA3::jb3_nll()` (Selex state):
   constant process error, catch without error, production lag, soft bounds on
-  P, JABBA priors on bkinit, sdb, sdi. States `spm_logP` are random effects.
+  P, JABBA priors on bkinit, sdb, sdi, and JABBA3's one-sided K prior
+  ("half8": flat below 5.7 x max catch, half-normal on log K above). Without
+  it the fit can run up the K-r ridge (seen in CI: K 60 x larger, r and sdb
+  compensating). States `spm_logP` are random effects.
 - **Links**: SPR link log D_spr,y ~ N(log P_t, sigma.link) (default on), with
   D_spr = (4h·SPR − (1−h))/(5h−1); optional F link log H_t ~ N(log H_eq(F_y), sigma.Flink).
 
@@ -37,7 +40,7 @@ fit with SEs about 30 s. The catch weighting is an approximation of the
 joint selectivity (F shares are not catch shares). To do: exact fixed-effect
 F shares.
 
-## First results (alfonsino OM, `ci/sim/om_sim_spm.R`, CPUE = Gillnet EB, CV 0.2, sigR 0.3)
+## First results, with the K prior (alfonsino OM, `ci/sim/om_sim_spm.R`, CPUE = Gillnet EB, CV 0.2, sigR 0.3)
 | scenario | terminal SB/SB0 true | FLicc-SPM | FLicc alone (D_spr) | F/Fmsy true / SPM | conv |
 |---|---|---|---|---|---|
 | fudc 2001 | 0.130 | 0.127 | 0.137 | 1.33 / 1.72 | ok |
@@ -45,7 +48,7 @@ F shares.
 | rebuild 12 | 0.282 | 0.180 | 0.127 | 0.77 / 1.40 | fail |
 | decline 11 | 0.105 | 0.136 | 0.295 | 2.78 / 2.03 | ok |
 | decline 12 | 0.185 | 0.188 | 0.252 | 2.74 / 2.42 | ok |
-| flat 11 | 0.131 | 0.082 | 0.089 | 1.67 / 0.05 | fail |
+| flat 11 | 0.131 | 0.091 | 0.089 | 1.67 / 2.70 | fail |
 | flat 12 | 0.226 | 0.177 | 0.145 | 1.65 / 2.39 | ok |
 
 The joint model removes most of FLicc's lag under rising F (decline). Under
