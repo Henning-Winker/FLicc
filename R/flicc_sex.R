@@ -407,9 +407,10 @@ lenfit_sex_long_flicc <- function(fit) {
         lv <- sort(unique(oF$len[i])); lc <- lv[seq_len(min(cb, length(lv)))]
         iF <- which(i); ic <- iF[oF$len[iF] %in% lc]; iu <- iF[!(oF$len[iF] %in% lc)]
         tot <- sF + sM; ptot <- sum(pF$v[i] + pM$v[i])
+        # combined (F + M) expected over all lengths, observed below the cut-off
         rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "C",
-          len = oF$len[ic], year = y, observed = (oF$v[ic] + oM$v[ic]) / tot,
-          fitted = (pF$v[ic] + pM$v[ic]) / ptot, stringsAsFactors = FALSE)
+          len = oF$len[c(ic, iu)], year = y, observed = c((oF$v[ic] + oM$v[ic]) / tot, rep(NA, length(iu))),
+          fitted = (pF$v[c(ic, iu)] + pM$v[c(ic, iu)]) / ptot, stringsAsFactors = FALSE)
         # female and male expected lines over all lengths (below the cut-off
         # the model's split of the combined cell), so they run continuously;
         # observed sexes only above the cut-off
