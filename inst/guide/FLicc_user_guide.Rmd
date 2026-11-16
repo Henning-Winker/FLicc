@@ -80,9 +80,6 @@ blockquote p { margin-bottom: 0.4em; }
 ```{r child = "chapters/14c_dimorph_example.Rmd"}
 ```
 
-```{r child = "chapters/14d_hake_example.Rmd"}
-```
-
 ```{r child = "chapters/15_tail.Rmd"}
 ```
 
