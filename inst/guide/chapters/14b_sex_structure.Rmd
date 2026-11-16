@@ -121,8 +121,8 @@ fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
 The one-sex fit underestimates SPR most, because the small males are read as heavy fishing.
 Modelling both sexes reduces the bias even from unsexed samples, and the sexed survey reduces it
 further and lets the male Linf be estimated (from 52 back to about 45). Chapter *Worked example:
-a dimorphic stock* goes through this example with all plots by sex and compares the shortcuts
-(ignoring sex, pooled data) in detail.
+southern hake* applies the model to a real, strongly dimorphic stock assessed with Stock
+Synthesis.
 
 **Life-history penalties by sex.** Linf, M/k and CVL are separate parameters for each sex, each
 fixed at its input unless a penalty (prior SD on the log scale) is given:

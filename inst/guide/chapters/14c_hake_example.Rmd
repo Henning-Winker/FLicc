@@ -1,0 +1,240 @@
+# Worked example: southern hake
+
+This chapter fits the sex-structured model to a real, strongly dimorphic stock: southern hake
+(*Merluccius merluccius*, ICES hke.27.8c9a). Females grow much larger than males (Linf 110 vs
+74 cm), so the catch of large fish is almost all female. The inputs come from the Stock
+Synthesis (SS3) assessment, which also gives a benchmark. The chapter
+
+1. compares the sex-structured model with a one-sex model that ignores the sex structure, at the
+   life history of the SS3 assessment;
+2. estimates life-history parameters of both sexes with penalties;
+3. shows what these fits tell the SS3 assessment.
+
+## Data from the SS3 assessment
+
+`data(hake)` holds the inputs built from the SS3 output with r4ss and ss3diags2
+(`inst/extdata/make_hake.R`):
+
+```{r hk-data}
+data(hake)
+names(lfd_hake)
+ss3_hake$mirror
+ss3_hake$sex_minlen
+```
+
+* **Fisheries:** trawlers (retained and discarded fish), volpal (longline), artisanal and
+  cdTrw (a small trawl fleet). SS3 has quarterly length compositions; they are raised to annual
+  catch at length with the SS3 catch numbers by season and partition, as FLicc expects for
+  samples spread over the year.
+* **Surveys:** SpSurv and PtSurv are sexed; CdSurv is unsexed.
+* **CPUE fleets:** the two indices of the assessment mirror the selectivity of trawlers and volpal
+  and have no length data, so their selectivity is that of these fisheries; they are not separate
+  FLicc gears (and would enter the planned FLicc-SPM model through these gears).
+* **Small fish not sexed:** in the sexed surveys the fish below 21 cm are not sexed. SS3 combines
+  the sexes in those bins and stores them as females. `settings$sex_minlen` treats them the same
+  way (chapter *Sex structure*); without it, the small fish would be read as a large excess of
+  females.
+
+```{r hk-lfd, fig.height = 5}
+plot_lfd(FLQuants(lapply(lfd_hake[c("trawlers", "volpal", "artisanal", "PtSurv")],
+                         function(q) q[, ac(2022:2024)])),
+         type = "prop", sex_minlen = ss3_hake$sex_minlen)
+```
+
+## Life history by sex
+
+The growth, maturity, weight and natural mortality are those of the SS3 assessment. Male growth
+and M are set in SS3 as offsets from the females (male Linf = 110 × e^−0.4^ = 73.7 cm). M declines
+with age in SS3; here it is M at length, `m_model = "inverse"`, $M(L) = M\,L_{ref}/L$ with
+$L_{ref}$ = female L50, which follows the SS3 values within about 0.03 over the sizes caught.
+
+```{r hk-lh}
+lhpar_hake
+stk_hake <- stocklen_sex(lfd_hake, lhpar_hake, m_model = "inverse")
+```
+
+```{r hk-lh-plot, fig.height = 3.5}
+plot_growth(stk_hake, sex = "F") + ggplot2::ggtitle("Females")
+plot_growth(stk_hake, sex = "M") + ggplot2::ggtitle("Males")
+plot_m(stk_hake)
+```
+
+## Set-up
+
+* The cdTrw fleet takes about 4% of the catch; its catch is added to the trawlers and its length
+  data are not used.
+* PtSurv is the survey: it is sexed, covers 15-50 cm and fits well. SpSurv mostly samples fish
+  below 21 cm whose numbers vary with recruitment, and CdSurv is unsexed; both add little and are
+  left out here.
+* The fit uses the most recent 15 years, 2010-2024.
+
+```{r hk-setup}
+yy <- ac(2010:2024)
+gears <- c("trawlers", "volpal", "artisanal", "PtSurv")
+lfd <- FLQuants(lapply(lfd_hake[gears], function(q) q[, yy]))
+cbg <- FLQuants(lapply(catch_hake, function(q) q[, yy]))
+cbg$trawlers <- cbg$trawlers + cbg$cdTrw
+cbg <- FLQuants(cbg[c("trawlers", "volpal", "artisanal")])
+sf <- c(trawlers = "dsnormal", volpal = "logistic", artisanal = "dsnormal", PtSurv = "dsnormal")
+set <- list(obs_model = "mn", surveys = "PtSurv", sex_minlen = ss3_hake$sex_minlen["PtSurv"])
+ss3 <- data.frame(year = ss3_hake$spr$year, spr = ss3_hake$spr$spr)
+ss3 <- ss3[ss3$year %in% 2010:2024, ]
+```
+
+## Sex-structured versus one-sex
+
+The sex-structured fit uses the life history of both sexes; the one-sex fit uses the female life
+history for all fish, with the survey sexes pooled. In both, female Linf has a weak penalty (SD 0.1
+on the log scale) around the 110 cm of the assessment: with Linf fixed at exactly 110 cm the
+one-sex model does not converge, a first sign that female growth alone does not fit these data.
+
+```{r hk-fits}
+fit_sex <- fiticc(lfd, stocklen_sex(lfd, lhpar_hake, m_model = "inverse"),
+                  sel_fun = sf, catch_by_gear = cbg, settings = c(set, list(linf.sd = 0.1)))
+
+pool1 <- function(q) { u <- unitSums(q); dimnames(u)$unit <- "unique"; u }
+lfd1 <- FLQuants(lapply(lfd, pool1))
+lhF <- FLPar(lhpar_hake@.Data[, "F", 1], params = dimnames(lhpar_hake)$params)
+fit_one <- fiticc(lfd1, stocklen(lfd1, lhF, m_model = "inverse"), sel_fun = sf, catch_by_gear = cbg,
+                  settings = list(obs_model = "mn", surveys = "PtSurv", linf.sd = 0.1))
+rbind(convergence = c(sex_structured = fit_sex$opt$convergence, one_sex = fit_one$opt$convergence),
+      female_Linf = round(c(fit_sex$obj$report()$Linf, fit_one$obj$report()$Linf), 1))
+```
+
+```{r hk-spr, fig.height = 4.5}
+cmp <- list("Sex-structured" = fit_sex, "One-sex (female life history)" = fit_one)
+plot_spr(cmp, ci = TRUE, ci_type = "ribbon") +
+  ggplot2::geom_line(data = ss3, ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.9)
+```
+
+The dashed line is the SPR of the SS3 assessment. Mean SPR by period:
+
+```{r hk-spr-tab}
+spr_tab <- function(fits) {
+  x <- sapply(fits, function(f) c(f$report$spr))
+  x <- cbind(SS3 = ss3$spr, x)
+  round(rbind("2010-2014" = colMeans(x[1:5, , drop = FALSE]), "2015-2019" = colMeans(x[6:10, , drop = FALSE]),
+              "2020-2024" = colMeans(x[11:15, , drop = FALSE])), 3)
+}
+spr_tab(cmp)
+```
+
+Ignoring the sex structure lowers SPR by about a third. With female growth only, the shortage of fish above about
+75 cm, which in reality is the size only females reach, is read as fishing mortality; the
+sex-structured model explains part of it by the males, which stop growing at about 74 cm.
+
+Both FLicc fits follow the rise of SPR in the last years but stay below SS3. The stock has been
+rebuilding from very high F: large females take many years to reappear in the length data, and an
+equilibrium model reads their shortage as current fishing (chapter *Fishing mortality over time*).
+
+The fits to the length data and the sex ratio at length in the survey:
+
+```{r hk-len, fig.height = 6}
+plot_len(fit_sex, year = 2022:2024)
+```
+
+```{r hk-sexratio, fig.height = 3.5}
+plot_sexratio(fit_sex)
+```
+
+Below 21 cm the survey samples are one composition of both sexes (purple), above it female (red)
+and male (blue). The observed proportion of females between 21 and 35 cm is below the
+prediction: there are more males at these lengths than the male growth and M of the assessment
+imply.
+
+## Penalised estimates of the life history
+
+Linf, M/k and CVL of each sex are fixed unless a penalty is given (chapter *Sex structure*). With
+penalties (log-scale SD 0.1) centred on the SS3 values, the length data can move them. The
+sex-structured fit above (female Linf penalised) is compared with fits at the SS3 values and with
+male Linf or male M/k also estimated:
+
+```{r hk-pen}
+fit_fixed <- fiticc(lfd, stocklen_sex(lfd, lhpar_hake, m_model = "inverse"), sel_fun = sf,
+                    catch_by_gear = cbg, settings = set)
+pens <- list("Female and male Linf" = list(linf.sd = 0.1, linf_m.sd = 0.1),
+             "Female Linf and male M/k" = list(linf.sd = 0.1, Mk_m.sd = 0.1))
+fits_pen <- c(list("SS3 values" = fit_fixed, "Female Linf" = fit_sex),
+              lapply(pens, function(p)
+                fiticc(lfd, stocklen_sex(lfd, lhpar_hake, m_model = "inverse"), sel_fun = sf,
+                       catch_by_gear = cbg, settings = c(set, p))))
+lh_est <- function(f) {
+  r <- f$obj$report()
+  c(conv = f$opt$convergence, Linf_F = round(r$Linf, 1), Linf_M = round(r$Linf_m, 1),
+    M_M_at_Lref = round(r$Mk_m * c(lhpar_hake["k", "M"]), 3),
+    SPR_2024 = round(tail(c(f$report$spr), 1), 3), nll = round(f$opt$objective, 1))
+}
+t(sapply(fits_pen, lh_est))
+```
+
+```{r hk-pen-sexratio, fig.height = 3.5}
+plot_sexratio(fits_pen[["Female Linf and male M/k"]])
+```
+
+```{r hk-pen-spr, fig.height = 4.5}
+plot_spr(fits_pen) +
+  ggplot2::geom_line(data = ss3, ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.9)
+```
+
+The length data pull female Linf below the 110 cm fixed in the assessment (to about 92-96 cm),
+which raises SPR, and male M below its SS3 value (males surviving better). A lower male M moves the
+predicted sex ratio only slightly towards the observations: the remaining excess of males at
+21-35 cm points to the male growth offsets or to a sex ratio at recruitment below 0.5. The changes
+in the likelihood are a few units, so the penalties matter: the estimates show the direction the
+length data point to, not values to adopt without other information (growth studies, tagging).
+
+## Selectivity
+
+The selectivity at length of the sex-structured fit against SS3 (dashed, females, 2024), and a fit
+in which volpal is dome-shaped:
+
+```{r hk-dome}
+sf_dome <- sf; sf_dome["volpal"] <- "dsnormal"
+fit_dome <- fiticc(lfd, stocklen_sex(lfd, lhpar_hake, m_model = "inverse"), sel_fun = sf_dome,
+                   catch_by_gear = cbg, settings = c(set, list(linf.sd = 0.1)))
+c(conv = fit_dome$opt$convergence, delta_nll = round(fit_dome$opt$objective - fit_sex$opt$objective, 1))
+```
+
+```{r hk-sel, fig.height = 5}
+ss3sel <- ss3_hake$sel[ss3_hake$sel$gear %in% gears & ss3_hake$sel$len <= 90, ]
+names(ss3sel)[names(ss3sel) == "len"] <- "L"
+plot_compare_sel(list("Volpal logistic" = fit_sex, "Volpal dome" = fit_dome),
+                 colours = c("#E69F00", "#0072B2")) +
+  ggplot2::geom_line(data = ss3sel, ggplot2::aes(L, sel), inherit.aes = FALSE, linetype = 2)
+```
+
+```{r hk-dome-spr, fig.height = 4.5}
+plot_spr(list("Volpal logistic" = fit_sex, "Volpal dome" = fit_dome),
+         ci = TRUE, ci_type = "ribbon") +
+  ggplot2::geom_line(data = ss3, ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.9)
+```
+
+The length data clearly prefer a dome for volpal (lower negative log-likelihood). With the dome,
+the shortage of large females is explained by large fish escaping the longlines rather than by
+fishing, and SPR rises to the level of SS3, but the trend is lost in the early years. With all
+gears dome-shaped nothing in the length data fixes how many large fish there are, so the dome and
+F are confounded; the better fit may reflect the dome absorbing the shortage of large fish left by
+past high F.
+
+## What FLicc tells the SS3 assessment
+
+FLicc fits each fleet's length data in seconds, with the same life history as the assessment, so
+it is a quick check of structural choices:
+
+* **Volpal selectivity:** the length data prefer a dome to the logistic curve of the assessment.
+* **Female Linf:** the length data point to a smaller Linf than the 110 cm fixed in the
+  assessment.
+* **Male biology:** the sex ratio at length in PtSurv shows more males at 21-35 cm than the male
+  growth and M offsets imply; a lower male M fits slightly better but does not explain all of it.
+* **Sexed samples:** small unsexed fish must be combined over sexes (`settings$sex_minlen`, as in
+  SS3), or they bias the male parameters.
+
+Each is an SS3 sensitivity run (dome volpal, estimated Linf, male M and growth offsets).
+
+**Limits.** The equilibrium model lags a rebuild, and length data alone cannot separate dome-shaped
+selectivity from F. The CPUE indices of the assessment, which share the selectivity of trawlers
+and volpal, carry exactly that information; combining them with the length data is the aim of the
+planned FLicc-SPM model.

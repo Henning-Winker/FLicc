@@ -218,3 +218,40 @@ NULL
 #' @source Simulated with FLicc.
 #' @author Henning Winker
 NULL
+
+
+#' Southern hake: length data and life history by sex from the SS3 assessment
+#'
+#' Inputs for a sex-structured FLicc fit of southern hake (*Merluccius
+#' merluccius*, ICES hke.27.8c9a), built from the Stock Synthesis assessment
+#' (SS3 3.30.22, two sexes, four seasons, 1960-2024) with r4ss and ss3diags2
+#' (`inst/extdata/make_hake.R`). Females grow much larger than males (Linf
+#' 110 vs 74 cm) and have lower M; M declines with length in both sexes. Used
+#' in the guide chapter *Worked example: southern hake*.
+#'
+#' Fishery length compositions are quarterly in SS3 (trawlers with retained
+#' and discarded fish) and are raised to annual catch at length with the SS3
+#' catch numbers by season and partition. The surveys SpSurv and PtSurv are
+#' sexed, with the sexes combined below 21 cm (`ss3_hake$sex_minlen`, for
+#' `settings$sex_minlen`); CdSurv is unsexed. The two CPUE fleets of the
+#' assessment mirror the selectivity of trawlers and volpal and have no length
+#' data (`ss3_hake$mirror`).
+#'
+#' @name hake
+#' @docType data
+#' @usage data(hake)
+#' @format The dataset loads four objects:
+#' \describe{
+#'   \item{\code{lfd_hake}}{`FLQuants`, 1994-2024: fisheries `trawlers`,
+#'     `volpal`, `artisanal`, `cdTrw` (unit `U`), surveys `SpSurv`, `PtSurv`
+#'     (units `F`, `M`) and `CdSurv` (unit `U`).}
+#'   \item{\code{catch_hake}}{`FLQuants` of dead catch weight (t) of the four
+#'     fisheries by year.}
+#'   \item{\code{lhpar_hake}}{`FLPar` of the life history by sex (params x
+#'     unit `F`, `M`), including `reflen` for `m_model = "inverse"`.}
+#'   \item{\code{ss3_hake}}{list with the SS3 benchmark: `spr` (SPR,
+#'     SSB/SSB0, F by year), `sel` (selectivity at length by fleet, females,
+#'     2024), `sex_minlen`, `mirror` (CPUE fleets) and `notes`.}
+#' }
+#' @source ICES WGBIE southern hake (hke.27.8c9a) Stock Synthesis assessment.
+NULL

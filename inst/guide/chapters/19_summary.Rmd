@@ -21,6 +21,7 @@
 | Growth | fix Linf and CVL; Linf is the main sensitivity; default `maxsd = 3, ngtg = 13` (`maxsd = 2` only to reproduce LBSPR) |
 | Selectivity | logistic unless supported; always run `dome_sens_flicc()` (rsd 1000 to 0.4 x Linf); `binormal`/`bidsnormal` for two size modes |
 | Sex structure | dimorphic stocks: `stocklen_sex()` and sexed samples (unit F/M/U; SS3 codes); fix M/k; estimate male (or female) Linf with `linf_m.sd` only with sexed samples; check `plot_sexratio()`; sexed surveys via `settings$surveys` |
+| Real example: southern hake | SS3 inputs via ss3diags2 (`data(hake)`); combine small unsexed fish (`sex_minlen`); merge minor fleets; one-sex vs sex-structured; penalised Linf and male M/k; FLicc as a check of SS3 structural choices (dome selectivity, Linf, male offsets) |
 | Sensitivity runs | `fits_summary()` for the table; `ensemble_flicc()` with equal weights (AIC weights as a check, same data only) |
 | Management options | `plot_contour_flicc()`: yield and SPR (or SSB with `s`) over selectivity and F by gear |
 | F over time | random walk, sigmaF fixed (0.3 or the `F_re` estimate); `by_year = TRUE` only as a check |
