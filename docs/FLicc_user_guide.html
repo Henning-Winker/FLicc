@@ -1645,9 +1645,16 @@ sampling). Monte-Carlo ensembles over life-history uncertainty
 </div>
 <div id="installation" class="section level1" number="2">
 <h1><span class="header-section-number">2</span> Installation</h1>
-<p><code>FLicc</code> depends on <code>FLCore</code>,
-<code>ggplotFL</code> and <code>TMB</code>. On Windows, compiling the
-TMB model requires Rtools (<a href="https://cran.r-project.org/bin/windows/Rtools/" class="uri">https://cran.r-project.org/bin/windows/Rtools/</a>).</p>
+<p>FLicc is on the henning-winker r-universe, together with its FLR
+dependencies from the FLR r-universe. This installs FLicc and everything
+it needs, with ready-built binaries for Windows and macOS (no Rtools
+needed):</p>
+<pre class="r"><code>install.packages(&quot;FLicc&quot;, repos = c(&quot;https://henning-winker.r-universe.dev&quot;,
+                                    &quot;https://flr.r-universe.dev&quot;,
+                                    &quot;https://cloud.r-project.org&quot;))</code></pre>
+<p>The development version from GitHub needs the dependencies first and,
+on Windows, Rtools (<a href="https://cran.r-project.org/bin/windows/Rtools/" class="uri">https://cran.r-project.org/bin/windows/Rtools/</a>) to
+compile the TMB model:</p>
 <pre class="r"><code>install.packages(&quot;TMB&quot;, type = &quot;source&quot;)
 install.packages(c(&quot;FLCore&quot;, &quot;ggplotFL&quot;),
                  repos = c(&quot;https://flr.r-universe.dev&quot;, &quot;https://cloud.r-project.org&quot;))
@@ -2804,7 +2811,7 @@ takes under a second:</p>
 <pre class="r"><code>system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = list(CVL = 0.1, obs_model = &quot;dm&quot;, dm_theta = &quot;saturating&quot;)))
 #&gt;    user  system elapsed 
-#&gt;   0.687   0.000   0.691
+#&gt;   0.644   0.000   0.645
 sigmaF_flicc(fit)
 #&gt; [1] 0.3
 neff_flicc(fit)[1:4, ]
@@ -4640,10 +4647,10 @@ process.</li>
 </ul>
 <pre class="r"><code>system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$fixed_0.3))
 #&gt;    user  system elapsed 
-#&gt;   0.625   0.000   0.625
+#&gt;   0.696   0.000   0.709
 system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg, settings = f_settings$F_re))
 #&gt;    user  system elapsed 
-#&gt;   7.129   0.028   7.206</code></pre>
+#&gt;   6.756   0.047   6.858</code></pre>
 <p>Use it for a final assessment and to estimate
 <math display="inline" xmlns="http://www.w3.org/1998/Math/MathML"><semantics><msub><mi>σ</mi><mi>F</mi></msub><annotation encoding="application/x-tex">\sigma_F</annotation></semantics></math>
 once; then fix it for repeated fits:
@@ -5789,11 +5796,11 @@ plot_spr(fits_model, ci = TRUE)</code></pre>
 <pre class="r"><code>system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = model_settings$gtg_nb))
 #&gt;    user  system elapsed 
-#&gt;   0.716   0.000   0.724
+#&gt;   0.674   0.000   0.678
 system.time(fiticc(lfd, stklen, sel_fun = sel_fun, catch_by_gear = cbg,
                    settings = model_settings$gamma_nb))
 #&gt;    user  system elapsed 
-#&gt;   8.593   0.348   9.029</code></pre>
+#&gt;   8.353   0.431   8.877</code></pre>
 <p>Log-likelihoods and AIC are not comparable between observation models
 (they are likelihoods of different things); compare the estimates, their
 precision and the fit to the compositions (<code>plot_len</code>).
