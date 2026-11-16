@@ -410,10 +410,15 @@ lenfit_sex_long_flicc <- function(fit) {
         rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "C",
           len = oF$len[ic], year = y, observed = (oF$v[ic] + oM$v[ic]) / tot,
           fitted = (pF$v[ic] + pM$v[ic]) / ptot, stringsAsFactors = FALSE)
+        # female and male expected lines over all lengths (below the cut-off
+        # the model's split of the combined cell), so they run continuously;
+        # observed sexes only above the cut-off
         rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "F",
-          len = oF$len[iu], year = y, observed = oF$v[iu] / tot, fitted = pF$v[iu] / ptot, stringsAsFactors = FALSE)
+          len = oF$len[c(ic, iu)], year = y, observed = c(rep(NA, length(ic)), oF$v[iu] / tot),
+          fitted = pF$v[c(ic, iu)] / ptot, stringsAsFactors = FALSE)
         rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "M",
-          len = oM$len[iu], year = y, observed = oM$v[iu] / tot, fitted = pM$v[iu] / ptot, stringsAsFactors = FALSE)
+          len = oM$len[c(ic, iu)], year = y, observed = c(rep(NA, length(ic)), oM$v[iu] / tot),
+          fitted = pM$v[c(ic, iu)] / ptot, stringsAsFactors = FALSE)
         next
       }
       if (sF > 0 && sM > 0) {         # joint length x sex composition
@@ -435,27 +440,41 @@ lenfit_sex_long_flicc <- function(fit) {
   df
 }
 
+# widths of length bins with lower bounds L (last bin: the previous width) (internal)
+bin_width_flicc <- function(L) {
+  u <- sort(unique(L)); w <- if (length(u) > 1) c(diff(u), utils::tail(diff(u), 1)) else 1
+  w[match(L, u)]
+}
+
 # the mirrored plot: df with panel, year, sex, len, observed and optionally fitted
 plot_sex_mirror_flicc <- function(df, cols, len_by = 10, ylab = "Proportion",
                                   title = NULL, ncol_years = NULL, scales = "free_y",
                                   fitted_U = "black", linewidth = 0.8) {
+  # bins of unequal width: proportions per unit length, so that wider bins
+  # do not show as steps
+  df$w <- bin_width_flicc(df$len)
+  if (length(unique(round(df$w, 6))) > 1) {
+    df$observed <- df$observed / df$w
+    if (!is.null(df$fitted)) df$fitted <- df$fitted / df$w
+    if (ylab == "Proportion") ylab <- "Proportion per cm" else ylab <- paste(ylab, "per cm")
+  }
+  df$mid <- df$len + df$w / 2
   sg <- ifelse(df$sex == "M", -1, 1)
   df$obs_s <- sg * df$observed
   if (!is.null(df$fitted)) df$fit_s <- sg * df$fitted
   df$sex <- factor(df$sex, levels = c("F", "M", "U", "C"))
   lab <- c(F = "Female", M = "Male", U = "Unsexed", C = "Sexes combined")
-  bw <- if (length(unique(df$len)) > 1) min(diff(sort(unique(df$len)))) else 1
   lens <- sort(unique(df$len))
   x_breaks <- seq(floor(min(lens) / len_by) * len_by, ceiling(max(lens) / len_by) * len_by, by = len_by)
   df$year <- factor(df$year, levels = sort(unique(df$year)))
   df$panel <- factor(df$panel, levels = unique(df$panel))
   p <- ggplot2::ggplot(df, ggplot2::aes(x = len)) +
-    ggplot2::geom_col(ggplot2::aes(y = obs_s, fill = sex), width = bw, alpha = 0.45,
-                      colour = NA, position = "identity") +
+    ggplot2::geom_rect(ggplot2::aes(xmin = len, xmax = len + w, ymin = 0, ymax = obs_s, fill = sex),
+                       alpha = 0.45, colour = NA, na.rm = TRUE) +
     ggplot2::geom_hline(yintercept = 0, colour = "grey20", linewidth = 0.3)
   if (!is.null(df$fitted)) {
     lcol <- cols; lcol["U"] <- fitted_U
-    p <- p + ggplot2::geom_line(ggplot2::aes(y = fit_s, colour = sex,
+    p <- p + ggplot2::geom_line(ggplot2::aes(x = mid, y = fit_s, colour = sex,
                                              group = interaction(sex, panel, year)),
                                 linewidth = linewidth, na.rm = TRUE) +
       ggplot2::scale_colour_manual(values = lcol, labels = lab, drop = TRUE, name = "Fitted")

@@ -556,21 +556,29 @@ plot_len <- function(fit,
   #-----------------------------
   # plot
   #-----------------------------
+  # bins of unequal width: proportions per unit length (no steps where the
+  # bins widen)
+  df$w <- bin_width_flicc(df$len)
+  ylab <- "Proportion"
+  if (length(unique(round(df$w, 6))) > 1) {
+    df$observed <- df$observed / df$w; df$fitted <- df$fitted / df$w
+    ylab <- "Proportion per cm"
+  }
   p <- ggplot2::ggplot(df, ggplot2::aes(x = len)) +
-    ggplot2::geom_col(
-      ggplot2::aes(y = observed),
+    ggplot2::geom_rect(
+      ggplot2::aes(xmin = len, xmax = len + w, ymin = 0, ymax = observed),
       fill = observed_fill,
-      colour = observed_colour
+      colour = observed_colour, na.rm = TRUE
     ) +
     ggplot2::geom_line(
-      ggplot2::aes(y = fitted, group = 1),
+      ggplot2::aes(x = len + w / 2, y = fitted, group = 1),
       colour = fitted_colour,
       linewidth = fitted_linewidth
     ) +
     ggplot2::scale_x_continuous(breaks = x_breaks) +
     ggplot2::labs(
       x = "Length",
-      y = "Proportion",
+      y = ylab,
       title = title
     ) +
     ggplot2::theme_bw() +
