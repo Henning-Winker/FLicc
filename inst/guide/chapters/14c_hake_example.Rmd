@@ -220,6 +220,18 @@ lh_est <- function(f) {
 t(sapply(fits_pen, lh_est))
 ```
 
+What the penalised estimates imply for status:
+
+```{r hk-pen-spr, fig.height = 4.5}
+plot_spr(fits_pen, ci = TRUE, ci_type = "ribbon") +
+  ggplot2::geom_line(data = ss3, ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.9)
+spr_tab(fits_pen)
+```
+
+The three SPR trajectories lie on top of each other: the life-history changes the length data
+support move the fit, but not the status. Ignoring the sex structure (above) matters far more.
+
 ```{r hk-pen-sexratio, fig.height = 3.5}
 plot_sexratio(fit_mk)
 ```
