@@ -415,52 +415,24 @@ In that sense, `LBIspr` sits naturally between these two lines of work:
 
 ## Installation
 
-`FLicc` depends on `FLCore`, `ggplotFL`, and `TMB`. The FLR packages are available from the FLR r-universe repository, while `TMB` is installed from CRAN. On Windows, installing `TMB` from source requires Rtools.
-
-
-
-### 1. Install required packages
+`FLicc` and its FLR dependencies (`FLCore`, `ggplotFL`) are available from r-universe, with ready-built binaries for Windows and macOS (no Rtools needed):
 
 ```r
-install.packages("devtools")
-install.packages("TMB", type = "source")
-install.packages("ggplot2")
-```
-
-`TMB` is the estimation engine used by `FLicc`. Installing from source ensures compatibility when compiling models and linking against the local toolchain.
-
-### 2. Windows only: install Rtools (if not already installed)
-
-On Windows, `TMB` requires Rtools. You can install in R from:
-
-
-```r
-browseURL("https://cran.r-project.org/bin/windows/Rtools/")
-```
-
-After installation, restart R before proceeding.
-
-
-### 3. Install FLR dependencies
-
-```r
-install.packages(
-  c("FLCore", "ggplotFL"),
-  repos = c("https://flr.r-universe.dev", "https://cloud.r-project.org")
-)
-```
-
-### 4. Install FLicc
-
-```r
-devtools::install_github("henning-winker/FLicc")
-```
-
-
-### 5. Load the package
-
-```r
+install.packages("FLicc", repos = c("https://henning-winker.r-universe.dev",
+                                    "https://flr.r-universe.dev",
+                                    "https://cloud.r-project.org"))
 library(FLicc)
+```
+
+### Development version from GitHub
+
+```r
+# Windows only: Rtools is needed to compile the TMB model
+# browseURL("https://cran.r-project.org/bin/windows/Rtools/")
+install.packages("TMB", type = "source")
+install.packages(c("FLCore", "ggplotFL"),
+                 repos = c("https://flr.r-universe.dev", "https://cloud.r-project.org"))
+remotes::install_github("henning-winker/FLicc")
 ```
 
 ## Typical workflow
