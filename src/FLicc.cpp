@@ -461,6 +461,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(spm_logq);
   PARAMETER_VECTOR(spm_logsdi);
   PARAMETER_VECTOR(spm_logP);  // log SB_t/SB0 (random effects)
+  PARAMETER_VECTOR(spm_trho);  // 2: AR1 correlation of the SPR- and F-link errors, rho = 2/(1+exp(-x))-1
 
   Type nll = 0.0;
 
@@ -1013,8 +1014,12 @@ Type objective_function<Type>::operator() ()
         wtA_m(l) += wt_m(l, y)      / Type(nyb);
       }
     }
+    // smooth maximum (p-norm, p = 20) instead of a hard max: r, m, BmsyK and
+    // Hmsy do not depend on the scale of sA, and a hard max puts kinks into
+    // the fixed-effect surface when the apical bin switches
     Type samax = Type(0);
-    for(int l = 0; l < nlen; l++) samax = CppAD::CondExpGt(sA(l), samax, sA(l), samax);
+    for(int l = 0; l < nlen; l++) samax += pow(sA(l) + Type(1e-12), Type(20));
+    samax = pow(samax, Type(1) / Type(20));
     for(int l = 0; l < nlen; l++) {
       sA(l) = sA(l) / (samax + Type(1e-30));
       MA(l) = Mk * brp_k * Ms(l);                    // annual M at length, female
@@ -1239,22 +1244,38 @@ Type objective_function<Type>::operator() ()
       nll -= dnorm(spm_logI(k), spm_Imean(k), sqrt(spm_se2(k) + sdi(i) * sdi(i)), true);
     }
 
+    // links between the length model and the SPM. The equilibrium lag of the
+    // length model gives persistent link errors, so they are AR1 over the
+    // length-data years (rho^gap for gaps): e_0 ~ N(0, sig),
+    // e_y ~ N(rho_g e_(y-1), sig sqrt(1 - rho_g^2)), rho_g = rho^gap
+    auto ar1_nll = [&](vector<Type> e, Type rho, Type sig) {
+      Type out = -dnorm(e(0), Type(0), sig, true);
+      for(int y = 1; y < e.size(); y++) {
+        Type rg = rho;                       // rho^gap by products (pow() has no derivative at rho = 0)
+        for(int k = 1; k < spm_lfd_t(y) - spm_lfd_t(y - 1); k++) rg *= rho;
+        out -= dnorm(e(y), rg * e(y - 1), sig * sqrt(Type(1) - rg * rg + Type(1e-10)), true);
+      }
+      return out;
+    };
+    vector<Type> rho_link = Type(2) / (Type(1) + exp(-spm_trho)) - Type(1);
     // SPR link: depletion implied by the length model's SPR under steepness
-    vector<Type> D_spr(nyear), Heq_y(nyear);
-    D_spr.setZero(); Heq_y.setZero();
+    vector<Type> D_spr(nyear), Heq_y(nyear), e_spr(nyear), e_F(nyear);
+    D_spr.setZero(); Heq_y.setZero(); e_spr.setZero(); e_F.setZero();
     for(int y = 0; y < nyear; y++) {
       Type D = (Type(4) * spm_h * spr_y(y) - (Type(1) - spm_h)) / (Type(5) * spm_h - Type(1));
       D_spr(y) = smax_(D, Type(1e-3), Type(1e-8));
-      if(spm_link_spr == 1) nll -= dnorm(log(D_spr(y)), spm_logP(spm_lfd_t(y)), spm_sigma_link, true);
+      e_spr(y) = log(D_spr(y)) - spm_logP(spm_lfd_t(y));
     }
+    if(spm_link_spr == 1) nll += ar1_nll(e_spr, rho_link(0), spm_sigma_link);
     // F link: harvest rate of the SPM against the equilibrium harvest rate
     // (yield / exploitable biomass per recruit) at the length model's apical F
     if(spm_link_F == 1) {
       for(int y = 0; y < nyear; y++) {
         vector<Type> q = prq(fapic_y(y) * brp_k);
         Heq_y(y) = q(1) / q(2);
-        nll -= dnorm(log(H(spm_lfd_t(y))), log(Heq_y(y)), spm_sigma_Flink, true);
+        e_F(y) = log(Heq_y(y)) - log(H(spm_lfd_t(y)));
       }
+      nll += ar1_nll(e_F, rho_link(1), spm_sigma_Flink);
     }
 
     Type MSY_spm = BmsyK_spm * K * Hmsy_spm * rho_at(BmsyK_spm, 0);
@@ -1271,7 +1292,7 @@ Type objective_function<Type>::operator() ()
     REPORT(spm_r); REPORT(spm_m); REPORT(spm_K); REPORT(spm_sdb); REPORT(spm_sdi); REPORT(spm_q);
     REPORT(BmsyK_spm); REPORT(Hmsy_spm); REPORT(MSY_spm);
     REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
-    REPORT(spm_Imean); REPORT(D_spr); REPORT(Heq_y);
+    REPORT(spm_Imean); REPORT(D_spr); REPORT(Heq_y); REPORT(e_spr); REPORT(e_F); REPORT(rho_link);
     vector<Type> spm_sA = sA;
     REPORT(Pg); REPORT(Yg); REPORT(rhog); REPORT(sprg); REPORT(spm_sA);
     ADREPORT(spm_logB); ADREPORT(spm_logBBmsy); ADREPORT(spm_logHHmsy); ADREPORT(spm_logMSY);

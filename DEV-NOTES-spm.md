@@ -1,7 +1,7 @@
 # FLicc-SPM prototype (branch dev-spm, from dev-sex)
 
-One TMB objective: FLicc length likelihood (gtg, one or two sexes, F as random
-effects) + a Pella-Tomlinson state-space surplus production model in spawning
+One TMB objective: FLicc length likelihood (gtg, one or two sexes; F as fixed
+effects, a nuisance that tunes SPR; `F_re = TRUE` still possible) + a Pella-Tomlinson state-space surplus production model in spawning
 biomass fitted to catch and CPUE + coupling. Switched on by `settings$spm`
 (`spm_settings_flicc()`); without it FLicc is unchanged (`spm_use = 0`, SPM
 parameters mapped off).
@@ -65,3 +65,32 @@ fits do not converge.
 5. Regression test of the SPM block against `JABBA3:::jb3_nll` at fixed parameters.
 6. Output in the `jabba3` layout for JABBA3's plots and diagnostics.
 7. Simulation grid (scenarios x iterations), sexes (FLOSS `om_sex()`).
+
+## Status 16 Nov (work in progress, stopped here)
+
+Changes after the first push (commit "WIP"):
+- **F not random by default** (HW: in FLicc F is a nuisance that tunes SPR; the
+  random effects belong to the SPM states, as in JABBA3).
+- **Per-recruit selectivity from catch-share weights by default**
+  (`sel.weights = "catch"`). With F fixed, the F-weighted joint selectivity
+  (`"F"`) gives a flat direction: the whole F level of one gear moves with its
+  selectivity, K and q (4 of 7 fits failed). The production layer should not
+  depend on the nuisance F anyway.
+- **AR1 link errors** (`link.rho = c(spr = , F = )`, value fixes, NA
+  estimates), rho^gap over gaps between length-data years. Estimated rho on
+  the SPR link runs to 1 (trend-only link, process error collapses): needs a
+  prior or a fixed value.
+- Smooth max (p-norm) for the apical scaling of the per-recruit selectivity.
+- Fixed: `pow(rho, gap)` has no derivative at rho = 0 in TMB (products instead).
+
+Partial comparison (F fixed, catch weights; 15 of 28 runs before stopping):
+- SPR link, independent errors: 5 of 7 converged; terminal SB/SB0 close in
+  decline and fudc runs, pessimistic under rebuild and flat F.
+- SPR link, rho = 0.7: little change in depletion; 4 of 7 converged; one
+  nonsense F/Fmsy (0.03).
+- F link, rho = 0.7: one run (fudc 2001) converged, F/Fmsy 1.51 vs true 1.33
+  (SPR link 1.75-1.78), SB/SB0 0.157 vs 0.130.
+
+Next when resumed: finish the F-link (AR1) runs and the combined links; prior
+on rho; convergence failures; F/Fmsy bias. Scripts used: `ci/sim/om_sim_spm.R`
+and an evaluation loop (seeds 2001/11/12; fudc, rebuild, decline, flat).

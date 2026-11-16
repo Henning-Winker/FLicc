@@ -705,8 +705,6 @@ fiticc_core <- function(lfd, stklen,
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
-  # FLicc-SPM: F as random effects by default (Laplace), with the SPM states
-  if (!is.null(settings$spm) && is.null(settings$F_re)) settings$F_re <- TRUE
 
   if(isTRUE(any(settings$prior_sigmaF == FALSE, na.rm = TRUE))) settings$prior_sigmaF <- c(NA_real_, NA_real_, 0)
 
