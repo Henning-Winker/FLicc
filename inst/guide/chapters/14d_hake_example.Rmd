@@ -73,17 +73,17 @@ plot_m(stk_hake)
 
 ```{r hk-setup}
 yy <- ac(2015:2024)
-gears <- c("trawlers", "volpal", "artisanal", "PtSurv")
-lfd <- FLQuants(lapply(lfd_hake[gears], function(q) q[, yy]))
-cbg <- FLQuants(lapply(catch_hake, function(q) q[, yy]))
-cbg$trawlers <- cbg$trawlers + cbg$cdTrw
-cbg <- FLQuants(cbg[c("trawlers", "volpal", "artisanal")])
-set <- list(obs_model = "mn", surveys = "PtSurv", sex_minlen = ss3_hake$sex_minlen["PtSurv"])
+gears_hk <- c("trawlers", "volpal", "artisanal", "PtSurv")
+lfd_hk <- FLQuants(lapply(lfd_hake[gears_hk], function(q) q[, yy]))
+cbg_hk <- FLQuants(lapply(catch_hake, function(q) q[, yy]))
+cbg_hk$trawlers <- cbg_hk$trawlers + cbg_hk$cdTrw
+cbg_hk <- FLQuants(cbg_hk[c("trawlers", "volpal", "artisanal")])
+set_hk <- list(obs_model = "mn", surveys = "PtSurv", sex_minlen = ss3_hake$sex_minlen["PtSurv"])
 ss3 <- data.frame(year = ss3_hake$spr$year, spr = ss3_hake$spr$spr)
 ss3 <- ss3[ss3$year %in% 2015:2024, ]
-ss3sel <- ss3_hake$sel[ss3_hake$sel$gear %in% gears & ss3_hake$sel$len <= 90, ]
+ss3sel <- ss3_hake$sel[ss3_hake$sel$gear %in% gears_hk & ss3_hake$sel$len <= 90, ]
 names(ss3sel)[names(ss3sel) == "len"] <- "L"
-stk_sex <- stocklen_sex(lfd, lhpar_hake, m_model = "inverse")
+stk_sex <- stocklen_sex(lfd_hk, lhpar_hake, m_model = "inverse")
 ```
 
 ## Dome-shaped selectivity
@@ -98,10 +98,10 @@ volpal fixed as logistic, as in SS3:
 ```{r hk-dome}
 sf_dome <- c(trawlers = "dsnormal", volpal = "dsnormal", artisanal = "dsnormal", PtSurv = "dsnormal")
 sf_logi <- replace(sf_dome, "volpal", "logistic")
-fit_sex <- fiticc(lfd, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg,
-                  settings = c(set, list(linf.sd = 0.1)))
-fit_logi <- fiticc(lfd, stk_sex, sel_fun = sf_logi, catch_by_gear = cbg,
-                   settings = c(set, list(linf.sd = 0.1)))
+fit_sex <- fiticc(lfd_hk, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg_hk,
+                  settings = c(set_hk, list(linf.sd = 0.1)))
+fit_logi <- fiticc(lfd_hk, stk_sex, sel_fun = sf_logi, catch_by_gear = cbg_hk,
+                   settings = c(set_hk, list(linf.sd = 0.1)))
 rbind(convergence = c(dome = fit_sex$opt$convergence, logistic = fit_logi$opt$convergence),
       neg_loglik = round(c(fit_sex$opt$objective, fit_logi$opt$objective), 1))
 ```
@@ -132,9 +132,9 @@ The sex-aggregated fit uses the female life history for all fish, with the surve
 
 ```{r hk-agg}
 pool1 <- function(q) { u <- unitSums(q); dimnames(u)$unit <- "unique"; u }
-lfd1 <- FLQuants(lapply(lfd, pool1))
+lfd1 <- FLQuants(lapply(lfd_hk, pool1))
 lhF <- FLPar(lhpar_hake@.Data[, "F", 1], params = dimnames(lhpar_hake)$params)
-fit_agg <- fiticc(lfd1, stocklen(lfd1, lhF, m_model = "inverse"), sel_fun = sf_dome, catch_by_gear = cbg,
+fit_agg <- fiticc(lfd1, stocklen(lfd1, lhF, m_model = "inverse"), sel_fun = sf_dome, catch_by_gear = cbg_hk,
                   settings = list(obs_model = "mn", surveys = "PtSurv", linf.sd = 0.1))
 rbind(convergence = c(sex_structured = fit_sex$opt$convergence, aggregated = fit_agg$opt$convergence),
       female_Linf = round(c(fit_sex$obj$report()$Linf, fit_agg$obj$report()$Linf), 1))
@@ -207,9 +207,9 @@ penalties (log-scale SD 0.1) centred on the SS3 values, the length data can move
 case (female Linf penalised) is compared with the SS3 values and with male M/k also estimated:
 
 ```{r hk-pen}
-fit_fixed <- fiticc(lfd, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg, settings = set)
-fit_mk <- fiticc(lfd, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg,
-                 settings = c(set, list(linf.sd = 0.1, Mk_m.sd = 0.1)))
+fit_fixed <- fiticc(lfd_hk, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg_hk, settings = set_hk)
+fit_mk <- fiticc(lfd_hk, stk_sex, sel_fun = sf_dome, catch_by_gear = cbg_hk,
+                 settings = c(set_hk, list(linf.sd = 0.1, Mk_m.sd = 0.1)))
 fits_pen <- list("SS3 values" = fit_fixed, "Female Linf" = fit_sex, "Female Linf and male M/k" = fit_mk)
 lh_est <- function(f) {
   r <- f$obj$report()
