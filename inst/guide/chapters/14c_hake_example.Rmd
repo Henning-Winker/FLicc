@@ -67,13 +67,12 @@ plot_m(stk_hake)
 * PtSurv is the survey: it is sexed, covers 15-50 cm and fits well. SpSurv mostly samples fish
   below 21 cm whose numbers vary with recruitment, and CdSurv is unsexed; both add little and are
   left out here.
-* The fit uses the most recent years, 2017-2024: a short window suits the equilibrium assumption
-  (similar conditions in all years) and constant selectivity. With 2010-2024 the domes make the
-  early years more optimistic than SS3.
+* The fit uses the last 10 years, 2015-2024: a short window suits the equilibrium assumption
+  (similar conditions in all years) and constant selectivity.
 * Female Linf has a weak penalty (log-scale SD 0.1) around the 110 cm of the assessment.
 
 ```{r hk-setup}
-yy <- ac(2017:2024)
+yy <- ac(2015:2024)
 gears <- c("trawlers", "volpal", "artisanal", "PtSurv")
 lfd <- FLQuants(lapply(lfd_hake[gears], function(q) q[, yy]))
 cbg <- FLQuants(lapply(catch_hake, function(q) q[, yy]))
@@ -81,7 +80,7 @@ cbg$trawlers <- cbg$trawlers + cbg$cdTrw
 cbg <- FLQuants(cbg[c("trawlers", "volpal", "artisanal")])
 set <- list(obs_model = "mn", surveys = "PtSurv", sex_minlen = ss3_hake$sex_minlen["PtSurv"])
 ss3 <- data.frame(year = ss3_hake$spr$year, spr = ss3_hake$spr$spr)
-ss3 <- ss3[ss3$year %in% 2017:2024, ]
+ss3 <- ss3[ss3$year %in% 2015:2024, ]
 ss3sel <- ss3_hake$sel[ss3_hake$sel$gear %in% gears & ss3_hake$sel$len <= 90, ]
 names(ss3sel)[names(ss3sel) == "len"] <- "L"
 stk_sex <- stocklen_sex(lfd, lhpar_hake, m_model = "inverse")
@@ -153,7 +152,7 @@ Mean SPR by period (SS3 in the first column):
 ```{r hk-spr-tab}
 spr_tab <- function(fits) {
   x <- cbind(SS3 = ss3$spr, sapply(fits, function(f) c(f$report$spr)))
-  round(rbind("2017-2020" = colMeans(x[1:4, , drop = FALSE]), "2021-2024" = colMeans(x[5:8, , drop = FALSE])), 3)
+  round(rbind("2015-2019" = colMeans(x[1:5, , drop = FALSE]), "2020-2024" = colMeans(x[6:10, , drop = FALSE])), 3)
 }
 spr_tab(cmp)
 ```
