@@ -396,6 +396,8 @@ Type objective_function<Type>::operator() ()
   DATA_ARRAY(obs_sex);       // nlen x nyear x ngear x 2: sexed compositions (F, M); zeros = none
   DATA_IMATRIX(sex_type);    // nyear x ngear, as SS3 gender codes for the sexed part:
                              // 0 none, 1 females only, 2 males only, 3 both (joint length x sex)
+  DATA_IVECTOR(sex_comb);    // by gear: number of leading (retained) length bins in which the
+                             // sexes are combined in sexed samples (0 = none)
   DATA_SCALAR(sex_ratio);    // proportion female at recruitment (1 when nsex = 1)
   DATA_SCALAR(k_ratio);      // k_female / k_male: F/k and time scale of male survival
   DATA_SCALAR(mk_ratio);     // (M/k)_male / (M/k)_female of the inputs (start value of log_Mk_m; not used in the model)
@@ -913,6 +915,33 @@ Type objective_function<Type>::operator() ()
           }
         int st = sex_type(y, g);
         if(st <= 0 || st > 3) continue;     // 0 none; 1 F, 2 M, 3 joint (SS3 gender codes)
+        // sexes combined below a length (SS3 'combine males into females at or
+        // below a bin'): the first cb retained bins are one cell of both sexes
+        // (observed: F + M columns; predicted: females + males), the bins above
+        // are female and male cells, all in one composition
+        int cb = sex_comb(g);
+        if(cb > nb) cb = nb;
+        if(cb > 0) {
+          int nc = cb + 2 * (nb - cb);
+          vector<Type> oc(nc), pc(nc);
+          oc.setZero(); pc.setZero();
+          for(int sx = 0; sx < 2; sx++) {
+            for(int l = 0; l < nkeep; l++) {
+              int k = (l < nb) ? l : (nb - 1);
+              int idx = (k < cb) ? k : (cb + sx * (nb - cb) + (k - cb));
+              oc(idx) += obs_sex(l, y, g, sx);
+              pc(idx) += plen_sex(l, y, g, sx);
+            }
+          }
+          Type pcs = pc.sum();
+          if(pcs > Type(0)) pc = pc / pcs;
+          if(rob_eps > Type(0)) {
+            for(int k = 0; k < nc; k++) pc(k) = (Type(1) - rob_eps) * pc(k) + rob_eps / Type(nc);
+          }
+          if(pred_gear(g) > Type(0))
+            nll += comp_nll_flicc(oc, pc, obs_model, dm_type, log_dm(g), phi);
+          continue;
+        }
         int s0 = (st == 2) ? 1 : 0;          // first sex in the composition
         int s1 = (st == 1) ? 0 : 1;          // last sex in the composition
         int ns = s1 - s0 + 1;

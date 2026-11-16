@@ -41,6 +41,16 @@ lfd <- FLQuantLen(lfd_long_to_wide(df_long_with_sex), unit = "cm")
 `lfdess()` rescales females and males of a sample together, so the sex ratio is kept, and
 unsexed fish separately.
 
+**Small fish that cannot be sexed.** Often the fish below a certain length are not sexed. Stock
+Synthesis then combines the sexes in those length bins and stores the combined fish in the
+female columns. `settings$sex_minlen` does the same in FLicc, by gear (e.g.
+`sex_minlen = c(Survey = 21)`): in a sexed sample, each length bin below it is one cell of both
+sexes (observed F + M counts, predicted females + males), and the bins above are female and male
+cells, all in one composition. `plot_len()` and `plot_lfd(..., sex_minlen = )` show these bins in
+purple above the line, and `plot_sexratio()` leaves them out. Without the setting, the small fish
+stored as females would be read as a strong excess of females, which biases the male parameters
+when they are estimated.
+
 `plot_lfd()` shows length data with sexes in the style of r4ss: one panel per year and gear,
 females above the horizontal line (red), males below (blue), and unsexed samples in their own
 column (grey). This view is used automatically when any gear has F or M units (`sex = FALSE`
@@ -111,8 +121,8 @@ fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
 The one-sex fit underestimates SPR most, because the small males are read as heavy fishing.
 Modelling both sexes reduces the bias even from unsexed samples, and the sexed survey reduces it
 further and lets the male Linf be estimated (from 52 back to about 45). Chapter *Worked example:
-a dimorphic stock* goes through this example with all plots by sex and compares the shortcuts
-(ignoring sex, pooled data) in detail.
+southern hake* applies the model to a real, strongly dimorphic stock assessed with Stock
+Synthesis.
 
 **Life-history penalties by sex.** Linf, M/k and CVL are separate parameters for each sex, each
 fixed at its input unless a penalty (prior SD on the log scale) is given:

@@ -148,6 +148,15 @@ estimates closely match the full random-effects fit.}
 sparse or outlying bins. Predicted proportions become
 \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
 few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).}
+\item{\code{sex_minlen}}{Sex-structured fits: length below which the
+sexes are combined in sexed samples, by gear (named numeric, e.g.
+\code{c(SpSurv = 21)}, or one value per gear). As SS3's option to
+combine males into females at or below a length bin: in a sexed
+sample, each length bin below \code{sex_minlen} is one cell of both
+sexes (observed: the F and M counts summed, e.g. small fish that could
+not be sexed and are stored as F; predicted: females + males), and the
+bins above are female and male cells, all in one composition. Default
+\code{NULL} (none).}
 \item{\code{Lplus}}{Optional plus-group length. Observed and predicted
 counts in bins with lower bound \code{>= Lplus} are pooled into one
 bin before the likelihood (tail compression). Reduces the influence
