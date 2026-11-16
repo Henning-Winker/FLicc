@@ -67,11 +67,13 @@ plot_m(stk_hake)
 * PtSurv is the survey: it is sexed, covers 15-50 cm and fits well. SpSurv mostly samples fish
   below 21 cm whose numbers vary with recruitment, and CdSurv is unsexed; both add little and are
   left out here.
-* The fit uses the most recent 15 years, 2010-2024.
+* The fit uses the most recent years, 2017-2024: a short window suits the equilibrium assumption
+  (similar conditions in all years) and constant selectivity. With 2010-2024 the domes make the
+  early years more optimistic than SS3.
 * Female Linf has a weak penalty (log-scale SD 0.1) around the 110 cm of the assessment.
 
 ```{r hk-setup}
-yy <- ac(2010:2024)
+yy <- ac(2017:2024)
 gears <- c("trawlers", "volpal", "artisanal", "PtSurv")
 lfd <- FLQuants(lapply(lfd_hake[gears], function(q) q[, yy]))
 cbg <- FLQuants(lapply(catch_hake, function(q) q[, yy]))
@@ -79,7 +81,7 @@ cbg$trawlers <- cbg$trawlers + cbg$cdTrw
 cbg <- FLQuants(cbg[c("trawlers", "volpal", "artisanal")])
 set <- list(obs_model = "mn", surveys = "PtSurv", sex_minlen = ss3_hake$sex_minlen["PtSurv"])
 ss3 <- data.frame(year = ss3_hake$spr$year, spr = ss3_hake$spr$spr)
-ss3 <- ss3[ss3$year %in% 2010:2024, ]
+ss3 <- ss3[ss3$year %in% 2017:2024, ]
 ss3sel <- ss3_hake$sel[ss3_hake$sel$gear %in% gears & ss3_hake$sel$len <= 90, ]
 names(ss3sel)[names(ss3sel) == "len"] <- "L"
 stk_sex <- stocklen_sex(lfd, lhpar_hake, m_model = "inverse")
@@ -118,7 +120,7 @@ plot_spr(list("All dome-shaped" = fit_sex, "Volpal logistic (as SS3)" = fit_logi
                      linetype = 2, linewidth = 0.9)
 ```
 
-The dashed lines are SS3. The length data clearly prefer a dome for volpal as well (lower negative
+The dashed lines are SS3. The length data prefer a dome for volpal as well (lower negative
 log-likelihood): large hake are less available to the longlines. With the domes, the shortage of
 large females is explained by selectivity rather than by fishing, and SPR is close to the SS3
 level in recent years. The wider confidence band of the dome fit is real: it is the uncertainty
@@ -151,8 +153,7 @@ Mean SPR by period (SS3 in the first column):
 ```{r hk-spr-tab}
 spr_tab <- function(fits) {
   x <- cbind(SS3 = ss3$spr, sapply(fits, function(f) c(f$report$spr)))
-  round(rbind("2010-2014" = colMeans(x[1:5, , drop = FALSE]), "2015-2019" = colMeans(x[6:10, , drop = FALSE]),
-              "2020-2024" = colMeans(x[11:15, , drop = FALSE])), 3)
+  round(rbind("2017-2020" = colMeans(x[1:4, , drop = FALSE]), "2021-2024" = colMeans(x[5:8, , drop = FALSE])), 3)
 }
 spr_tab(cmp)
 ```
@@ -160,10 +161,7 @@ spr_tab(cmp)
 Ignoring the sex structure lowers SPR by about 40%. With female growth only, the shortage of fish
 above about 75 cm, which in reality is the size only females reach, is read as fishing mortality,
 and female Linf is pushed up; the sex-structured model explains part of the shortage by the males,
-which stop growing at about 74 cm. That the aggregated fit is closer to SS3 in 2010-2019 is no
-evidence for it (SS3 is itself sex-structured): in those years the sex-structured FLicc fit is above
-SS3, because of the dome-shaped volpal selectivity (logistic in SS3) and the equilibrium
-assumption, while the aggregated fit is pulled down by ignoring the males.
+which stop growing at about 74 cm. 
 
 **Is there evidence in the residuals?** The two models fit the fishery length compositions equally
 well:
@@ -227,7 +225,7 @@ t(sapply(fits_pen, lh_est))
 plot_sexratio(fit_mk)
 ```
 
-A lower male M (males surviving better) improves the fit and moves the predicted sex ratio towards
+A lower male M (males surviving better) improves the fit slightly and moves the predicted sex ratio towards
 the observations, but not all the way: the remaining excess of males at 21-35 cm points to the male
 growth offsets or to a sex ratio at recruitment below 0.5. Female Linf is weakly determined: it
 moves down when only female Linf is estimated and up when male M/k is estimated as well, and the
