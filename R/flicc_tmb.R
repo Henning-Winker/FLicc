@@ -1444,17 +1444,34 @@ fiticc <- function(lfd, stklen,
       # Loops through years
       fity <- lapply(yrs,function(y){
 
-           if (inherits(catch_by_gear, "FLQuants")){
-             cbg <- window(catch_by_gear,start= yrs[nyrs],end=yrs[nyrs])
-           } else {
-             cbg <- catch_by_gear
-           }
+         # gears without length samples in year y are dropped for that year (their selectivity is not
+         # identifiable from one year); catch shares of year y among the gears that remain
+         ly <- window(lfd, start = y, end = y)
+         has <- vapply(ly, function(q) sum(q, na.rm = TRUE) > 0, TRUE)
+         if (!any(has)) {
+           warning("No length samples in year ", y, ": year skipped.")
+           return(NULL)
+         }
+         if (!all(has) && !silent)
+           message("Year ", y, ": gear(s) without samples dropped: ", paste(names(ly)[!has], collapse = ", "))
+         if (inherits(catch_by_gear, "FLQuants")) {
+           cbg <- catch_by_gear
+           if (!is.null(names(cbg)) && all(names(ly) %in% names(cbg))) cbg <- cbg[names(ly)]
+           cbg <- FLQuants(lapply(cbg, function(q) window(q, start = y, end = y)))[has]
+         } else if (length(catch_by_gear) == length(ly)) {
+           cbg <- catch_by_gear[has]
+         } else {
+           cbg <- catch_by_gear
+         }
+         sf <- if (length(sel_fun) == length(ly)) sel_fun[has] else sel_fun
+         sfx <- sel_fixed
+         if (!is.null(sfx) && is.list(sfx) && length(sfx) == length(ly)) sfx <- sfx[has]
 
          fiticc_core(
-         lfd = window(lfd,start= y,end=y),
+         lfd = ly[has],
          stklen = window(stklen,start= y,y),
          stklen_m = if (!is.null(stklen_m)) window(stklen_m, start = y, end = y) else NULL,
-         sel_fun = sel_fun,
+         sel_fun = sf,
          catch_by_gear =cbg,
          settings = settings,
          years = NULL,
@@ -1462,7 +1479,7 @@ fiticc <- function(lfd, stklen,
          compile = compile,
          silent = silent,
          dll = dll,
-         sel_fixed = sel_fixed,
+         sel_fixed = sfx,
          n_restart = n_restart,
          se = se,
          grad_tol = grad_tol,
@@ -1471,6 +1488,14 @@ fiticc <- function(lfd, stklen,
          newton = newton
          )}
       )
+      # standard errors of log SPR and log EPR of every year (the combined fit keeps the last year's sdreport)
+      by_year_se <- lapply(c(spr = "spr", epr = "epr"), function(w) {
+        d <- do.call(rbind, lapply(fity, function(f) if (is.null(f)) NULL else ratio_ci_flicc(f, w)))
+        if (is.null(d) || !nrow(d)) NULL else d[, c("year", w, "se_log")]
+      })
+      keep <- !vapply(fity, is.null, TRUE)
+      fity <- fity[keep]; yrs <- yrs[keep]; nyrs <- length(yrs)
+      if (!nyrs) stop("No year with length samples.")
       repy <-  fity[[1]]$report
       fit_final = fity[[nyrs]]
       dn <-  names(fity[[1]]$report)[-c(3)]
@@ -1490,6 +1515,9 @@ fiticc <- function(lfd, stklen,
       fit_final <- fity[[nyrs]]
       fit_final$stklen <- stklen
       fit_final$report[qs] <- repy[qs]
+      fit_final$by_year_se <- by_year_se
+      fit_final$by_year_conv <- vapply(fity, function(f) f$diagnostics$conv_tier %||% NA_character_, "")
+      names(fit_final$by_year_conv) <- yrs
       if (!is.null(fity[[1]]$report$epr)) {
         ep <- fity[[1]]$report$epr
         for (y in 2:nyrs) ep <- append(ep, fity[[y]]$report$epr)
