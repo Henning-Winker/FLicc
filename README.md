@@ -9,6 +9,7 @@
 **Documentation**
 
 - [**FLicc User Guide**](https://henning-winker.github.io/FLicc/FLicc_user_guide.html): the complete reference for the current version. It covers the workflow from length data to advice (data preparation, model configuration, fitting, diagnostics, reference points, sensitivity and ensemble analyses), the available likelihoods and selectivity functions, and how LBSPR, LBB and `fishblicc` are reproduced as special cases of FLicc.
+- [User guide R script](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_user_guide.R): all code of the user guide, chapter by chapter, to run in R.
 - [Introductory vignette](https://henning-winker.github.io/FLicc/FLicc_intro_vignette.html): a first walk-through of multi-gear length-interval catch-curve analysis in FLR with `FLicc`.
 - [Presentation](https://github.com/Henning-Winker/FLicc/blob/main/docs/FLicc_Intro.pdf): an illustrated overview of the FLicc utilities. 
 
