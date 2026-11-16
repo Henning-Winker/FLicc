@@ -159,10 +159,30 @@ sex_lhpar_flicc <- function(lhpar) {
   list(F = one("F"), M = one("M"))
 }
 
+# number of leading length bins with sexes combined in sexed samples, by gear,
+# from settings$sex_minlen (named by gear, or one value per gear) (internal)
+sex_comb_flicc <- function(sex_minlen, gear_names, lens) {
+  cb <- rep(0L, length(gear_names))
+  if (is.null(sex_minlen) || !length(sex_minlen)) return(cb)
+  v <- as.numeric(sex_minlen)
+  if (!is.null(names(sex_minlen))) {
+    bad <- setdiff(names(sex_minlen), gear_names)
+    if (length(bad)) stop("settings$sex_minlen names must be gears of lfd; unknown: ", paste(bad, collapse = ", "))
+    idx <- match(names(sex_minlen), gear_names)
+  } else {
+    if (length(v) == 1) v <- rep(v, length(gear_names))
+    if (length(v) != length(gear_names)) stop("settings$sex_minlen: one value per gear, or named by gear.")
+    idx <- seq_along(gear_names)
+  }
+  for (j in seq_along(idx)) if (is.finite(v[j]) && v[j] > 0) cb[idx[j]] <- as.integer(sum(lens < v[j]))
+  cb
+}
+
 # fill the sex-structure data of the template for objects made before it
 # (one-sex model) (internal)
 sex_defaults_tmb_flicc <- function(td) {
   if (is.null(td$gear_type)) td$gear_type <- rep(0L, td$ngear)
+  if (is.null(td$sex_comb)) td$sex_comb <- rep(0L, td$ngear)
   if (!is.null(td$nsex)) return(td)
   nl <- td$nlen; ny <- td$nyear; ng <- td$ngear
   td$nsex <- 1L
@@ -223,8 +243,10 @@ plot_sexratio <- function(fit, gear = NULL, by_year = FALSE, years = NULL, min_n
   sel_y <- seq_along(yn)
   if (!is.null(years)) sel_y <- which(yn %in% as.character(years))
   d <- do.call(rbind, lapply(sel_g, function(g) do.call(rbind, lapply(sel_y, function(y) {
-    if (td$sex_type[y, g] != 3L) return(NULL)
+    cb <- if (!is.null(td$sex_comb)) td$sex_comb[g] else 0L
+    if (td$sex_type[y, g] != 3L && !(cb > 0 && td$sex_type[y, g] > 0)) return(NULL)
     oF <- td$obs_sex[, y, g, 1]; oM <- td$obs_sex[, y, g, 2]
+    if (cb > 0) { oF[seq_len(cb)] <- 0; oM[seq_len(cb)] <- 0 }    # sexes combined below sex_minlen: no ratio
     data.frame(gear = gn[g], year = yn[y], len = L, oF = oF, oM = oM, n = sum(oF + oM),
                pF = ps[, y, g, 1], pM = ps[, y, g, 2])
   }))))
@@ -309,7 +331,7 @@ obslen_all_flicc <- function(fit) {
 
 # colours used for the sexes in all sex views
 sex_cols_flicc <- function(cols = NULL) {
-  def <- c(F = "#D7191C", M = "#2C7BB6", U = "grey45")
+  def <- c(F = "#D7191C", M = "#2C7BB6", U = "grey45", C = "#7B3294")
   if (!is.null(cols)) def[names(cols)] <- cols
   def
 }
@@ -319,9 +341,12 @@ sex_cols_flicc <- function(cols = NULL) {
 # scale: "raw" counts, "prop" proportions within panel-year (females and males
 # jointly where both were sampled, so the sex ratio is kept), "relmax" divided
 # by the panel-year maximum
-lfd_sex_long_flicc <- function(lfd, scale = c("raw", "prop", "relmax"), iter = 1) {
+lfd_sex_long_flicc <- function(lfd, scale = c("raw", "prop", "relmax"), iter = 1, sex_minlen = NULL) {
   scale <- match.arg(scale)
   out <- list()
+  cbl <- if (is.null(sex_minlen)) NULL else
+    stats::setNames(if (is.null(names(sex_minlen))) rep(as.numeric(sex_minlen), length.out = length(lfd)) else
+      as.numeric(sex_minlen)[match(names(lfd), names(sex_minlen))], names(lfd))
   for (g in names(lfd)) {
     q <- lfd[[g]]
     if (dim(q)[6] > 1) q <- q[, , , , , iter]
@@ -330,6 +355,8 @@ lfd_sex_long_flicc <- function(lfd, scale = c("raw", "prop", "relmax"), iter = 1
     df$len <- as.numeric(as.character(df$len))
     df$year <- as.character(df$year)
     df$sex <- sx[match(as.character(df$unit), dimnames(q)$unit)]
+    if (!is.null(cbl) && is.finite(cbl[g]))      # sexes combined below sex_minlen
+      df$sex[df$sex %in% c("F", "M") & df$len < cbl[g]] <- "C"
     df$data[!is.finite(df$data)] <- 0
     df <- stats::aggregate(data ~ len + year + sex, data = df, FUN = sum)
     df$gear <- g
@@ -370,10 +397,25 @@ lenfit_sex_long_flicc <- function(fit) {
     if (is.null(rp$obslen_sex)) next
     oF <- todf(rp$obslen_sex[[g]][, , "F"]); oM <- todf(rp$obslen_sex[[g]][, , "M"])
     pF <- todf(rp$predlen_sex[[g]][, , "F"]); pM <- todf(rp$predlen_sex[[g]][, , "M"])
+    gi <- match(g, gears)
+    cb <- if (!is.null(fit$tmb_data$sex_comb)) fit$tmb_data$sex_comb[gi] else 0L
     for (y in unique(oF$year)) {
       i <- oF$year == y
       sF <- sum(oF$v[i], na.rm = TRUE); sM <- sum(oM$v[i], na.rm = TRUE)
       if (!(sF + sM > 0)) next
+      if (cb > 0) {                   # sexes combined in the first cb bins, joint above
+        lv <- sort(unique(oF$len[i])); lc <- lv[seq_len(min(cb, length(lv)))]
+        iF <- which(i); ic <- iF[oF$len[iF] %in% lc]; iu <- iF[!(oF$len[iF] %in% lc)]
+        tot <- sF + sM; ptot <- sum(pF$v[i] + pM$v[i])
+        rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "C",
+          len = oF$len[ic], year = y, observed = (oF$v[ic] + oM$v[ic]) / tot,
+          fitted = (pF$v[ic] + pM$v[ic]) / ptot, stringsAsFactors = FALSE)
+        rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "F",
+          len = oF$len[iu], year = y, observed = oF$v[iu] / tot, fitted = pF$v[iu] / ptot, stringsAsFactors = FALSE)
+        rows[[length(rows) + 1]] <- data.frame(gear = g, panel = paste(g, "sexed"), sex = "M",
+          len = oM$len[iu], year = y, observed = oM$v[iu] / tot, fitted = pM$v[iu] / ptot, stringsAsFactors = FALSE)
+        next
+      }
       if (sF > 0 && sM > 0) {         # joint length x sex composition
         dF <- oF$v[i] / (sF + sM); dM <- oM$v[i] / (sF + sM)
         fF <- pF$v[i]; fM <- pM$v[i]
@@ -400,8 +442,8 @@ plot_sex_mirror_flicc <- function(df, cols, len_by = 10, ylab = "Proportion",
   sg <- ifelse(df$sex == "M", -1, 1)
   df$obs_s <- sg * df$observed
   if (!is.null(df$fitted)) df$fit_s <- sg * df$fitted
-  df$sex <- factor(df$sex, levels = c("F", "M", "U"))
-  lab <- c(F = "Female", M = "Male", U = "Unsexed")
+  df$sex <- factor(df$sex, levels = c("F", "M", "U", "C"))
+  lab <- c(F = "Female", M = "Male", U = "Unsexed", C = "Sexes combined")
   bw <- if (length(unique(df$len)) > 1) min(diff(sort(unique(df$len)))) else 1
   lens <- sort(unique(df$len))
   x_breaks <- seq(floor(min(lens) / len_by) * len_by, ceiling(max(lens) / len_by) * len_by, by = len_by)

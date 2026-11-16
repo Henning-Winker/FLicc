@@ -77,6 +77,10 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   sex_type[nF > 0 & nM <= 0] <- 1L
   sex_type[nF <= 0 & nM > 0] <- 2L
   sex_type[nF > 0 & nM > 0]  <- 3L
+  # sexes combined below a length in sexed samples (SS3 'combine males into
+  # females at or below a bin'): settings$sex_minlen by gear (named, or one
+  # value per gear); the first bins below it are one cell of both sexes
+  sex_comb <- sex_comb_flicc(settings$sex_minlen, gear_names, as.numeric(lens))
   if (sexed_data && nsex == 1L)
     stop("lfd has sexed compositions (unit F/M): give life history by sex, e.g. ",
          "stklen = stocklen_sex(lfd, lhpar) with lhpar by unit c(\"F\", \"M\").")
@@ -369,6 +373,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     nsex       = as.integer(nsex),
     obs_sex    = unname(obs_sex),
     sex_type   = unname(sex_type),
+    sex_comb   = as.integer(sex_comb),
     sex_ratio  = as.numeric(if (nsex == 2L) sex_ratio else 1),
     k_ratio    = as.numeric(k_ratio),
     mk_ratio   = as.numeric(mk_ratio),
@@ -698,7 +703,8 @@ fiticc_core <- function(lfd, stklen,
     Mk_m.sd = NULL,
     CVL_m = NULL,
     CVL_m.sd = NULL,
-    surveys = NULL
+    surveys = NULL,
+    sex_minlen = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -1228,6 +1234,15 @@ fiticc_core <- function(lfd, stklen,
 #'       sparse or outlying bins. Predicted proportions become
 #'       \code{(1 - rob_eps) * p + rob_eps / nbins}, which bounds the cost of a
 #'       few fish in bins the model barely reaches (e.g. 0.001). Default 0 (off).}
+#'     \item{\code{sex_minlen}}{Sex-structured fits: length below which the
+#'       sexes are combined in sexed samples, by gear (named numeric, e.g.
+#'       \code{c(SpSurv = 21)}, or one value per gear). As SS3's option to
+#'       combine males into females at or below a length bin: in a sexed
+#'       sample, each length bin below \code{sex_minlen} is one cell of both
+#'       sexes (observed: the F and M counts summed, e.g. small fish that could
+#'       not be sexed and are stored as F; predicted: females + males), and the
+#'       bins above are female and male cells, all in one composition. Default
+#'       \code{NULL} (none).}
 #'     \item{\code{Lplus}}{Optional plus-group length. Observed and predicted
 #'       counts in bins with lower bound \code{>= Lplus} are pooled into one
 #'       bin before the likelihood (tail compression). Reduces the influence

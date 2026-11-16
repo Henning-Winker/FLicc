@@ -16,7 +16,8 @@ plot_lfd(
   ncol = NULL,
   lwd = 0.5,
   sex = NULL,
-  sex_cols = NULL
+  sex_cols = NULL,
+  sex_minlen = NULL
 )
 }
 \arguments{
@@ -55,7 +56,11 @@ units. With \code{sex = TRUE}, \code{type = "prop"} gives proportions within eac
 gear-year (females and males jointly, so the sex ratio is kept).}
 
 \item{sex_cols}{Optional named colours replacing the defaults
-\code{c(F = "#D7191C", M = "#2C7BB6", U = "grey45")}.}
+\code{c(F = "#D7191C", M = "#2C7BB6", U = "grey45", C = "#7B3294")}.}
+
+\item{sex_minlen}{Optional length below which the sexes are combined in
+the sexed samples (as \code{settings$sex_minlen} of \code{\link[=fiticc]{fiticc()}}): those bins
+are shown as combined (purple, above the line).}
 }
 \value{
 A \code{ggplot} object.

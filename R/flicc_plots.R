@@ -779,7 +779,10 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #'   units. With `sex = TRUE`, `type = "prop"` gives proportions within each
 #'   gear-year (females and males jointly, so the sex ratio is kept).
 #' @param sex_cols Optional named colours replacing the defaults
-#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45")`.
+#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45", C = "#7B3294")`.
+#' @param sex_minlen Optional length below which the sexes are combined in
+#'   the sexed samples (as `settings$sex_minlen` of [fiticc()]): those bins
+#'   are shown as combined (purple, above the line).
 #'
 #' @details
 #' Length bins are extracted from the \code{FLQuant} dimension names, ensuring
@@ -840,7 +843,8 @@ plot_lfd <- function(lfd,
                      ncol = NULL,
                      lwd = 0.5,
                      sex = NULL,
-                     sex_cols = NULL) {
+                     sex_cols = NULL,
+                     sex_minlen = NULL) {
 
   type <- match.arg(type)
 
@@ -848,7 +852,7 @@ plot_lfd <- function(lfd,
     sex <- any(unlist(lapply(lfd, function(q)
       sex_code_flicc(dimnames(q)$unit, strict = FALSE) %in% c("F", "M"))))
   if (isTRUE(sex)) {
-    df <- lfd_sex_long_flicc(lfd, scale = type, iter = iter)
+    df <- lfd_sex_long_flicc(lfd, scale = type, iter = iter, sex_minlen = sex_minlen)
     names(df)[names(df) == "data"] <- "observed"
     ylab <- c(raw = "Frequency", prop = "Proportion", relmax = "Relative frequency")[type]
     return(plot_sex_mirror_flicc(df, sex_cols_flicc(sex_cols), len_by = len_by, ylab = ylab,
