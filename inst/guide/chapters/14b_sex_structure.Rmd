@@ -108,25 +108,11 @@ tail(tab, 5)
 fits_summary(runs)[, c("run", "conv", "SPR", "lwr", "upr", "Linf_M", "Mk_M")]
 ```
 
-`plot_spr()` takes a named list of fits, so the combined-sex model with female life history
-can be compared directly with the sex-structured fits; the dashed line is the true SPR of the
-simulation:
-
-```{r sex-spr-compare, fig.height = 4.5}
-cmp <- list("Combined sex (female LH)" = fit_1sex, "Two-sex, unsexed data" = fit_2sex_U,
-            "Two-sex, + sexed survey" = fit_sex)
-plot_spr(cmp, ci = TRUE, ci_type = "ribbon") +
-  ggplot2::geom_line(data = data.frame(year = truth_dimorph$year, spr = truth_dimorph$spr),
-                     ggplot2::aes(x = year, y = spr), inherit.aes = FALSE,
-                     linetype = 2, linewidth = 0.8)
-```
-
 The one-sex fit underestimates SPR most, because the small males are read as heavy fishing.
-Modelling both sexes with their life history reduces the bias even from unsexed samples, and the
-sexed survey reduces it further: it informs the selectivity of small fish and the sex ratio at
-length, and with it the male growth, so that the estimated male Linf moves from 52 back to about
-45. All fits are lowest in the last years, where the equilibrium model lags the rising F
-(chapter *Fishing mortality over time*).
+Modelling both sexes reduces the bias even from unsexed samples, and the sexed survey reduces it
+further and lets the male Linf be estimated (from 52 back to about 45). Chapter *Worked example:
+a dimorphic stock* goes through this example with all plots by sex and compares the shortcuts
+(ignoring sex, pooled data) in detail.
 
 **Life-history penalties by sex.** Linf, M/k and CVL are separate parameters for each sex, each
 fixed at its input unless a penalty (prior SD on the log scale) is given:

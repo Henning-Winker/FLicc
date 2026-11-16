@@ -1,0 +1,244 @@
+# Worked example: a dimorphic stock
+
+This chapter works through a sexually dimorphic stock from start to finish with the functions of
+chapter *Sex structure*: the life history by sex, the data by sex, the fits and all diagnostics
+split by sex, status and indicators. It then shows what happens with two common shortcuts:
+
+1. **ignoring the sex structure**: a one-sex model with female life history fitted to all fish;
+2. **pooled length data**: the sex-structured model when no samples are sexed.
+
+The stock is the simulated example `data(dimorph)` (simulated from FLicc's sex-structured model,
+script `inst/extdata/make_dimorph.R`): females grow to Linf 60 cm with k 0.15 and mature at
+35 cm; males grow to Linf 45 cm with k 0.25 and mature at 28 cm; M = 0.3 for both, a 50:50 sex
+ratio at recruitment. A trawl fishery (dome-shaped selectivity) has 400 unsexed fish a year from
+2011 to 2025, and a survey (logistic selectivity) samples 250 fish a year by sex from 2016. F
+rises over the period.
+
+```{r dim-data}
+data(dimorph)
+lhpar_dimorph
+```
+
+## Life history by sex
+
+`stocklen_sex()` builds the stock objects of both sexes. The life-history plots accept them (or
+a fit) and show both sexes:
+
+(Weight at length is the same for both sexes in this example.)
+
+```{r dim-stock, fig.height = 3.2}
+stk_dim <- stocklen_sex(lfd_dimorph, lhpar_dimorph, m_model = "constant")
+plot_mat(stk_dim)
+plot_lw(stk_dim)
+plot_m(stk_dim)
+```
+
+Growth by sex, with the spread of length at age of the growth-type groups:
+
+```{r dim-growth, fig.height = 4}
+plot_growth(stk_dim, sex = "F") + ggplot2::ggtitle("Females")
+plot_growth(stk_dim, sex = "M") + ggplot2::ggtitle("Males")
+```
+
+Males reach their asymptotic length at about the length at which females start to mature: in the
+catch, most fish above 45 cm are females, and below it both sexes mix.
+
+## Length data by sex
+
+The trawl samples are unsexed (unit `U`), the survey samples are sexed (`F` and `M` in the same
+samples). Females are shown above the line, males below:
+
+```{r dim-lfd, fig.height = 6}
+plot_lfd(FLQuants(lapply(lfd_dimorph, function(q) q[, ac(2019:2025)])), type = "prop")
+```
+
+The survey shows the sex ratio at length directly: similar numbers of both sexes below 30 cm,
+then fewer and fewer males, and only females above about 45 cm.
+
+## The sex-structured fit
+
+The survey is declared as a survey gear (no fishing mortality, no catch share), so
+`catch_by_gear` is given for the trawl only.
+
+```{r dim-fit}
+fit_dim <- fiticc(lfd_dimorph, stk_dim, sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1,
+                  settings = list(obs_model = "mn", surveys = "Survey"))
+fit_dim$opt$convergence
+```
+
+### Fits to the length data
+
+```{r dim-len, fig.height = 7}
+plot_len(fit_dim, year = 2019:2025)
+```
+
+The unsexed trawl samples are compared with the predicted catch of both sexes together; the
+sexed survey samples are one joint composition over length and sex, so the areas above and below
+the line sum to one and the split between them is the sex ratio.
+
+### Sex ratio at length
+
+```{r dim-sexratio, fig.height = 3.5}
+plot_sexratio(fit_dim)
+```
+
+The predicted proportion of females is about 0.5 among small fish, dips slightly where the
+males accumulate just below their asymptotic length, and rises to 1 above the male Linf. It
+follows from the growth and M of each sex and the sex ratio at recruitment, so the observed
+proportions check the male life history.
+
+### Residuals and predictive checks
+
+All residual plots have one panel per gear and sex (the sexed survey parts as "Survey F" and
+"Survey M"):
+
+```{r dim-resid, fig.height = 5}
+plot_resid_bubble(fit_dim, type = "osa")
+plot_resid_qq(fit_dim)
+plot_resid_len(fit_dim, type = "osa", pool_years = TRUE)
+```
+
+```{r dim-ppc, fig.height = 6}
+ppc_dim <- ppc_flicc(fit_dim, nsim = 300)
+plot_ppc_lfd(ppc_dim, year = 2023:2025)
+```
+
+### Population by sex
+
+Numbers at length by sex in the final year (per recruit of both sexes): the male curve falls
+to zero below the male Linf of 45 cm, while the females extend to larger lengths.
+
+```{r dim-n-sex, fig.height = 3.5}
+nsx <- as.data.frame(fit_dim$report$N_sex[, "2025"])
+ggplot2::ggplot(nsx, ggplot2::aes(as.numeric(as.character(len)), data, colour = unit)) +
+  ggplot2::geom_line(linewidth = 0.9) +
+  ggplot2::scale_colour_manual(values = c(F = "#D7191C", M = "#2C7BB6"), name = "Sex") +
+  ggplot2::labs(x = "Length", y = "Numbers per recruit, 2025") + ggplot2::theme_bw()
+```
+
+### Growth check by sex
+
+`growth_phase_flicc()` compares the modal progression in the samples with the assumed growth; with
+`sex = "M"` it uses the male growth and the male samples:
+
+```{r dim-phase, fig.height = 3.5}
+plot_growth_phase(growth_phase_flicc(fit_dim, sex = "F", gear = "Survey"))
+plot_growth_phase(growth_phase_flicc(fit_dim, sex = "M", gear = "Survey"))
+```
+
+## Status, reference points and indicators
+
+SPR is female spawning potential; yield sums both sexes. The equilibrium curves and FLR objects
+are built from both sexes:
+
+```{r dim-status, fig.height = 4}
+plot_spr(fit_dim, ci = TRUE, ci_type = "ribbon")
+eq_dim <- eqstklen(fit_dim, s = 0.75)
+attr(eq_dim, "refpts")
+plot_eqcurves(eq_dim)
+```
+
+Empirical indicators are computed for each sex from its own samples and life history, so the
+ratios of the males refer to the male Linf and maturity:
+
+```{r dim-lbi, fig.height = 5}
+plot_lbi(lbi_flicc(fit_dim, sex = "each"))
+```
+
+## Shortcut 1: ignoring the sex structure
+
+A common approach is to fit a one-sex model with female life history (females determine
+spawning) to all fish. The survey samples are pooled over sex:
+
+```{r dim-pool-data}
+pool <- function(q) {
+  u <- FLCore::unitSums(q)
+  dimnames(u)$unit <- "U"
+  u
+}
+lfd_pool <- FLQuants(lapply(lfd_dimorph, pool))
+lh_F <- FLPar(lhpar_dimorph@.Data[, "F", 1], params = dimnames(lhpar_dimorph)$params)
+lfd_pool1 <- FLQuants(lapply(lfd_pool, function(q) { dimnames(q)$unit <- "unique"; q }))
+fit_1sex <- fiticc(lfd_pool1, stocklen(lfd_pool1, lh_F, m_model = "constant"),
+                   sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1,
+                   settings = list(obs_model = "mn", surveys = "Survey"))
+```
+
+```{r dim-1sex-len, fig.height = 6}
+plot_len(fit_1sex, by_gear = TRUE, year = 2019:2025)
+```
+
+The fit to the pooled compositions looks acceptable, but the model has only female growth: the
+peak of small fish made up of both sexes and the shortage of large fish are explained by fishing
+and selectivity.
+
+## Shortcut 2: sex-structured model, pooled length data
+
+When none of the samples are sexed, the sex-structured model can still be fitted: it predicts the
+pooled composition as the sum of females and males from the life history of each sex and the sex
+ratio at recruitment.
+
+```{r dim-2sex-pool}
+fit_2pool <- fiticc(lfd_pool, stocklen_sex(lfd_pool, lhpar_dimorph, m_model = "constant"),
+                    sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1,
+                    settings = list(obs_model = "mn", surveys = "Survey"))
+```
+
+```{r dim-2pool-len, fig.height = 6}
+plot_len(fit_2pool, year = 2019:2025)
+```
+
+The male parameters cannot be estimated from pooled data, and the sex ratio cannot be checked
+(`plot_sexratio()` needs sexed samples): the results rest on the male life history assumed.
+
+## Comparison
+
+```{r dim-compare, fig.height = 4.5}
+runs <- list("Ignoring sex (female LH, pooled)" = fit_1sex,
+             "Sex-structured, pooled data" = fit_2pool,
+             "Sex-structured, sexed survey" = fit_dim)
+plot_spr(runs, ci = TRUE, ci_type = "ribbon") +
+  ggplot2::geom_line(data = data.frame(year = truth_dimorph$year, spr = truth_dimorph$spr),
+                     ggplot2::aes(x = year, y = spr), inherit.aes = FALSE, linetype = 2, linewidth = 0.8)
+```
+
+The dashed line is the true SPR. Relative error by period:
+
+```{r dim-compare-tab}
+err <- sapply(runs, function(f) c(f$report$spr) / truth_dimorph$spr - 1)
+round(rbind("2011-2015" = colMeans(err[1:5, ]), "2016-2020" = colMeans(err[6:10, ]),
+            "2021-2025" = colMeans(err[11:15, ])), 2)
+```
+
+Selectivity of the three fits (the true trawl selectivity has its mode at 34 cm, left SD 6,
+right SD 20; the survey is logistic with 50% at 12 cm and 95% at 16 cm):
+
+```{r dim-compare-sel, fig.height = 4}
+L <- seq(1, 79, by = 0.5)
+true_sel <- rbind(data.frame(L = L, sel = sel_curve_flicc(L, "dsnormal", list(mode = 34, lsd = 6, rsd = 20)),
+                             gear = "Trawl"),
+                  data.frame(L = L, sel = sel_curve_flicc(L, "logistic", list(SL50 = 12, SL95 = 16)),
+                             gear = "Survey"))
+plot_compare_sel(runs, colours = c("#D55E00", "#E69F00", "#0072B2")) +
+  ggplot2::geom_line(data = true_sel, ggplot2::aes(L, sel), inherit.aes = FALSE,
+                     linetype = 2, linewidth = 0.8)
+```
+
+What the comparison shows:
+
+- **Ignoring the sex structure** biases status most. With female growth only, the many small
+  males look like young females, and the shortage of large fish (males never grow large) looks
+  like fishing mortality. The estimated selectivity and F absorb the difference.
+- **The sex-structured model on pooled data** removes much of that bias, because the life history
+  of the males explains the mix of sizes. It depends entirely on the assumed male life history and
+  sex ratio: these cannot be estimated or checked without sexed samples, and should be varied in
+  sensitivity runs.
+- **Sexed samples** (here from the survey) give the sex ratio at length, which checks, and if
+  needed estimates, the male parameters (`linf_m.sd`, `Mk_m.sd`; chapter *Sex structure*) and
+  informs the selectivity of small fish. Even a few years of sexed samples help.
+
+This example is a best case: the data were simulated from FLicc's own model with the true life
+history. Tests with an independent age-structured operating model (FLOSS `dev-sex`,
+`om_sex()`), with recruitment variability and changing F, show the same ranking; the size and
+the direction of the bias of a one-sex model depend on the stock, the selectivity and the
+exploitation history.
