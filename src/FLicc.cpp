@@ -405,6 +405,19 @@ Type objective_function<Type>::operator() ()
   DATA_MATRIX(wt_m);         // nlen x nyear, male
   DATA_MATRIX(mat_m);        // nlen x nyear, male
 
+  // conditional age at length (ALK): growth (Linf, k) from age-length keys
+  DATA_INTEGER(alk_on);      // 0 = no ALK
+  DATA_INTEGER(alk_mkk);     // 1: M fixed at its input, M/k = M / k follows the estimated k
+  DATA_SCALAR(alk_logM);     // log M (alk_mkk = 1)
+  DATA_SCALAR(alk_t0);       // von Bertalanffy t0 (fixed)
+  DATA_SCALAR(alk_maxsd);    // Linf range in SD (truncated normal)
+  DATA_VECTOR(alk_gl_x);     // Gauss-Legendre nodes on [-1, 1]
+  DATA_VECTOR(alk_gl_w);     // Gauss-Legendre weights
+  DATA_VECTOR(alk_age);      // ages of the keys (rows of alk_obs)
+  DATA_IVECTOR(alk_year);    // year index of each key (0-based)
+  DATA_VECTOR(alk_tau);      // sampling time within the year of each key
+  DATA_ARRAY(alk_obs);       // nage x nlen x nkey: aged fish by age and length class
+
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
   PARAMETER(log_Mk);
@@ -416,12 +429,13 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_Linf_m);   // male Linf   (nsex = 2; fixed unless linf_m.sd)
   PARAMETER(log_Mk_m);     // male M/k    (nsex = 2; fixed unless Mk_m.sd)
   PARAMETER(log_Galpha_m); // male 1/CVL^2 (nsex = 2; fixed unless CVL_m.sd)
+  PARAMETER(log_k);        // von Bertalanffy k (estimated with an ALK; otherwise fixed)
 
   Type nll = 0.0;
 
   Type Linf   = exp(log_Linf);
   Type Galpha = exp(log_Galpha);
-  Type Mk     = exp(log_Mk);
+  Type Mk     = (alk_mkk == 1) ? Type(exp(alk_logM - log_k)) : Type(exp(log_Mk));
   Type phi    = exp(log_phi);
   Type Gbeta  = Galpha / Linf;
   Type sigmaF = exp(log_sigmaF);
@@ -532,6 +546,8 @@ Type objective_function<Type>::operator() ()
   matrix<Type> N_y_m(nlen, nyear);             // male numbers per recruit (male k time scale)
   plen_sex.setZero(); N_y_m.setZero();
 
+  matrix<Type> ZK_y(nlen, nyear);              // Z/K at length by year (for the ALK)
+  ZK_y.setZero();
   sel_joint.setZero();
   epr_y.setZero();
   Fk_l.setZero();
@@ -582,6 +598,8 @@ Type objective_function<Type>::operator() ()
         Z(l) += F_len(l,g);
       }
     }
+
+    for(int l = 0; l < nlen; l++) ZK_y(l, y) = Z(l);
 
     // what each gear samples at length: catch rate F(l) for fisheries, the
     // population through the selectivity curve for surveys
@@ -1168,6 +1186,58 @@ Type objective_function<Type>::operator() ()
       nll -= dnorm(log_sigmaF, prior_sigmaF_mean, prior_sigmaF_sd, true);
     }
   }
+
+  // --- CONDITIONAL AGE AT LENGTH (ALK) ---
+  // P(a | l) for a key of year y sampled at time tau: fish of age a are in length class l when their Linf lies in
+  // [LB_l / g_a, LB_l+1 / g_a], g_a = 1 - exp(-k (a + tau - t0)); integrated over that interval (Gauss-Legendre)
+  // of the Linf density (normal, CVL, truncated at +- maxsd) times the survival to length L = Linf g_a along the
+  // length classes with the year's Z/K (LBSPR recursion). Selectivity at length cancels in P(a | l). Smooth in
+  // k, Linf and CVL (interval limits by conditional expressions).
+  Type nll_alk = Type(0);
+  Type kgr = exp(log_k);
+  if(alk_on == 1) {
+    int na = alk_obs.dim(0), nkey = alk_obs.dim(2), nq = alk_gl_x.size();
+    vector<Type> LB(nlen + 1);
+    for(int l = 0; l < nlen; l++) LB(l) = LLB(l);
+    LB(nlen) = (nlen > 1) ? Type(LLB(nlen - 1) + (LLB(nlen - 1) - LLB(nlen - 2))) : Type(LLB(0) + Type(1));
+    Type sdL = CVL * Linf;
+    Type Llo = Linf * (Type(1) - alk_maxsd * CVL);
+    Type Lhi = Linf * (Type(1) + alk_maxsd * CVL);
+    for(int kk = 0; kk < nkey; kk++) {
+      int y = alk_year(kk);
+      for(int l = 0; l < nlen; l++) {
+        Type nobs = Type(0);
+        for(int a = 0; a < na; a++) nobs += alk_obs(a, l, kk);
+        if(nobs <= Type(0)) continue;
+        vector<Type> C(na);
+        for(int a = 0; a < na; a++) {
+          Type ga = Type(1) - exp(-kgr * (alk_age(a) + alk_tau(kk) - alk_t0));
+          ga = CppAD::CondExpGt(ga, Type(1e-4), ga, Type(1e-4));
+          Type lo = LB(l) / ga, hi = LB(l + 1) / ga;
+          lo = CppAD::CondExpGt(lo, Llo, lo, Llo);
+          hi = CppAD::CondExpLt(hi, Lhi, hi, Lhi);
+          Type w = hi - lo;
+          w = CppAD::CondExpGt(w, Type(0), w, Type(0));
+          Type acc = Type(0);
+          for(int q = 0; q < nq; q++) {
+            Type Li = lo + w * (alk_gl_x(q) + Type(1)) / Type(2);
+            Type L  = Li * ga;
+            Type ls = MKMat(0, 0) * Mscaler(0, y) * log((Li - LB(0)) / Li);
+            for(int i = 0; i < l; i++) ls += ZK_y(i, y) * log((Li - LB(i + 1)) / (Li - LB(i)));
+            ls += ZK_y(l, y) * log((Li - L) / (Li - LB(l)));
+            acc += alk_gl_w(q) * dnorm(Li, Linf, sdL, false) * exp(ls);
+          }
+          C(a) = acc * w / Type(2);
+        }
+        Type Csum = C.sum() + Type(1e-300);
+        for(int a = 0; a < na; a++)
+          if(alk_obs(a, l, kk) > Type(0)) nll_alk -= alk_obs(a, l, kk) * log(C(a) / Csum + Type(1e-12));
+      }
+    }
+    nll += nll_alk;
+  }
+  REPORT(nll_alk);
+  REPORT(kgr);
 
   // --- NORMAL PRIOR PENALTIES ---
   for(int i = 0; i < prior_mu.size(); i++) {

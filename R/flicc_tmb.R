@@ -10,7 +10,7 @@
 #' @return list for TMB::MakeADFun
 data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                              settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
-                             years = NULL, stklen_m = NULL) {
+                             years = NULL, stklen_m = NULL, alk = NULL) {
 
   stopifnot(is.list(lfd))
   if (is.null(names(lfd))) {
@@ -348,7 +348,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_code <- c(prior_code, 7L)
   }
 
-  list(
+  c(list(
     nlen       = nlen,
     nyear      = nyear,
     ngear      = ngear,
@@ -412,9 +412,10 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     Mk_init     = Mk_init,
     CVL_init    = CVL_init,
     Galpha_init = Galpha_init,
+    k_init      = as.numeric(lhpar["k"]),
     gear_names  = gear_names,
     year_names  = years
-  )
+  ), alk_tmb_data_flicc(alk, as.numeric(LLB), years, lhpar, settings))
 }
 
 #' Tail cut as a length (internal)
@@ -577,7 +578,8 @@ init_tmb_flicc <- function(tmb_data) {
     log_sigmaF = tmb_data$prior_sigmaF_mean,
     log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init),
     log_Mk_m   = log(if (!is.null(tmb_data$Mk_m_init)) tmb_data$Mk_m_init else tmb_data$Mk_init),
-    log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init)
+    log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init),
+    log_k      = log(if (!is.null(tmb_data$k_init)) tmb_data$k_init else tmb_data$brp_k)
   )
 }
 
@@ -663,7 +665,8 @@ fiticc_core <- function(lfd, stklen,
                      FLRreport=FALSE,
                      se = TRUE,
                      newton = 3,
-                     stklen_m = NULL) {
+                     stklen_m = NULL,
+                     alk = NULL) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -688,6 +691,10 @@ fiticc_core <- function(lfd, stklen,
     linf.sd = NULL,
     Mk.sd = NULL,
     CVL.sd = NULL,
+    alk_t0 = NULL,
+    alk_fixM = NULL,
+    alk_growth = NULL,
+    alk_nq = NULL,
     rob_eps = 0,
     Lplus = NULL,
     F_re = FALSE,
@@ -807,7 +814,8 @@ fiticc_core <- function(lfd, stklen,
     catch_by_gear = catch_by_gear,
     settings = settings,
     years = years,
-    stklen_m = stkm_i
+    stklen_m = stkm_i,
+    alk = alk
   )
 
   # Set priors for random walk on F (if nyear > 0)
@@ -846,6 +854,16 @@ fiticc_core <- function(lfd, stklen,
   }
   if (is.null(settings$CVL.sd)) {
     map$log_Galpha <- factor(NA)
+  }
+  # growth from age-length keys: Linf and k estimated (settings$alk_growth), M/k = M / k when alk_fixM
+  if (isTRUE(tmb_data$alk_on == 1L)) {
+    if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure.")
+    ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k")
+    if ("linf" %in% ag) map$log_Linf <- NULL
+    if (!"k" %in% ag) map$log_k <- factor(NA)
+    if (isTRUE(tmb_data$alk_mkk == 1L)) map$log_Mk <- factor(NA)
+  } else {
+    map$log_k <- factor(NA)
   }
   # male life history: fixed at the input values unless a penalty (prior SD)
   # is given, independently of the female parameters
@@ -911,7 +929,7 @@ fiticc_core <- function(lfd, stklen,
   obj <- TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
                             c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
-                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
+                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init", "k_init"))],
     parameters = parameters,
     map = map,
     random = random,
@@ -1094,6 +1112,20 @@ fiticc_core <- function(lfd, stklen,
   fit$n_restarts <- opt$n_restarts
   fit$restart_log <- opt$restart_log
   fit$sel_fixed <- sel_fixed
+
+  # growth estimated from age-length keys: estimates written back to the life history of the fit, so that F
+  # (= F/k x k), reference points and outputs use the estimated growth
+  if (isTRUE(tmb_data$alk_on == 1L)) {
+    pl <- obj$env$parList(opt$par)
+    linf_e <- exp(pl$log_Linf); k_e <- exp(pl$log_k)
+    mk_e <- if (tmb_data$alk_mkk == 1L) exp(tmb_data$alk_logM) / k_e else exp(pl$log_Mk)
+    fit$growth <- c(linf = linf_e, k = k_e, t0 = tmb_data$alk_t0, Mk = mk_e, M = mk_e * k_e)
+    lh <- fit$stklen@lhpar
+    lh["linf"] <- linf_e; lh["k"] <- k_e; lh["Mk"] <- mk_e; lh["M"] <- mk_e * k_e
+    attr(fit$stklen, "lhpar") <- lh
+    fit$tmb_data$brp_k <- k_e
+    stklen <- fit$stklen
+  }
 
   fit$logLik <- LLflicc(fit)
   fit$diagnostics <- diagnostics_flicc(fit)
@@ -1409,6 +1441,7 @@ fiticc <- function(lfd, stklen,
                    dll = "FLicc",
                    start = NULL,
                    by_year = FALSE,
+                   alk = NULL,
                    sel_fixed = NULL,
                    FLRreport = TRUE,
                    safe_fit = TRUE,
@@ -1431,6 +1464,8 @@ fiticc <- function(lfd, stklen,
   }
 
 
+     if(by_year && !is.null(alk))
+       stop("by_year = TRUE with alk: fit growth jointly first, then by year with stklen = fit$stklen.")
      if(by_year){
       if (!is.null(start)) {
         warning("Argument 'start' is currently ignored when by_year = TRUE.")
@@ -1451,6 +1486,7 @@ fiticc <- function(lfd, stklen,
            }
 
          fiticc_core(
+         alk = alk,
          lfd = window(lfd,start= y,end=y),
          stklen = window(stklen,start= y,y),
          stklen_m = if (!is.null(stklen_m)) window(stklen_m, start = y, end = y) else NULL,
@@ -1500,6 +1536,7 @@ fiticc <- function(lfd, stklen,
 
   if(!by_year){
   fit1 <- fiticc_core(
+         alk = alk,
     lfd = lfd,
     stklen = stklen,
     stklen_m = stklen_m,
@@ -1533,6 +1570,7 @@ fiticc <- function(lfd, stklen,
 
     fit2 <- tryCatch(
       fiticc_core(
+         alk = alk,
         lfd = lfd,
         stklen = stklen,
         stklen_m = stklen_m,
