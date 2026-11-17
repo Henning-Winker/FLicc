@@ -857,7 +857,8 @@ fiticc_core <- function(lfd, stklen,
   }
   # growth from age-length keys: Linf and k estimated (settings$alk_growth), M/k = M / k when alk_fixM
   if (isTRUE(tmb_data$alk_on == 1L)) {
-    if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure.")
+    if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure (growth by sex): ",
+                                  "fit one sex, with the ALK of the selected sexes pooled (alk_flicc(sex = )).")
     ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k")
     if ("linf" %in% ag) map$log_Linf <- NULL
     if (!"k" %in% ag) map$log_k <- factor(NA)

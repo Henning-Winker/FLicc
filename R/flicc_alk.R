@@ -9,23 +9,81 @@
 #' removal of fast growers by fishing (Rosa Lee effect) through the survival along the length classes. It carries
 #' growth information, not information on total mortality.
 #'
-#' @param data data frame with `age` and `len` (one row per fish), or `age`, `len` and `n` (counts). `len` in the
-#'   units of the length compositions; fish are assigned to the length classes of the fit.
+#' @param data aged fish in one of these formats:
+#'   * data frame with `age` and `len` (one row per fish), or `age`, `len` and `n` (counts); optional `sex`
+#'     (F, M, U) and `year` (then `year` may be omitted if the frame holds one year);
+#'   * `FLPar` of counts with dimensions age x len (x unit) (x iter), as an age-length key sample of FLRef
+#'     (`alk.sample()`); a `unit` (or `sex`) dimension holds sexes (F, M, U);
+#'   * `FLPars` of such `FLPar`s named by year (FLRef format): one key per year.
+#'   Lengths are lower limits of the length classes (as in FLRef and FLicc).
 #' @param gears gear(s) the fish were sampled from (for diagnostics; P(age | length) does not depend on the gear
 #'   when selectivity is length-based).
-#' @param year year of the sample (one of the fitted years).
+#' @param year year of the sample (one of the fitted years); taken from the names of an `FLPars`.
 #' @param timing sampling time within the year (fraction of the year; 0.5 = mid-year, the mean of year-round sampling).
-#' @return an object of class `flicc_alk`.
+#' @param iter iteration of an `FLPar`/`FLPars` with several iterations (simulations); default 1.
+#' @param sex sexes to use (any of "F", "M", "U"); default all. A one-sex fit pools the selected sexes (common
+#'   growth); growth by sex is not yet available.
+#' @return an object of class `flicc_alk`, or a list of them (one per year) for an `FLPars`.
+#' @examples
+#' \dontrun{
+#' # data frame, one row per fish
+#' key <- alk_flicc(data.frame(age = c(1, 2, 2, 3), len = c(18, 24, 26, 30)), gears = "traps", year = 2025)
+#' # FLRef: sampled keys by year (FLPars), iteration 5 of a simulation
+#' keys <- alk_flicc(alk.sample(lfds, alks), gears = "handline", iter = 5)
+#' fit <- fiticc(lfd, stklen, sel_fun, catch_by_gear, alk = keys, settings = list(alk_t0 = -0.5))
+#' }
 #' @export
-alk_flicc <- function(data, gears, year, timing = 0.5) {
+alk_flicc <- function(data, gears, year = NULL, timing = 0.5, iter = 1, sex = NULL) {
+  if (inherits(data, "FLPars")) {
+    yrs <- names(data)
+    if (is.null(yrs) || any(!nzchar(yrs))) stop("an FLPars of age-length keys needs year names.")
+    if (!is.null(year)) { keep <- yrs %in% as.character(year); data <- data[keep]; yrs <- yrs[keep] }
+    keys <- lapply(seq_along(data), function(j) alk_flicc(data[[j]], gears = gears, year = as.numeric(yrs[j]),
+                                                          timing = timing, iter = iter, sex = sex))
+    keys <- keys[!vapply(keys, is.null, TRUE)]
+    if (!length(keys)) stop("no aged fish in any year.")
+    return(keys)
+  }
+  if (inherits(data, "FLPar")) data <- alk_flpar_df(data, iter)
   data <- as.data.frame(data)
   if (!all(c("age", "len") %in% names(data))) stop("data needs columns 'age' and 'len'.")
   if (is.null(data$n)) data$n <- 1
-  data <- data[is.finite(data$age) & is.finite(data$len) & data$n > 0, c("age", "len", "n")]
-  if (!nrow(data)) stop("no aged fish.")
-  if (length(year) != 1) stop("one year per key: use a list of keys for several years or gears.")
+  if (!is.null(data$year)) {
+    if (is.null(year)) {
+      year <- unique(data$year)
+      if (length(year) != 1) stop("data holds several years: give 'year' or one key per year.")
+    }
+    data <- data[data$year == year, ]
+  }
+  if (!is.null(data$sex)) {
+    data$sex <- as.character(data$sex)
+    if (!is.null(sex)) data <- data[data$sex %in% sex, ]
+  } else if (!is.null(sex)) warning("data have no sex information: 'sex' ignored.", call. = FALSE)
+  cols <- intersect(c("age", "len", "n", "sex"), names(data))
+  data <- data[is.finite(data$age) & is.finite(data$len) & data$n > 0, cols]
+  if (is.null(year) || length(year) != 1) stop("give one 'year' per key: use a list of keys for several years or gears.")
+  if (!nrow(data)) { warning("no aged fish in ", year, ".", call. = FALSE); return(NULL) }
   structure(list(data = data, gears = gears, year = as.numeric(year), timing = as.numeric(timing)),
             class = "flicc_alk")
+}
+
+# FLPar of counts (age x len [x unit/sex] [x iter]) to a long data frame of one iteration
+alk_flpar_df <- function(x, iter = 1) {
+  dn <- dimnames(x)
+  if (!all(c("age", "len") %in% names(dn))) stop("an FLPar age-length key needs dimensions 'age' and 'len'.")
+  if ("iter" %in% names(dn)) {
+    ni <- length(dn$iter)
+    if (iter > ni) stop("iter ", iter, " requested, the key has ", ni, " iteration(s).")
+  }
+  d <- as.data.frame(x)
+  if ("iter" %in% names(d)) d <- d[as.character(d$iter) == dn$iter[iter], ]
+  sx <- intersect(c("unit", "sex"), names(d))
+  out <- data.frame(age = as.numeric(as.character(d$age)), len = as.numeric(as.character(d$len)), n = d$data)
+  if (length(sx)) {
+    s <- as.character(d[[sx[1]]])
+    if (!all(s %in% c("unique", "all"))) out$sex <- s
+  }
+  out[is.finite(out$n) & out$n > 0, ]
 }
 
 # TMB data of the ALK block (defaults when there is no ALK)
@@ -35,7 +93,11 @@ alk_tmb_data_flicc <- function(alk, LLB, years, lhpar, settings) {
                alk_obs = array(0, c(1, 1, 1)))
   if (is.null(alk)) return(none)
   if (inherits(alk, "flicc_alk")) alk <- list(alk)
-  if (!all(vapply(alk, inherits, TRUE, "flicc_alk"))) stop("alk must be an alk_flicc() object or a list of them.")
+  alk <- unlist(lapply(alk, function(k) if (inherits(k, "flicc_alk")) list(k) else k), recursive = FALSE)
+  alk <- alk[!vapply(alk, is.null, TRUE)]
+  if (!length(alk) || !all(vapply(alk, inherits, TRUE, "flicc_alk")))
+    stop("alk must be an alk_flicc() object or a list of them.")
+  # one-sex ALK block: sexes are pooled (common growth); growth by sex is not yet available
   nlen <- length(LLB)
   bw <- if (nlen > 1) LLB[nlen] - LLB[nlen - 1] else 1
   ub <- c(LLB[-1], LLB[nlen] + bw)
