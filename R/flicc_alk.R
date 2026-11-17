@@ -122,8 +122,10 @@ alk_tmb_data_flicc <- function(alk, LLB, years, lhpar, settings) {
     if (is.na(yi[j])) stop("ALK year ", alk[[j]]$year, " is not a fitted year.")
   }
   gq <- statmod::gauss.quad(if (!is.null(settings$alk_nq)) settings$alk_nq else 5, "legendre")
+  ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k", "t0")
   t0 <- if (!is.null(settings$alk_t0)) settings$alk_t0 else {
-    warning("settings$alk_t0 not given: t0 = 0 assumed for the ALK.", call. = FALSE); 0
+    if (!"t0" %in% ag) warning("t0 fixed and settings$alk_t0 not given: t0 = 0 assumed for the ALK.", call. = FALSE)
+    0                                                    # start value when t0 is estimated
   }
   fixM <- isTRUE(settings$alk_fixM)                # default: M/k fixed, M follows the estimated k
   list(alk_on = 1L, alk_mkk = as.integer(fixM), alk_logM = log(as.numeric(lhpar["M"])),
@@ -156,7 +158,7 @@ alk_fit_flicc <- function(fit) {
     n <- colSums(o)
     obs_mean <- ifelse(n > 0, colSums(o * td$alk_age) / n, NA)
     # predicted mean age at length (no mortality): from the growth curve and the Linf distribution
-    g <- 1 - exp(-k * (td$alk_age + td$alk_tau[j] - td$alk_t0))
+    g <- 1 - exp(-k * (td$alk_age + td$alk_tau[j] - growth[["t0"]]))
     Lm <- td$LLB + (td$LLB[2] - td$LLB[1]) / 2
     p <- sapply(Lm, function(L) { d <- stats::dnorm(L / pmax(g, 1e-4), Linf, CVL * Linf) / pmax(g, 1e-4); d / sum(d) })
     out[[j]] <- data.frame(key = j, len = td$LLB, n = n, obs = obs_mean,

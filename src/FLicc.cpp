@@ -409,7 +409,7 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(alk_on);      // 0 = no ALK
   DATA_INTEGER(alk_mkk);     // 1: M fixed at its input, M/k = M / k follows the estimated k
   DATA_SCALAR(alk_logM);     // log M (alk_mkk = 1)
-  DATA_SCALAR(alk_t0);       // von Bertalanffy t0 (fixed)
+  DATA_SCALAR(alk_t0);       // von Bertalanffy t0: start value (estimated) or fixed value
   DATA_SCALAR(alk_maxsd);    // Linf range in SD (truncated normal)
   DATA_VECTOR(alk_gl_x);     // Gauss-Legendre nodes on [-1, 1]
   DATA_VECTOR(alk_gl_w);     // Gauss-Legendre weights
@@ -430,6 +430,7 @@ Type objective_function<Type>::operator() ()
   PARAMETER(log_Mk_m);     // male M/k    (nsex = 2; fixed unless Mk_m.sd)
   PARAMETER(log_Galpha_m); // male 1/CVL^2 (nsex = 2; fixed unless CVL_m.sd)
   PARAMETER(log_k);        // von Bertalanffy k (estimated with an ALK; otherwise fixed)
+  PARAMETER(t0g);          // von Bertalanffy t0 (estimated with an ALK unless fixed; enters the ALK only)
 
   Type nll = 0.0;
 
@@ -1213,7 +1214,7 @@ Type objective_function<Type>::operator() ()
         if(nobs <= Type(0)) continue;
         vector<Type> C(na);
         for(int a = 0; a < na; a++) {
-          Type ga = Type(1) - exp(-kgr * (alk_age(a) + alk_tau(kk) - alk_t0));
+          Type ga = Type(1) - exp(-kgr * (alk_age(a) + alk_tau(kk) - t0g));
           ga = CppAD::CondExpGt(ga, Type(1e-4), ga, Type(1e-4));
           Type lo = LB(l) / ga, hi = LB(l + 1) / ga;
           lo = CppAD::CondExpGt(lo, Llo, lo, Llo);
@@ -1246,6 +1247,7 @@ Type objective_function<Type>::operator() ()
   REPORT(nll_alk);
   REPORT(alk_pexp);
   REPORT(kgr);
+  REPORT(t0g);
 
   // --- NORMAL PRIOR PENALTIES ---
   for(int i = 0; i < prior_mu.size(); i++) {

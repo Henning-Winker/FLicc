@@ -579,7 +579,8 @@ init_tmb_flicc <- function(tmb_data) {
     log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init),
     log_Mk_m   = log(if (!is.null(tmb_data$Mk_m_init)) tmb_data$Mk_m_init else tmb_data$Mk_init),
     log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init),
-    log_k      = log(if (!is.null(tmb_data$k_init)) tmb_data$k_init else tmb_data$brp_k)
+    log_k      = log(if (!is.null(tmb_data$k_init)) tmb_data$k_init else tmb_data$brp_k),
+    t0g        = if (!is.null(tmb_data$alk_t0)) tmb_data$alk_t0 else 0
   )
 }
 
@@ -860,12 +861,14 @@ fiticc_core <- function(lfd, stklen,
   if (isTRUE(tmb_data$alk_on == 1L)) {
     if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure (growth by sex): ",
                                   "fit one sex, with the ALK of the selected sexes pooled (alk_flicc(sex = )).")
-    ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k")
+    ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k", "t0")
     if ("linf" %in% ag) map$log_Linf <- NULL
     if (!"k" %in% ag) map$log_k <- factor(NA)
+    if (!"t0" %in% ag) map$t0g <- factor(NA)
     if (isTRUE(tmb_data$alk_mkk == 1L)) map$log_Mk <- factor(NA)
   } else {
     map$log_k <- factor(NA)
+    map$t0g <- factor(NA)
   }
   # male life history: fixed at the input values unless a penalty (prior SD)
   # is given, independently of the female parameters
@@ -1121,7 +1124,7 @@ fiticc_core <- function(lfd, stklen,
     pl <- obj$env$parList(opt$par)
     linf_e <- exp(pl$log_Linf); k_e <- exp(pl$log_k)
     mk_e <- if (tmb_data$alk_mkk == 1L) exp(tmb_data$alk_logM) / k_e else exp(pl$log_Mk)
-    fit$growth <- c(linf = linf_e, k = k_e, t0 = tmb_data$alk_t0, Mk = mk_e, M = mk_e * k_e)
+    fit$growth <- c(linf = linf_e, k = k_e, t0 = pl$t0g, Mk = mk_e, M = mk_e * k_e)
     fit$alk <- alk_list_flicc(alk)                         # the keys, for the ALK diagnostics
     fit$alk_pexp <- report$alk_pexp                        # expected age proportions by length bin and key
     fit$alk_cvl <- as.numeric(report$CVL)[1]
@@ -1368,10 +1371,11 @@ fiticc_core <- function(lfd, stklen,
 #'   annual report quantities are updated and combined across years.
 #'   Default is \code{FALSE}.
 #' @param alk Optional age-length key(s) from \code{alk_flicc()} (conditional age at length). Growth is then
-#'   estimated inside the model: Linf and k by default (\code{settings$alk_growth}). By default M/k is held at
+#'   estimated inside the model: Linf, k and t0 by default (\code{settings$alk_growth}; e.g.
+#'   \code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M/k is held at
 #'   its input value, so M follows the estimated k (length-based SPR depends on M/k, not on M and k
 #'   separately); with \code{settings$alk_fixM = TRUE}, M is held at its input value and M/k = M / k follows
-#'   k instead. \code{settings$alk_t0} gives t0 (fixed); \code{settings$alk_nq} the number of quadrature nodes.
+#'   k instead. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes.
 #'
 #' @details
 #' The FLicc model separates:

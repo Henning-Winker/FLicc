@@ -4,7 +4,7 @@
 \alias{resid_alk_flicc}
 \title{Residuals of the age-length keys}
 \usage{
-resid_alk_flicc(fit, type = c("osa", "pearson"), seed = 1)
+resid_alk_flicc(fit, type = c("osa", "pearson"), seed = 1, min_exp = 0.01)
 }
 \arguments{
 \item{fit}{A fitted FLicc object with age-length keys.}
@@ -12,6 +12,10 @@ resid_alk_flicc(fit, type = c("osa", "pearson"), seed = 1)
 \item{type}{\code{"osa"} or \code{"pearson"}.}
 
 \item{seed}{Random seed for the OSA randomization.}
+
+\item{min_exp}{OSA residuals of cells with no fish observed and an expected count (n p) below \code{min_exp} are
+set to \code{NA}: the randomized residual of a cell that can hardly be observed (old ages in small length bins,
+young ages in large ones) is pure noise. 0 keeps all (as in ss3diags2).}
 }
 \value{
 A data frame with key, gears, year, len (lower bound), lmid, age, obs, exp (n p), pexp, n (aged fish in
