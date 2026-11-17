@@ -11,7 +11,8 @@ data_tmb_flicc(
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
   years = NULL,
-  stklen_m = NULL
+  stklen_m = NULL,
+  alk = NULL
 )
 }
 \arguments{

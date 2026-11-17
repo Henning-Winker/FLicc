@@ -855,7 +855,8 @@ fiticc_core <- function(lfd, stklen,
   if (is.null(settings$CVL.sd)) {
     map$log_Galpha <- factor(NA)
   }
-  # growth from age-length keys: Linf and k estimated (settings$alk_growth), M/k = M / k when alk_fixM
+  # growth from age-length keys: Linf and k estimated (settings$alk_growth); M/k fixed at its input (default) or,
+  # with alk_fixM = TRUE, M fixed and M/k = M / k
   if (isTRUE(tmb_data$alk_on == 1L)) {
     if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure (growth by sex): ",
                                   "fit one sex, with the ALK of the selected sexes pooled (alk_flicc(sex = )).")
@@ -1363,6 +1364,11 @@ fiticc_core <- function(lfd, stklen,
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
 #'   Default is \code{FALSE}.
+#' @param alk Optional age-length key(s) from \code{alk_flicc()} (conditional age at length). Growth is then
+#'   estimated inside the model: Linf and k by default (\code{settings$alk_growth}). By default M/k is held at
+#'   its input value, so M follows the estimated k (length-based SPR depends on M/k, not on M and k
+#'   separately); with \code{settings$alk_fixM = TRUE}, M is held at its input value and M/k = M / k follows
+#'   k instead. \code{settings$alk_t0} gives t0 (fixed); \code{settings$alk_nq} the number of quadrature nodes.
 #'
 #' @details
 #' The FLicc model separates:
