@@ -1194,6 +1194,8 @@ Type objective_function<Type>::operator() ()
   // length classes with the year's Z/K (LBSPR recursion). Selectivity at length cancels in P(a | l). Smooth in
   // k, Linf and CVL (interval limits by conditional expressions).
   Type nll_alk = Type(0);
+  array<Type> alk_pexp(alk_obs.dim(0), alk_obs.dim(1), alk_obs.dim(2));   // expected age proportions by length
+  alk_pexp.setZero();
   Type kgr = exp(log_k);
   if(alk_on == 1) {
     int na = alk_obs.dim(0), nkey = alk_obs.dim(2), nq = alk_gl_x.size();
@@ -1233,13 +1235,16 @@ Type objective_function<Type>::operator() ()
         // Linf range (all C = 0), e.g. while Linf is low during the optimisation
         Type eps = Type(1e-20);
         Type Csum = C.sum() + Type(na) * eps;
-        for(int a = 0; a < na; a++)
+        for(int a = 0; a < na; a++) {
+          alk_pexp(a, l, kk) = (C(a) + eps) / Csum;
           if(alk_obs(a, l, kk) > Type(0)) nll_alk -= alk_obs(a, l, kk) * log((C(a) + eps) / Csum);
+        }
       }
     }
     nll += nll_alk;
   }
   REPORT(nll_alk);
+  REPORT(alk_pexp);
   REPORT(kgr);
 
   // --- NORMAL PRIOR PENALTIES ---

@@ -1122,6 +1122,9 @@ fiticc_core <- function(lfd, stklen,
     linf_e <- exp(pl$log_Linf); k_e <- exp(pl$log_k)
     mk_e <- if (tmb_data$alk_mkk == 1L) exp(tmb_data$alk_logM) / k_e else exp(pl$log_Mk)
     fit$growth <- c(linf = linf_e, k = k_e, t0 = tmb_data$alk_t0, Mk = mk_e, M = mk_e * k_e)
+    fit$alk <- alk_list_flicc(alk)                         # the keys, for the ALK diagnostics
+    fit$alk_pexp <- report$alk_pexp                        # expected age proportions by length bin and key
+    fit$alk_cvl <- as.numeric(report$CVL)[1]
     lh <- fit$stklen@lhpar
     lh["linf"] <- linf_e; lh["k"] <- k_e; lh["Mk"] <- mk_e; lh["M"] <- mk_e * k_e
     attr(fit$stklen, "lhpar") <- lh

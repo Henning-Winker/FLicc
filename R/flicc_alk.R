@@ -86,17 +86,23 @@ alk_flpar_df <- function(x, iter = 1) {
   out[is.finite(out$n) & out$n > 0, ]
 }
 
+# one flat list of flicc_alk keys
+alk_list_flicc <- function(alk) {
+  if (inherits(alk, "flicc_alk")) alk <- list(alk)
+  alk <- unlist(lapply(alk, function(k) if (inherits(k, "flicc_alk")) list(k) else k), recursive = FALSE)
+  alk <- alk[!vapply(alk, is.null, TRUE)]
+  if (!length(alk) || !all(vapply(alk, inherits, TRUE, "flicc_alk")))
+    stop("alk must be an alk_flicc() object or a list of them.")
+  alk
+}
+
 # TMB data of the ALK block (defaults when there is no ALK)
 alk_tmb_data_flicc <- function(alk, LLB, years, lhpar, settings) {
   none <- list(alk_on = 0L, alk_mkk = 0L, alk_logM = 0, alk_t0 = 0, alk_maxsd = 3,
                alk_gl_x = 0, alk_gl_w = 2, alk_age = 0, alk_year = 0L, alk_tau = 0.5,
                alk_obs = array(0, c(1, 1, 1)))
   if (is.null(alk)) return(none)
-  if (inherits(alk, "flicc_alk")) alk <- list(alk)
-  alk <- unlist(lapply(alk, function(k) if (inherits(k, "flicc_alk")) list(k) else k), recursive = FALSE)
-  alk <- alk[!vapply(alk, is.null, TRUE)]
-  if (!length(alk) || !all(vapply(alk, inherits, TRUE, "flicc_alk")))
-    stop("alk must be an alk_flicc() object or a list of them.")
+  alk <- alk_list_flicc(alk)
   # one-sex ALK block: sexes are pooled (common growth); growth by sex is not yet available
   nlen <- length(LLB)
   bw <- if (nlen > 1) LLB[nlen] - LLB[nlen - 1] else 1
