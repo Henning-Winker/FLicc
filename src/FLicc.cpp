@@ -1229,9 +1229,12 @@ Type objective_function<Type>::operator() ()
           }
           C(a) = acc * w / Type(2);
         }
-        Type Csum = C.sum() + Type(1e-300);
+        // small floor on every age before normalising: finite gradients when a length class lies beyond the
+        // Linf range (all C = 0), e.g. while Linf is low during the optimisation
+        Type eps = Type(1e-20);
+        Type Csum = C.sum() + Type(na) * eps;
         for(int a = 0; a < na; a++)
-          if(alk_obs(a, l, kk) > Type(0)) nll_alk -= alk_obs(a, l, kk) * log(C(a) / Csum + Type(1e-12));
+          if(alk_obs(a, l, kk) > Type(0)) nll_alk -= alk_obs(a, l, kk) * log((C(a) + eps) / Csum);
       }
     }
     nll += nll_alk;
