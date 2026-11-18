@@ -127,7 +127,7 @@ alk_tmb_data_flicc <- function(alk, LLB, years, lhpar, settings) {
     if (!"t0" %in% ag) warning("t0 fixed and settings$alk_t0 not given: t0 = 0 assumed for the ALK.", call. = FALSE)
     0                                                    # start value when t0 is estimated
   }
-  fixM <- isTRUE(settings$alk_fixM)                # default: M/k fixed, M follows the estimated k
+  fixM <- if (is.null(settings$alk_fixM)) TRUE else isTRUE(settings$alk_fixM)   # default: M fixed
   list(alk_on = 1L, alk_mkk = as.integer(fixM), alk_logM = log(as.numeric(lhpar["M"])),
        alk_t0 = as.numeric(t0), alk_maxsd = if (!is.null(settings$maxsd)) as.numeric(settings$maxsd) else 3,
        alk_gl_x = as.numeric(gq$nodes), alk_gl_w = as.numeric(gq$weights), alk_age = as.numeric(ages),

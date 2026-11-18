@@ -218,10 +218,9 @@ Default is \code{FALSE}.}
 
 \item{alk}{Optional age-length key(s) from \code{alk_flicc()} (conditional age at length). Growth is then
 estimated inside the model: Linf, k and t0 by default (\code{settings$alk_growth}; e.g.
-\code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M/k is held at
-its input value, so M follows the estimated k (length-based SPR depends on M/k, not on M and k
-separately); with \code{settings$alk_fixM = TRUE}, M is held at its input value and M/k = M / k follows
-k instead. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes.}
+\code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M is held at its
+input value and M/k = M / k follows the estimated k, so k is informed by both the ALK and the length
+compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes.}
 
 \item{sel_fixed}{Optional named list (by gear) of selectivity parameters
 fixed at given values on the length scale, with the names used by
