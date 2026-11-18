@@ -1,5 +1,6 @@
-# FLicc-SPM prototype: joint fit of the gtg length model (F random effects)
-# and a state-space surplus production model to catch and CPUE, on one
+# FLicc-SPM prototype: joint fit of the gtg length model (F fixed effects,
+# a nuisance that tunes SPR) and a state-space surplus production model
+# (states random) to catch and CPUE, on one
 # OM-like simulation (alfonsino, F history up-down-constant). Checks that the
 # fit converges, that the reference F from the taped Newton iterations is the
 # maximum of the equilibrium yield on the grid, and that the terminal SB/SB0 is

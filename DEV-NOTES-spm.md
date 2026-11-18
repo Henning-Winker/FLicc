@@ -19,7 +19,10 @@ parameters mapped off).
   r enters as a penalty log r ~ N(log r(theta), r.sd) (default 0.2); m fixed at
   m(theta) unless `m.sd > 0`.
 - **EB/SB curves**: equilibrium SB/SB0 and EB/SB on the F grid (`xgrid`,
-  multiples of M at Linf), linear interpolation in SB/SB0 (CondExp). Column 0
+  multiples of M at Linf), Nadaraya-Watson kernel smoother in log SB/SB0
+  (Gaussian, bandwidth 0.25). Must be smooth: SB/SB0 is a random effect, and
+  with linear interpolation the Laplace log-determinant jumps when a state
+  crosses a node (negative Hessian eigenvalues, false convergence). Column 0
   for removals (fishery), one per index (gear selectivity, joint fishery, or SB).
 - **SPM**: translation of the subset of `JABBA3::jb3_nll()` (Selex state):
   constant process error, catch without error, production lag, soft bounds on
@@ -94,3 +97,30 @@ Partial comparison (F fixed, catch weights; 15 of 28 runs before stopping):
 Next when resumed: finish the F-link (AR1) runs and the combined links; prior
 on rho; convergence failures; F/Fmsy bias. Scripts used: `ci/sim/om_sim_spm.R`
 and an evaluation loop (seeds 2001/11/12; fudc, rebuild, decline, flat).
+
+## Status 18 Nov
+
+- Rebased on `dev-sex` (74c62b6).
+- **Smooth EB/SB curve** (kernel smoother instead of linear interpolation):
+  the convergence failures came from the kinks. With it all fits converge
+  with the SPR link and with both links (30-50 s per fit). `test_spm.R`
+  passes again (terminal SB/SB0 0.133 vs 0.130 true).
+- **Link comparison** (F fixed, catch-weighted per-recruit selectivity, 7
+  scenarios; `ci/spm/spm_case.R`, results in `ci/spm/results_links_smooth.txt`;
+  errors are log(est/true) in the terminal year):
+
+| link | converged | SB/SB0 median error | median abs | F/Fmsy median error | median abs |
+|---|---|---|---|---|---|
+| SPR | 7/7 | -0.10 | 0.23 | +0.36 | 0.36 |
+| F (rho 0.7) | 2/7 | +0.31 | 0.45 | -0.14 | 0.54 |
+| SPR + F (rho 0.7 both) | 7/7 | -0.08 | 0.16 | +0.28 | 0.37 |
+
+  The F link alone is not usable: FLicc's equilibrium F does not carry the
+  SPM. Added to the SPR link it improves depletion (flat F especially).
+  Remaining problems: F/Fmsy biased high under flat and rebuilding F
+  (+0.3 to +0.6) and low under rising F; depletion pessimistic under
+  rebuilding F (seed 12: -0.44 in all variants).
+
+Next: the F/Fmsy bias (per-recruit BmsyK 0.296 vs 0.275 true; H = C/EB vs
+the OM's Fbar), prior on rho, per-recruit gradient check, regression test
+against `jb3_nll`.

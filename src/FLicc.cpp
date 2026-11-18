@@ -1112,17 +1112,22 @@ Type objective_function<Type>::operator() ()
       rhog(j, 0) = q(2) / q(0);
       for(int i = 0; i < spm_nidx; i++) rhog(j, 1 + i) = q(3 + i) / q(0);
     }
-    // linear interpolation of an EB/SB curve at depletion P (grid P decreases
-    // with F); constant beyond the grid; AD-safe (CondExp)
+    // EB/SB curve at depletion P: Nadaraya-Watson kernel smoother in log P over
+    // the grid nodes (Gaussian kernel, bandwidth 0.25 in log P). Smooth in P,
+    // which matters because P is a random effect: with linear interpolation
+    // the Laplace log-determinant jumps when a state crosses a node. Flat
+    // beyond the grid.
+    vector<Type> lPg(nx);
+    for(int j = 0; j < nx; j++) lPg(j) = log(Pg(j) + Type(1e-4));
+    Type bw2 = Type(2) * Type(0.25) * Type(0.25);
     auto rho_at = [&](Type P, int col) {
-      Type res = rhog(nx - 1, col);
-      for(int j = nx - 2; j >= 0; j--) {
-        Type d = Pg(j) - Pg(j + 1);
-        d = CppAD::CondExpLt(d, Type(1e-10), Type(1e-10), d);
-        Type v = rhog(j + 1, col) + (rhog(j, col) - rhog(j + 1, col)) * (P - Pg(j + 1)) / d;
-        res = CppAD::CondExpGt(P, Pg(j + 1), v, res);
+      Type lp = log(P + Type(1e-4));
+      Type sw = Type(0), sr = Type(0);
+      for(int j = 0; j < nx; j++) {
+        Type w = exp(-(lp - lPg(j)) * (lp - lPg(j)) / bw2);
+        sw += w; sr += w * rhog(j, col);
       }
-      return CppAD::CondExpGt(P, Pg(0), Type(rhog(0, col)), res);
+      return Type(sr / (sw + Type(1e-300)));
     };
 
     // reference F: Fmsy (max equilibrium yield) or Fspr, by taped damped
