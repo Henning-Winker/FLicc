@@ -16,16 +16,25 @@ om_simulate_spm <- function(st, years = 1971:2024, data_years = 2012:2024, sigR 
   bh <- function(ssb) 4 * h * ssb / (sb0 * (1 - h) + (5 * h - 1) * ssb)
   sbmsy <- { sb <- om_sbpr(st, Fmsy); max((4 * h * sb - sb0 * (1 - h)) / ((5 * h - 1) * sb), 0) * sb }
   s_cell <- sweep(st$Fsel, 2, st$Fap, "/")            # selectivity of each cell by gear (max 1 at length)
+  sj <- rowSums(st$Fsel); sj <- sj / max(sj)          # joint fishery selectivity (apical 1)
+  eqH <- function(F) {                                # equilibrium harvest rates at F (start / mean of year)
+    N <- om_eq(st, F); Fc <- F * rowSums(st$Fsel); Z <- lh$M + Fc
+    C <- sum(N * Fc / Z * (1 - exp(-Z)) * cl$wt)
+    c(start = C / sum(N * cl$wt * sj), mean = C / sum(N * cl$wt * sj * (1 - exp(-Z)) / Z))
+  }
+  Hmsy <- eqH(Fmsy)
   sb1 <- om_sbpr(st, Fbar[1]); R1 <- max((4 * h * sb1 - sb0 * (1 - h)) / ((5 * h - 1) * sb1), 0.05)
   N <- R1 * om_eq(st, Fbar[1])
   key <- paste(cl$g, cl$c)
   catch_cell <- array(0, c(nrow(cl), length(st$gears), ny))
   ssb <- numeric(ny); eb <- matrix(0, ny, length(st$gears), dimnames = list(years, st$gears))
+  ebj <- ebjm <- numeric(ny)
   for (y in seq_len(ny)) {
     ssb[y] <- sum(N * cl$mat * cl$wt)
     N[cl$a == 0] <- bh(ssb[y]) * dev[y] * cl$w[cl$a == 0]
     eb[y, ] <- colSums(N * cl$wt * s_cell)
     Fc <- Fbar[y] * st$Fsel; Z <- lh$M + rowSums(Fc)
+    ebj[y] <- sum(N * cl$wt * sj); ebjm[y] <- sum(N * cl$wt * sj * (1 - exp(-Z)) / Z)
     catch_cell[, , y] <- N * Fc / Z * (1 - exp(-Z))
     Ns <- N * exp(-Z); Nn <- numeric(length(N))
     for (k in unique(key)) {
@@ -50,5 +59,7 @@ om_simulate_spm <- function(st, years = 1971:2024, data_years = 2012:2024, sigR 
   list(years = years, data_years = data_years, Fbar = Fbar, Fmsy = Fmsy, ssb = ssb, dev = dev,
        sb0 = sb0, sbmsy = sbmsy, depletion = ssb / sb0, bbmsy = ssb / sbmsy, ffmsy = Fbar / Fmsy,
        spr = sapply(Fbar, function(F) om_spr(st, F)), lfd = lfd, catch_w = cw, lb = st$lb,
-       eb = eb, index = index, catch = setNames(rowSums(cw), years))
+       eb = eb, index = index, catch = setNames(rowSums(cw), years),
+       Hmsy = Hmsy, H_start = rowSums(cw) / ebj, H_mean = rowSums(cw) / ebjm,
+       hhmsy_start = rowSums(cw) / ebj / Hmsy["start"], hhmsy_mean = rowSums(cw) / ebjm / Hmsy["mean"])
 }

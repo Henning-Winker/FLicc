@@ -26,7 +26,7 @@ cat(sprintf("seed %d %s: %.1f s conv %d tier %s maxgrad %.2g | BmsyK pr %.3f tru
             seed, shape, secs, f1$opt$convergence, f1$diagnostics$conv_tier, f1$max_gradient,
             s$refpts["BmsyK_pr"], sim$sbmsy / sim$sb0, s$refpts["r"], s$refpts["m"], s$refpts["sdb"]))
 print(round(d[d$year %in% c(1975, 1990, 2000, 2005, 2010, kd + 1970), ], 3), row.names = FALSE)
-saveRDS(list(sim = sim, f0 = f0, f1 = f1, d = d), sprintf("/tmp/spm_eval_%d_%s_%s.rds", seed, shape, cfg))
+saveRDS(list(sim = sim, f0 = f0, f1 = f1, d = d), sprintf("ci/spm/fits/spm_eval_%d_%s_%s.rds", seed, shape, cfg))
 ty <- nrow(d)
 cat(sprintf("SUMMARY %s %s seed %d |", cfg, shape, seed)); cat(sprintf(" time %.0fs rho %.2f/%.2f |", secs, s$refpts["rho_spr"], s$refpts["rho_F"])); cat(sprintf("%s seed %d | terminal dep true %.3f spm %.3f flicc-Dspr %.3f | B/Bmsy true %.2f spm %.2f | F/Fmsy true %.2f spm %.2f | conv %s\n",
   shape, seed, d$dep[ty], d$dep_spm[ty], d$dspr_flicc[ty], d$bbmsy[ty], d$bbmsy_spm[ty], d$ffmsy[ty], d$ffmsy_spm[ty], f1$diagnostics$conv_tier))

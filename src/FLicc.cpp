@@ -439,6 +439,7 @@ Type objective_function<Type>::operator() ()
   DATA_VECTOR(spm_xgrid);      // F grid for the EB/SB curves: multiples of M at Linf, first 0
   DATA_INTEGER(spm_newton_it); // taped Newton iterations for Fmsy / Fspr and m
   DATA_VECTOR(spm_Pbound);     // soft bounds on SB/SB0 (JABBA: 0.02, 1.3)
+  DATA_INTEGER(spm_timing);    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
   DATA_VECTOR(spm_selw);       // ngear: fixed weights of the gear selectivities for the per-recruit
                                // block; all <= 0: F-weighted joint selectivity of the terminal years
 
@@ -1055,7 +1056,12 @@ Type objective_function<Type>::operator() ()
 
     // per recruit at x: SBPR (female), YPR (both sexes), EBPR of the joint
     // fishery (both sexes, weight) and of each index (biomass or numbers)
-    int nq_out = 3 + spm_nidx;
+    // out: 0 SBPR (FLicc convention, for SPR, Fref, BmsyK), 1 YPR, 2 EBPR of the
+    // fishery, 3.. EBPR of each index, last SBPR for the EB/SB ratios. With
+    // spm_timing = 1 the biomasses for the SPM (EB, index, last SB) are at the
+    // start of the year: mean numbers x Z / (1 - exp(-Z)), so that Hmsy =
+    // YPR / EBPR matches the harvest rate C_t / EB_t of the discrete SPM.
+    int nq_out = 4 + spm_nidx;
     auto prq = [&](Type x) {
       vector<Type> out(nq_out);
       out.setZero();
@@ -1068,24 +1074,29 @@ Type objective_function<Type>::operator() ()
         Type n = NI(l) / scale0;
         Type c = n * x * sA(l) / Zl(l) * (Type(1) - exp(-Zl(l)));
         out(0) += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
+        Type cf = (spm_timing == 1) ? Type(Zl(l) / (Type(1) - exp(-Zl(l)))) : Type(1);
+        Type cfm = cf;
+        out(nq_out - 1) += sex_ratio * n * cf * matA(l) * wtA(l) *
+                           ((spm_timing == 1) ? Type(1) : Type(exp(-Zl(l) * brp_spawn)));
         out(1) += sex_ratio * c * wtA(l);
-        out(2) += sex_ratio * n * wtA(l) * sA(l);
+        out(2) += sex_ratio * n * cf * wtA(l) * sA(l);
         Type nm = Type(0), cm = Type(0);
         if(nsex == 2) {
           nm = NIm(l) / scale0;
           cm = nm * x * sA(l) / Zlm(l) * (Type(1) - exp(-Zlm(l)));
           out(1) += male_w * cm * wtA_m(l);
-          out(2) += male_w * nm * wtA_m(l) * sA(l);
+          if(spm_timing == 1) cfm = Zlm(l) / (Type(1) - exp(-Zlm(l)));
+          out(2) += male_w * nm * cfm * wtA_m(l) * sA(l);
         }
         for(int i = 0; i < spm_nidx; i++) {
           int gi = spm_idx_gear(i);
           if(gi == -1) continue;                         // SB index: filled below
           Type si = (gi >= 0) ? Type(Sel(l, gi)) : Type(sA(l));
-          if(spm_idx_units(i) == 1) out(3 + i) += (sex_ratio * n * wtA(l) + male_w * nm * wtA_m(l)) * si;
-          else                      out(3 + i) += (sex_ratio * n + male_w * nm) * si;
+          if(spm_idx_units(i) == 1) out(3 + i) += (sex_ratio * n * cf * wtA(l) + male_w * nm * cfm * wtA_m(l)) * si;
+          else                      out(3 + i) += (sex_ratio * n * cf + male_w * nm * cfm) * si;
         }
       }
-      for(int i = 0; i < spm_nidx; i++) if(spm_idx_gear(i) == -1) out(3 + i) = out(0);
+      for(int i = 0; i < spm_nidx; i++) if(spm_idx_gear(i) == -1) out(3 + i) = out(nq_out - 1);
       return out;
     };
     // Beverton-Holt equilibrium recruitment (R/R0) at SPR
@@ -1109,8 +1120,8 @@ Type objective_function<Type>::operator() ()
       Pg(j) = R * spr;
       Yg(j) = R * q(1);
       lxg(j) = log(x + Type(1e-12));
-      rhog(j, 0) = q(2) / q(0);
-      for(int i = 0; i < spm_nidx; i++) rhog(j, 1 + i) = q(3 + i) / q(0);
+      rhog(j, 0) = q(2) / q(nq_out - 1);
+      for(int i = 0; i < spm_nidx; i++) rhog(j, 1 + i) = q(3 + i) / q(nq_out - 1);
     }
     // EB/SB curve at depletion P: Nadaraya-Watson kernel smoother in log P over
     // the grid nodes (Gaussian kernel, bandwidth 0.25 in log P). Smooth in P,

@@ -124,3 +124,37 @@ and an evaluation loop (seeds 2001/11/12; fudc, rebuild, decline, flat).
 Next: the F/Fmsy bias (per-recruit BmsyK 0.296 vs 0.275 true; H = C/EB vs
 the OM's Fbar), prior on rho, per-recruit gradient check, regression test
 against `jb3_nll`.
+
+## Status 18 Nov (evening): where the F/Fmsy offset comes from
+
+Trajectory plot: `ci/spm/plot_status.R`. Biomass (SB/SB0, B/Bmsy) tracks the
+OM closely over the whole history; F/Fmsy is about 30% high where biomass is
+right.
+
+- **Not a harvest-rate/F conversion.** The SPM's harvest rate C/EB is within
+  about 10% of the OM's (same definition, `ci/spm/hmsy_check.R`); the
+  reference level is off: Hmsy 0.117 vs 0.136 true.
+- **Not the links.** Without any link Hmsy is 0.122; the SPR link is what
+  makes biomass precise (no link: terminal SB/SB0 0.335 vs 0.130 true in the
+  up-down run; `results_nolink.txt`). Dropping the F link does not change F/Fmsy.
+- **FLicc alone vs FLicc-SPM** (`fspr40_compare.R`, length-data years): FLicc
+  F/Fspr40 vs the OM's F/Fspr40 median absolute log error 0.75 (equilibrium
+  lag: about +0.95 under falling F, -0.85 under rising F); FLicc-SPM F/Fmsy
+  vs the OM's F/Fmsy 0.29.
+- **Cause: the estimated dome** (`prtrue_check.R`). The per-recruit block at
+  the true selectivity gives Hmsy 0.132 vs 0.136 true and r 0.083 vs 0.080
+  (the gtg approximation of the age-based OM is good; catch-share weights
+  barely matter). At the estimated selectivity Hmsy is 0.109 (-19%): the trawl
+  right-hand SD is estimated at 17.6 vs 11.2 true, so too many large fish count
+  as exploitable, EB is too high and Hmsy = yield / EB too low.
+- **Biomass timing** (`timing = "start"`, new default): EB and SB per recruit
+  at the start of the year (mean numbers x Z / (1 - exp(-Z))), as the discrete
+  SPM's harvest rate C_t / EB_t. Correct by definition; lowers Hmsy further
+  while the dome is too wide. Results (`results_links_start_timing.txt`, median
+  log error, median absolute in brackets): SPR + F links B/Bmsy +0.00 (0.17),
+  F/Fmsy +0.17 (0.28), 6/7 converged; SPR link alone B/Bmsy -0.32 (0.32),
+  F/Fmsy +0.42 (0.42). `timing = "mean"` keeps the previous behaviour.
+
+Next: the right-hand limb. Options: a prior on the dome's right SD; the
+production model informing it (catch/CPUE already in the same objective, but
+not enough here); an index with logistic selectivity in the length data.

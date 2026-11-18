@@ -25,4 +25,4 @@ s <- spm_flicc(f); g <- function(q) tail(s$ts$est[s$ts$quantity == q], 1)
 cat(sprintf("RES %-7s %-7s %4d %4.0fs %-4s K %6.2f r %.3f sdb %.3f | dep %.3f/%.3f | B/Bmsy %.2f/%.2f | F/Fmsy %.2f/%.2f\n",
   cfg, shape, seed, secs, f$diagnostics$conv_tier, s$refpts["K"], s$refpts["r"], s$refpts["sdb"],
   tail(sim$depletion, 1), g("SB/SB0"), tail(sim$bbmsy, 1), g("B/Bmsy"), tail(sim$ffmsy, 1), g("F/Fmsy")))
-saveRDS(list(sim = sim, f = f), sprintf("/tmp/case_%s_%s_%d.rds", cfg, shape, seed))
+saveRDS(list(sim = sim, f = f), sprintf("ci/spm/fits/case_%s_%s_%d.rds", cfg, shape, seed))

@@ -48,6 +48,11 @@
 #' @param xgrid F grid for the EB/SB curves, multiples of M at Linf (first 0)
 #' @param newton.it taped Newton iterations for the reference F and m
 #' @param P.bound soft bounds on SB/SB0
+#' @param sel.weights gear weights of the per-recruit selectivity: \code{"catch"}
+#'   (catch shares, default), \code{"F"} (F-weighted joint selectivity) or a vector
+#' @param timing biomass per recruit for the SPM (EB/SB curves, Hmsy):
+#'   \code{"start"} of the year (default, as the discrete SPM's harvest rate
+#'   C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)
 #' @return list of settings
 #' @export
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
@@ -55,11 +60,13 @@ spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, inde
                                r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, sigma.Flink = 0.2, link.rho = c(spr = 0, F = 0),
                                lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
-                               newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch") {
+                               newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
+                               timing = c("start", "mean")) {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
        h = h, shape = match.arg(shape), spr.tgt = spr.tgt, r.sd = r.sd, m.sd = m.sd, link = link,
        sigma.link = sigma.link, sigma.Flink = sigma.Flink, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
-       xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights)
+       xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights,
+       timing = match.arg(timing))
 }
 
 # gear weights of the per-recruit selectivity: "F" (0: F-weighted joint
@@ -111,7 +118,7 @@ spm_defaults_tmb_flicc <- function(td) {
             spm_spr_tgt = 0.4, spm_r_sd = 0, spm_m_sd = 0, spm_link_spr = 0L, spm_sigma_link = 1,
             spm_link_F = 0L, spm_sigma_Flink = 1, spm_lagidx = 0L, spm_bk_pr = c(1, 1, 0),
             spm_sdb_pr = c(1, 1, 0), spm_K_pr = c(1, 1, 0), spm_xgrid = c(0, 1), spm_newton_it = 1L,
-            spm_Pbound = c(0.02, 1.3), spm_selw = 0)
+            spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 1L)
   for (n in names(d)) if (is.null(td[[n]])) td[[n]] <- d[[n]]
   td
 }
@@ -187,6 +194,7 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_xgrid = as.numeric(sp$xgrid), spm_newton_it = as.integer(sp$newton.it),
     spm_Pbound = as.numeric(sp$P.bound),
     spm_selw = .spm_selw(sp$sel.weights, tmb_data),
+    spm_timing = as.integer(sp$timing == "start"),
     spm_info = list(years = yrs, mucatch = mucatch, index.names = if (nidx) colnames(I) else character(0),
                     obs = ok, settings = sp)))
   bk <- min(max(sp$bkinit[1], 0.05), 1.2)

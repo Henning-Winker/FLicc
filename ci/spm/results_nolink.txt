@@ -1,0 +1,7 @@
+RES none    rebuild   11   27s ok   K   2.86 r 0.065 sdb 0.074 | dep 0.164/0.192 | B/Bmsy 0.60/0.65 | F/Fmsy 0.78/0.96
+RES none    fudc    2001   28s ok   K   2.85 r 0.081 sdb 0.129 | dep 0.130/0.335 | B/Bmsy 0.47/1.13 | F/Fmsy 1.33/0.80
+RES none    decline   11   25s ok   K   3.33 r 0.103 sdb 0.060 | dep 0.105/0.095 | B/Bmsy 0.38/0.33 | F/Fmsy 2.78/2.82
+RES none    rebuild   12   27s ok   K   3.05 r 0.079 sdb 0.117 | dep 0.282/0.447 | B/Bmsy 1.02/1.52 | F/Fmsy 0.77/0.65
+RES none    decline   12   25s ok   K   3.39 r 0.097 sdb 0.070 | dep 0.185/0.153 | B/Bmsy 0.67/0.53 | F/Fmsy 2.74/2.77
+RES none    flat      11   25s ok   K   2.80 r 0.099 sdb 0.061 | dep 0.131/0.387 | B/Bmsy 0.47/1.34 | F/Fmsy 1.67/0.73
+RES none    flat      12   25s ok   K   2.87 r 0.093 sdb 0.068 | dep 0.226/0.276 | B/Bmsy 0.82/0.95 | F/Fmsy 1.65/1.59
