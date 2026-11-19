@@ -2368,6 +2368,15 @@ epr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "epr", level)
 #' @noRd
 ratio_ci_flicc <- function(fit, what = c("spr", "epr"), level = 0.95) {
   what <- match.arg(what)
+  z <- stats::qnorm(1 - (1 - level) / 2)
+  bys <- fit$by_year_se[[what]]
+  if (!is.null(bys)) {                                     # by_year fits: standard errors of every year
+    est <- bys[[what]]
+    out <- data.frame(year = as.character(bys$year), est = est, se_log = bys$se_log,
+                      lwr = est * exp(-z * bys$se_log), upr = est * exp(z * bys$se_log), row.names = NULL)
+    names(out)[2] <- what
+    return(out)
+  }
   if (is.null(fit$rep)) return(NULL)
   s <- summary(fit$rep, "report")
   s <- s[rownames(s) == paste0("log_", what, "_y"), , drop = FALSE]
