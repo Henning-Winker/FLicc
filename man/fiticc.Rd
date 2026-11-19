@@ -10,7 +10,8 @@ fiticc(
   sel_fun = c("logistic", "normal", "dsnormal"),
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 30, catch.sd = 0.05, pop_model = "gtg", obs_model =
-    "dm", ngtg = 13, maxsd = 3, Mpow = 0, linf.sd = NULL, Mk.sd = NULL, CVL.sd = NULL),
+    "dm", ngtg = 13, maxsd = 3, Mpow = 0, linf.sd = NULL, t0.prior = NULL, linf.prior =
+    NULL, Mk.sd = NULL, CVL.sd = NULL),
   years = NULL,
   iter = 1,
   compile = FALSE,
@@ -195,6 +196,11 @@ is fixed at its input value). For \code{pop_model = "gtg"}, the
 estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
 \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
 M/K is \code{Mk * (Linf / L)^Mpow}.}
+\item{\code{linf.prior}}{Lognormal prior on Linf independent of the start value,
+\code{c(median, log sd)}; takes the place of \code{linf.sd}. With the ALK option a vague prior such as
+\code{c(Lmax, 0.5)} (largest observed length) is recommended.}
+\item{\code{t0.prior}}{Normal prior on the von Bertalanffy t0 of the ALK growth model,
+\code{c(mean, sd)} in years; e.g. \code{c(0, 1)}.}
 }}
 
 \item{years}{Optional vector of years to fit (default all years in \code{lfd}).}
@@ -220,7 +226,8 @@ Default is \code{FALSE}.}
 estimated inside the model: Linf, k and t0 by default (\code{settings$alk_growth}; e.g.
 \code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M is held at its
 input value and M/k = M / k follows the estimated k, so k is informed by both the ALK and the length
-compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes.}
+compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes. Recommended: start values from a
+naive VB fit to the ALK and vague priors \code{t0.prior = c(0, 1)}, \code{linf.prior = c(Lmax, 0.5)}.}
 
 \item{sel_fixed}{Optional named list (by gear) of selectivity parameters
 fixed at given values on the length scale, with the names used by

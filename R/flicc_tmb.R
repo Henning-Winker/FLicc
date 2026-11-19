@@ -4,7 +4,7 @@
 #' @param stklen FLStockLen-like object with matching years
 #' @param sel_fun selectivity function per gear
 #' @param catch_by_gear numeric vector of relative catch by gear (in weight unless settings$catch_units = "numbers")
-#' @param settings list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd
+#' @param settings list with CVL, GL, catch.sd, optional linf.sd, linf.prior, t0.prior, Mk.sd, CVL.sd
 #' @param years optional vector of years to include
 #'
 #' @return list for TMB::MakeADFun
@@ -313,7 +313,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   prior_sd <- numeric()
   prior_code <- integer()
 
-  if (!is.null(settings$linf.sd)) {
+  # Linf prior independent of the start value: settings$linf.prior = c(median, log sd) (lognormal); takes the
+  # place of linf.sd (prior centred on the start value)
+  if (!is.null(settings$linf.prior)) {
+    prior_mu   <- c(prior_mu, log(as.numeric(settings$linf.prior[1])))
+    prior_sd   <- c(prior_sd, as.numeric(settings$linf.prior[2]))
+    prior_code <- c(prior_code, 1L)
+  } else if (!is.null(settings$linf.sd)) {
     prior_mu   <- c(prior_mu, log(Linf_init))
     prior_sd   <- c(prior_sd, as.numeric(settings$linf.sd))
     prior_code <- c(prior_code, 1L)
@@ -323,6 +329,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_mu   <- c(prior_mu, log(Mk_init))
     prior_sd   <- c(prior_sd, as.numeric(settings$Mk.sd))
     prior_code <- c(prior_code, 3L)
+  }
+
+  # t0 of the ALK growth model: settings$t0.prior = c(mean, sd), normal on the natural scale (years)
+  if (!is.null(settings$t0.prior)) {
+    prior_mu   <- c(prior_mu, as.numeric(settings$t0.prior[1]))
+    prior_sd   <- c(prior_sd, as.numeric(settings$t0.prior[2]))
+    prior_code <- c(prior_code, 9L)
   }
 
   if (!is.null(settings$CVL.sd)) {
@@ -690,6 +703,8 @@ fiticc_core <- function(lfd, stklen,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
+    t0.prior = NULL,
+    linf.prior = NULL,
     Mk.sd = NULL,
     CVL.sd = NULL,
     alk_t0 = NULL,
@@ -1320,6 +1335,11 @@ fiticc_core <- function(lfd, stklen,
 #'       estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
 #'       \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
 #'       M/K is \code{Mk * (Linf / L)^Mpow}.}
+#'     \item{\code{linf.prior}}{Lognormal prior on Linf independent of the start value,
+#'       \code{c(median, log sd)}; takes the place of \code{linf.sd}. With the ALK option a vague prior such as
+#'       \code{c(Lmax, 0.5)} (largest observed length) is recommended.}
+#'     \item{\code{t0.prior}}{Normal prior on the von Bertalanffy t0 of the ALK growth model,
+#'       \code{c(mean, sd)} in years; e.g. \code{c(0, 1)}.}
 #'   }
 #'
 #' @param years Optional vector of years to fit (default all years in \code{lfd}).
@@ -1374,7 +1394,8 @@ fiticc_core <- function(lfd, stklen,
 #'   estimated inside the model: Linf, k and t0 by default (\code{settings$alk_growth}; e.g.
 #'   \code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M is held at its
 #'   input value and M/k = M / k follows the estimated k, so k is informed by both the ALK and the length
-#'   compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes.
+#'   compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes. Recommended: start values from a
+#'   naive VB fit to the ALK and vague priors \code{t0.prior = c(0, 1)}, \code{linf.prior = c(Lmax, 0.5)}.
 #'
 #' @details
 #' The FLicc model separates:
@@ -1443,7 +1464,7 @@ fiticc <- function(lfd, stklen,
                      ngtg = 13,
                      maxsd = 3,
                      Mpow = 0,
-                     linf.sd = NULL,
+                     linf.sd = NULL, t0.prior = NULL, linf.prior = NULL,
                      Mk.sd = NULL,
                      CVL.sd = NULL
                    ),

@@ -1268,6 +1268,8 @@ Type objective_function<Type>::operator() ()
       x = log_Mk_m;
     } else if(code == 7) {
       x = log_Galpha_m;
+    } else if(code == 9) {
+      x = t0g;                                    // von Bertalanffy t0 (ALK growth): normal prior on the natural scale
     } else if(code >= 100 && code < 200) {
       int g = code - 100;
       x = log_Fk(0, g);
