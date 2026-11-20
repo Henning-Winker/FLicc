@@ -1,0 +1,132 @@
+
+> suppressPackageStartupMessages({
++     library(FLCore)
++     library(FLicc)
++ })
+
+> of <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
+
+> cand <- c(if (!is.null(of)) file.path(dirname(of), 
++     "..", "sim"), "ci/sim", "new/ci/sim")
+
+> here <- cand[file.exists(file.path(cand, "om_sim.R"))][1]
+
+> source(file.path(here, "om_sim.R"))
+
+> source(file.path(here, "om_sim_spm.R"))
+
+> lh <- om_lh
+
+> st <- om_structure()
+
+> set.seed(2001)
+
+> sim <- om_simulate_spm(st, sigR = 0.3, fshape = "fudc")
+
+> lfd <- FLQuants(lapply(sim$lfd, function(x) FLQuant(x, 
++     dimnames = list(len = sim$lb, year = sim$data_years))))
+
+> lhp <- FLPar(linf = lh$linf, k = lh$k, M = lh$M, L50 = lh$linf * 
++     (1 - exp(-lh$k * (lh$tm - lh$t0))), a = lh$a, b = lh$b)
+
+> stk <- stocklen(lfd, lhp, m_model = "constant")
+
+> kd <- match(sim$data_years, sim$years)
+
+> cbg <- colSums(sim$catch_w[kd, , drop = FALSE])
+
+> cbg <- cbg/sum(cbg)
+
+> spm <- list(catch = sim$catch, index = sim$index, 
++     index.gear = "Gillnet", h = lh$h, sel.weights = "catch", 
++     xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 20))), 
++     newton.it = 6)
+
+> t0 <- Sys.time()
+
+> fit <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cbg, settings = list(pop_model = "gtg", 
++     obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm))
+
+> cat("FLicc-SPM fit:", round(as.numeric(difftime(Sys.time(), 
++     t0, units = "secs")), 1), "s\n")
+FLicc-SPM fit: 32.8 s
+
+> s <- spm_flicc(fit)
+
+> print(round(s$refpts, 4))
+       K        r        m    BmsyK     Hmsy      MSY     r_pr     m_pr 
+  3.3637   0.0712   0.6634   0.2955   0.1074   0.0954   0.0726   0.6634 
+BmsyK_pr  Hmsy_pr     Fref  spr_ref      sdb  rho_spr    rho_F 
+  0.2955   0.1094   0.1425   0.3542   0.1308   0.0000   0.0000 
+
+> rp <- fit$report
+
+> dep <- s$ts$est[s$ts$quantity == "SB/SB0"]
+
+> cat(sprintf("terminal SB/SB0 true %.3f est %.3f | BmsyK true %.3f per-recruit %.3f\n", 
++     tail(sim$depletion, 1), tail(dep, 1), sim$sbmsy/sim$sb0, 
++     rp$BmsyK_pr))
+terminal SB/SB0 true 0.130 est 0.133 | BmsyK true 0.275 per-recruit 0.295
+
+> stopifnot(fit$diagnostics$conv_tier == "ok", all(is.finite(dep)), 
++     rp$Yref >= max(rp$Yg) * (1 - 1e-08), rp$Fref > 0, rp$m_pr > 
++         0, rp$r_pr > 0, abs(log(tail(dep, 1)/tail(sim$depletion, 
++         1))) < 0.25, abs(log(rp$BmsyK_pr/(sim$sbmsy/sim$sb0))) < 
++         0.2)
+
+> f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", 
++     "logistic"), catch_by_gear = cbg, settings = list(pop_model = "gtg", 
++     obs_model = "dm", CVL = 0.1, maxsd = 3), se = FALSE)
+
+> stopifnot(!any(grepl("^spm_", names(f0$opt$par))), 
++     is.null(f0$report$P))
+
+> stk2 <- stocklen_sex(lfd, list(F = lhp, M = lhp), 
++     m_model = "constant")
+
+> fs <- fiticc(lfd, stk2, sel_fun = c("dsnormal", "logistic"), 
++     catch_by_gear = cbg, settings = list(pop_model = "gtg", obs_model = "dm", 
++         CVL = 0.1, maxsd = 3, spm = spm), verbose = FALSE)
+
+> cat(sprintf("sex identity: nll one-sex %.6f two-sex %.6f\n", 
++     fit$opt$objective, fs$opt$objective))
+sex identity: nll one-sex 9901.540551 two-sex 9901.540551
+
+> stopifnot(fs$tmb_data$nsex == 2, abs(fit$opt$objective - 
++     fs$opt$objective) < 1e-04, abs(tail(fs$obj$report()$P, 1)/tail(rp$P, 
++     1) - 1) < 0.001)
+
+> set.seed(5)
+
+> yk <- tail(sim$data_years, 1)
+
+> ages <- rep(1:12, each = 40)
+
+> la <- lh$linf * (1 - exp(-lh$k * (ages + 0.5 - lh$t0))) * 
++     exp(rnorm(length(ages), 0, 0.1))
+
+> key <- alk_flicc(data.frame(age = ages, len = floor(la)), 
++     gears = "Gillnet", year = yk)
+
+> fa <- fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), 
++     catch_by_gear = cbg, alk = key, settings = list(pop_model = "gtg", 
++         obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm, alk_t0 = lh$t0), 
++     verbose = FALSE)
+
+> ka <- exp(fa$opt$par[["log_k"]])
+
+> ra <- fa$obj$report()
+
+> cat(sprintf("ALK + SPM: conv %s, k est %.3f (true %.3f), r_pr %.3f\n", 
++     fa$diagnostics$conv_tier, ka, lh$k, ra$r_pr))
+ALK + SPM: conv ok, k est 0.091 (true 0.080), r_pr 0.076
+
+> stopifnot(fa$tmb_data$alk_on == 1, "log_k" %in% names(fa$opt$par), 
++     abs(log(ka/lh$k)) < 0.3, fa$diagnostics$conv_tier == "ok", 
++     is.finite(ra$r_pr), all(is.finite(ra$P)))
+
+> cat("test_spm passed\n")
+test_spm passed
+Warning message:
+replacing previous import ‘ggplot2::%+%’ by ‘FLCore::%+%’ when loading ‘ggplotFL’ 
