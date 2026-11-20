@@ -269,7 +269,9 @@ spm_inits_flicc <- function(obj, tmb_data, parameters) {
 spm_flicc <- function(fit) {
   td <- fit$tmb_data
   if (!isTRUE(td$spm_use == 1L)) stop("not a FLicc-SPM fit", call. = FALSE)
-  info <- td$spm_info; rp <- fit$report; mu <- info$mucatch; yrs <- info$years
+  info <- td$spm_info; mu <- info$mucatch; yrs <- info$years
+  rp <- fit$report                                    # fiticc_core(): TMB report; fiticc(): summary report
+  if (is.null(rp$P) && !is.null(fit$obj)) rp <- fit$obj$report(fit$obj$env$last.par.best)
   sm <- if (!is.null(fit$rep)) summary(fit$rep, "report") else NULL
   get <- function(nm, est, scale = 1) {
     e <- est; lci <- uci <- rep(NA_real_, length(e))
