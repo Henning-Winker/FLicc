@@ -44,7 +44,8 @@
 #' @param K prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
 #'   catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
 #'   above, log sd 0.833), or c(median, log sd, on) in catch units (lognormal), or
-#'   \code{NULL} (no prior)
+#'   \code{NULL} (no prior). With two sexes K is the female SB0, and the half8 scale is
+#'   multiplied by the female share of recruits (\code{sex_ratio})
 #' @param xgrid F grid for the EB/SB curves, multiples of M at Linf (first 0)
 #' @param newton.it taped Newton iterations for the reference F and m
 #' @param P.bound soft bounds on SB/SB0
@@ -176,6 +177,7 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
   h <- sp$h
   if (is.null(h)) h <- if (!is.null(lh) && "s" %in% dimnames(lh)$params) as.numeric(lh["s"])[1] else 0.7
   mucatch <- mean(catch)
+  fsr <- if (isTRUE(tmb_data$nsex == 2L)) as.numeric(tmb_data$sex_ratio) else 1   # K is female SB0 with two sexes
   NT <- length(yrs)
   lk <- c(sp$link)
   tmb_data <- c(tmb_data[!grepl("^spm_", names(tmb_data))], list(
@@ -189,7 +191,8 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_link_F = as.integer("F" %in% lk), spm_sigma_Flink = as.numeric(sp$sigma.Flink),
     spm_lagidx = as.integer(pmax(seq_len(NT) - 1L - round(sp$lag), 0L)),
     spm_bk_pr = as.numeric(sp$bkinit), spm_sdb_pr = as.numeric(sp$sdb),
-    spm_K_pr = if (is.null(sp$K)) c(1, 1, 0) else if (identical(sp$K, "half8")) c(5.7 * max(catch) / mucatch, 0.833, 2)
+    spm_K_pr = if (is.null(sp$K)) c(1, 1, 0) else if (identical(sp$K, "half8"))
+                 c(5.7 * max(catch) / mucatch * fsr, 0.833, 2)
                else c(sp$K[1] / mucatch, sp$K[2], sp$K[3]),
     spm_xgrid = as.numeric(sp$xgrid), spm_newton_it = as.integer(sp$newton.it),
     spm_Pbound = as.numeric(sp$P.bound),

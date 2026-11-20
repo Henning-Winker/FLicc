@@ -610,9 +610,10 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   if (is.null(td$dm_prior_mu)) td$dm_prior_mu <- rep(0, length(fit$tmb_data$gear_names))
   if (is.null(td$dm_prior_sd)) td$dm_prior_sd <- 0
   td <- sex_defaults_tmb_flicc(td)                   # fits made before the sex structure
+  td <- alk_defaults_tmb_flicc(td)                   # fits made before the ALK option
   td <- spm_defaults_tmb_flicc(td)                   # fits made before FLicc-SPM
   td <- td[setdiff(names(td), c("gear_names", "year_names", "Linf_init", "Linf_m_init", "Mk_m_init", "CVL_m_init",
-                                "Mk_init", "CVL_init", "Galpha_init", "spm_info"))]
+                                "Mk_init", "CVL_init", "Galpha_init", "k_init", "spm_info"))]
   # full parameter set at the optimum, including random effects (F_re = TRUE)
   rnd <- fit$obj$env$random
   full <- fit$obj$env$last.par.best
@@ -625,6 +626,8 @@ brp_tmb_flicc <- function(fit, Fseq = numeric(0), spr = numeric(0), nyears = 1,
   if (is.null(pl$log_Linf_m)) pl$log_Linf_m <- pl$log_Linf
   if (is.null(pl$log_Mk_m)) pl$log_Mk_m <- pl$log_Mk + log(if (!is.null(td$mk_ratio)) td$mk_ratio else 1)
   if (is.null(pl$log_Galpha_m)) pl$log_Galpha_m <- pl$log_Galpha
+  if (is.null(pl$log_k)) pl$log_k <- log(k)                      # fits made before the ALK option
+  if (is.null(pl$t0g)) pl$t0g <- if (!is.null(td$alk_t0)) td$alk_t0 else 0
   pl <- spm_par_defaults_flicc(pl, td)
   # parameters fixed at the estimates (log_phi left free because TMB needs
   # at least one), so almost nothing is recorded on the AD tape and report()

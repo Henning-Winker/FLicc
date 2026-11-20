@@ -4,7 +4,8 @@
 # OM-like simulation (alfonsino, F history up-down-constant). Checks that the
 # fit converges, that the reference F from the taped Newton iterations is the
 # maximum of the equilibrium yield on the grid, and that the terminal SB/SB0 is
-# close to the truth.
+# close to the truth. Also: identical sexes reproduce the one-sex fit, and growth
+# from an age-length key (k estimated) works with the SPM on.
 suppressPackageStartupMessages({ library(FLCore); library(FLicc) })
 of <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
 cand <- c(if (!is.null(of)) file.path(dirname(of), "..", "sim"), "ci/sim", "new/ci/sim")
@@ -41,4 +42,22 @@ stopifnot(
 f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
                           settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3), se = FALSE)
 stopifnot(!any(grepl("^spm_", names(f0$opt$par))), is.null(f0$report$P))
+# sex structure: identical sexes reproduce the one-sex FLicc-SPM fit
+stk2 <- stocklen_sex(lfd, list(F = lhp, M = lhp), m_model = "constant")
+fs <- fiticc(lfd, stk2, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                          settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm), verbose = FALSE)
+cat(sprintf("sex identity: nll one-sex %.6f two-sex %.6f\n", fit$opt$objective, fs$opt$objective))
+stopifnot(fs$tmb_data$nsex == 2, abs(fit$opt$objective - fs$opt$objective) < 1e-4,
+          abs(tail(fs$obj$report()$P, 1) / tail(rp$P, 1) - 1) < 1e-3)
+# ALK: growth (k) estimated with the SPM on; the SPM uses the estimated k
+set.seed(5); yk <- tail(sim$data_years, 1); ages <- rep(1:12, each = 40)
+la <- lh$linf * (1 - exp(-lh$k * (ages + 0.5 - lh$t0))) * exp(rnorm(length(ages), 0, 0.1))
+key <- alk_flicc(data.frame(age = ages, len = floor(la)), gears = "Gillnet", year = yk)
+fa <- fiticc(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg, alk = key,
+                          settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm,
+                                          alk_t0 = lh$t0), verbose = FALSE)
+ka <- exp(fa$opt$par[["log_k"]]); ra <- fa$obj$report()
+cat(sprintf("ALK + SPM: conv %s, k est %.3f (true %.3f), r_pr %.3f\n", fa$diagnostics$conv_tier, ka, lh$k, ra$r_pr))
+stopifnot(fa$tmb_data$alk_on == 1, "log_k" %in% names(fa$opt$par), abs(log(ka / lh$k)) < 0.3,
+          fa$diagnostics$conv_tier == "ok", is.finite(ra$r_pr), all(is.finite(ra$P)))
 cat("test_spm passed\n")

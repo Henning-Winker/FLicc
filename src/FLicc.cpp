@@ -396,6 +396,8 @@ Type objective_function<Type>::operator() ()
   DATA_ARRAY(obs_sex);       // nlen x nyear x ngear x 2: sexed compositions (F, M); zeros = none
   DATA_IMATRIX(sex_type);    // nyear x ngear, as SS3 gender codes for the sexed part:
                              // 0 none, 1 females only, 2 males only, 3 both (joint length x sex)
+  DATA_IVECTOR(sex_comb);    // by gear: number of leading (retained) length bins in which the
+                             // sexes are combined in sexed samples (0 = none)
   DATA_SCALAR(sex_ratio);    // proportion female at recruitment (1 when nsex = 1)
   DATA_SCALAR(k_ratio);      // k_female / k_male: F/k and time scale of male survival
   DATA_SCALAR(mk_ratio);     // (M/k)_male / (M/k)_female of the inputs (start value of log_Mk_m; not used in the model)
@@ -442,6 +444,18 @@ Type objective_function<Type>::operator() ()
   DATA_INTEGER(spm_timing);    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
   DATA_VECTOR(spm_selw);       // ngear: fixed weights of the gear selectivities for the per-recruit
                                // block; all <= 0: F-weighted joint selectivity of the terminal years
+  // conditional age at length (ALK): growth (Linf, k) from age-length keys
+  DATA_INTEGER(alk_on);      // 0 = no ALK
+  DATA_INTEGER(alk_mkk);     // 1: M fixed at its input, M/k = M / k follows the estimated k
+  DATA_SCALAR(alk_logM);     // log M (alk_mkk = 1)
+  DATA_SCALAR(alk_t0);       // von Bertalanffy t0: start value (estimated) or fixed value
+  DATA_SCALAR(alk_maxsd);    // Linf range in SD (truncated normal)
+  DATA_VECTOR(alk_gl_x);     // Gauss-Legendre nodes on [-1, 1]
+  DATA_VECTOR(alk_gl_w);     // Gauss-Legendre weights
+  DATA_VECTOR(alk_age);      // ages of the keys (rows of alk_obs)
+  DATA_IVECTOR(alk_year);    // year index of each key (0-based)
+  DATA_VECTOR(alk_tau);      // sampling time within the year of each key
+  DATA_ARRAY(alk_obs);       // nage x nlen x nkey: aged fish by age and length class
 
   PARAMETER(log_Linf);
   PARAMETER(log_Galpha);
@@ -463,12 +477,14 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(spm_logsdi);
   PARAMETER_VECTOR(spm_logP);  // log SB_t/SB0 (random effects)
   PARAMETER_VECTOR(spm_trho);  // 2: AR1 correlation of the SPR- and F-link errors, rho = 2/(1+exp(-x))-1
+  PARAMETER(log_k);        // von Bertalanffy k (estimated with an ALK; otherwise fixed)
+  PARAMETER(t0g);          // von Bertalanffy t0 (estimated with an ALK unless fixed; enters the ALK only)
 
   Type nll = 0.0;
 
   Type Linf   = exp(log_Linf);
   Type Galpha = exp(log_Galpha);
-  Type Mk     = exp(log_Mk);
+  Type Mk     = (alk_mkk == 1) ? Type(exp(alk_logM - log_k)) : Type(exp(log_Mk));
   Type phi    = exp(log_phi);
   Type Gbeta  = Galpha / Linf;
   Type sigmaF = exp(log_sigmaF);
@@ -581,6 +597,8 @@ Type objective_function<Type>::operator() ()
   vector<Type> fapic_y(nyear);                 // apical F/k by year (joint selectivity), for the SPM F link
   fapic_y.setZero();
 
+  matrix<Type> ZK_y(nlen, nyear);              // Z/K at length by year (for the ALK)
+  ZK_y.setZero();
   sel_joint.setZero();
   epr_y.setZero();
   Fk_l.setZero();
@@ -631,6 +649,8 @@ Type objective_function<Type>::operator() ()
         Z(l) += F_len(l,g);
       }
     }
+
+    for(int l = 0; l < nlen; l++) ZK_y(l, y) = Z(l);
 
     // what each gear samples at length: catch rate F(l) for fisheries, the
     // population through the selectivity curve for surveys
@@ -965,6 +985,33 @@ Type objective_function<Type>::operator() ()
           }
         int st = sex_type(y, g);
         if(st <= 0 || st > 3) continue;     // 0 none; 1 F, 2 M, 3 joint (SS3 gender codes)
+        // sexes combined below a length (SS3 'combine males into females at or
+        // below a bin'): the first cb retained bins are one cell of both sexes
+        // (observed: F + M columns; predicted: females + males), the bins above
+        // are female and male cells, all in one composition
+        int cb = sex_comb(g);
+        if(cb > nb) cb = nb;
+        if(cb > 0) {
+          int nc = cb + 2 * (nb - cb);
+          vector<Type> oc(nc), pc(nc);
+          oc.setZero(); pc.setZero();
+          for(int sx = 0; sx < 2; sx++) {
+            for(int l = 0; l < nkeep; l++) {
+              int k = (l < nb) ? l : (nb - 1);
+              int idx = (k < cb) ? k : (cb + sx * (nb - cb) + (k - cb));
+              oc(idx) += obs_sex(l, y, g, sx);
+              pc(idx) += plen_sex(l, y, g, sx);
+            }
+          }
+          Type pcs = pc.sum();
+          if(pcs > Type(0)) pc = pc / pcs;
+          if(rob_eps > Type(0)) {
+            for(int k = 0; k < nc; k++) pc(k) = (Type(1) - rob_eps) * pc(k) + rob_eps / Type(nc);
+          }
+          if(pred_gear(g) > Type(0))
+            nll += comp_nll_flicc(oc, pc, obs_model, dm_type, log_dm(g), phi);
+          continue;
+        }
         int s0 = (st == 2) ? 1 : 0;          // first sex in the composition
         int s1 = (st == 1) ? 0 : 1;          // last sex in the composition
         int ns = s1 - s0 + 1;
@@ -993,6 +1040,7 @@ Type objective_function<Type>::operator() ()
   // --- FLicc-SPM: surplus production model in the same objective ---
   if(spm_use == 1 && brp_only == 0) {
     if(pop_model != 2) error("FLicc-SPM needs pop_model = gtg");
+    Type kspm = exp(log_k);     // annual k: estimated with an ALK, else fixed at brp_k (log_k mapped)
     // smooth bounds as JABBA3 (.smax, .smin)
     auto smax_ = [](Type x, Type a, Type eps) { return Type(a + Type(0.5) * ((x - a) + sqrt((x - a) * (x - a) + eps))); };
     auto smin_ = [](Type x, Type a, Type eps) { return Type(a - Type(0.5) * ((a - x) + sqrt((a - x) * (a - x) + eps))); };
@@ -1023,11 +1071,11 @@ Type objective_function<Type>::operator() ()
     samax = pow(samax, Type(1) / Type(20));
     for(int l = 0; l < nlen; l++) {
       sA(l) = sA(l) / (samax + Type(1e-30));
-      MA(l) = Mk * brp_k * Ms(l);                    // annual M at length, female
-      MA_m(l) = Mk_m * (brp_k / k_ratio) * Ms_m(l);  // male
+      MA(l) = Mk * kspm * Ms(l);                    // annual M at length, female
+      MA_m(l) = Mk_m * (kspm / k_ratio) * Ms_m(l);  // male
     }
     Type male_w = (nsex == 2) ? Type(Type(1) - sex_ratio) : Type(0);
-    Type Mref = Mk * brp_k;                          // annual M at Linf: scale of the F grid
+    Type Mref = Mk * kspm;                          // annual M at Linf: scale of the F grid
 
     // numbers at length per recruit at annual apical F x (female; male on the
     // female time scale), as popN() / popNm() of the brp block
@@ -1035,8 +1083,8 @@ Type objective_function<Type>::operator() ()
       matrix<Type> ZK(nlen + 1, ngtg);
       for(int l = 0; l < nlen; l++) Zl(l) = MA(l) + x * sA(l);
       for(int g = 0; g < ngtg; g++) {
-        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat(l, g) * Ms(l) + x * sA(l) / brp_k;
-        ZK(nlen, g) = MKMat(nlen, g) * Ms(nlen - 1) + x * sA(nlen - 1) / brp_k;
+        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat(l, g) * Ms(l) + x * sA(l) / kspm;
+        ZK(nlen, g) = MKMat(nlen, g) * Ms(nlen - 1) + x * sA(nlen - 1) / kspm;
       }
       return pop_len_gtg(LLB, gtgLinfs, ZK, recP);
     };
@@ -1044,8 +1092,8 @@ Type objective_function<Type>::operator() ()
       matrix<Type> ZK(nlen + 1, ngtg);
       for(int l = 0; l < nlen; l++) Zl(l) = MA_m(l) + x * sA(l);
       for(int g = 0; g < ngtg; g++) {
-        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat_m(l, g) * Ms_m(l) + x * sA(l) * k_ratio / brp_k;
-        ZK(nlen, g) = MKMat_m(nlen, g) * Ms_m(nlen - 1) + x * sA(nlen - 1) * k_ratio / brp_k;
+        for(int l = 0; l < nlen; l++) ZK(l, g) = MKMat_m(l, g) * Ms_m(l) + x * sA(l) * k_ratio / kspm;
+        ZK(nlen, g) = MKMat_m(nlen, g) * Ms_m(nlen - 1) + x * sA(nlen - 1) * k_ratio / kspm;
       }
       vector<Type> NI = pop_len_gtg(LLB, gtgLinfs_m, ZK, recP);
       return vector<Type>(NI * k_ratio);
@@ -1287,7 +1335,7 @@ Type objective_function<Type>::operator() ()
     // (yield / exploitable biomass per recruit) at the length model's apical F
     if(spm_link_F == 1) {
       for(int y = 0; y < nyear; y++) {
-        vector<Type> q = prq(fapic_y(y) * brp_k);
+        vector<Type> q = prq(fapic_y(y) * kspm);
         Heq_y(y) = q(1) / q(2);
         e_F(y) = log(Heq_y(y)) - log(H(spm_lfd_t(y)));
       }
@@ -1517,6 +1565,67 @@ Type objective_function<Type>::operator() ()
     }
   }
 
+  // --- CONDITIONAL AGE AT LENGTH (ALK) ---
+  // P(a | l) for a key of year y sampled at time tau: fish of age a are in length class l when their Linf lies in
+  // [LB_l / g_a, LB_l+1 / g_a], g_a = 1 - exp(-k (a + tau - t0)); integrated over that interval (Gauss-Legendre)
+  // of the Linf density (normal, CVL, truncated at +- maxsd) times the survival to length L = Linf g_a along the
+  // length classes with the year's Z/K (LBSPR recursion). Selectivity at length cancels in P(a | l). Smooth in
+  // k, Linf and CVL (interval limits by conditional expressions).
+  Type nll_alk = Type(0);
+  array<Type> alk_pexp(alk_obs.dim(0), alk_obs.dim(1), alk_obs.dim(2));   // expected age proportions by length
+  alk_pexp.setZero();
+  Type kgr = exp(log_k);
+  if(alk_on == 1) {
+    int na = alk_obs.dim(0), nkey = alk_obs.dim(2), nq = alk_gl_x.size();
+    vector<Type> LB(nlen + 1);
+    for(int l = 0; l < nlen; l++) LB(l) = LLB(l);
+    LB(nlen) = (nlen > 1) ? Type(LLB(nlen - 1) + (LLB(nlen - 1) - LLB(nlen - 2))) : Type(LLB(0) + Type(1));
+    Type sdL = CVL * Linf;
+    Type Llo = Linf * (Type(1) - alk_maxsd * CVL);
+    Type Lhi = Linf * (Type(1) + alk_maxsd * CVL);
+    for(int kk = 0; kk < nkey; kk++) {
+      int y = alk_year(kk);
+      for(int l = 0; l < nlen; l++) {
+        Type nobs = Type(0);
+        for(int a = 0; a < na; a++) nobs += alk_obs(a, l, kk);
+        if(nobs <= Type(0)) continue;
+        vector<Type> C(na);
+        for(int a = 0; a < na; a++) {
+          Type ga = Type(1) - exp(-kgr * (alk_age(a) + alk_tau(kk) - t0g));
+          ga = CppAD::CondExpGt(ga, Type(1e-4), ga, Type(1e-4));
+          Type lo = LB(l) / ga, hi = LB(l + 1) / ga;
+          lo = CppAD::CondExpGt(lo, Llo, lo, Llo);
+          hi = CppAD::CondExpLt(hi, Lhi, hi, Lhi);
+          Type w = hi - lo;
+          w = CppAD::CondExpGt(w, Type(0), w, Type(0));
+          Type acc = Type(0);
+          for(int q = 0; q < nq; q++) {
+            Type Li = lo + w * (alk_gl_x(q) + Type(1)) / Type(2);
+            Type L  = Li * ga;
+            Type ls = MKMat(0, 0) * Mscaler(0, y) * log((Li - LB(0)) / Li);
+            for(int i = 0; i < l; i++) ls += ZK_y(i, y) * log((Li - LB(i + 1)) / (Li - LB(i)));
+            ls += ZK_y(l, y) * log((Li - L) / (Li - LB(l)));
+            acc += alk_gl_w(q) * dnorm(Li, Linf, sdL, false) * exp(ls);
+          }
+          C(a) = acc * w / Type(2);
+        }
+        // small floor on every age before normalising: finite gradients when a length class lies beyond the
+        // Linf range (all C = 0), e.g. while Linf is low during the optimisation
+        Type eps = Type(1e-20);
+        Type Csum = C.sum() + Type(na) * eps;
+        for(int a = 0; a < na; a++) {
+          alk_pexp(a, l, kk) = (C(a) + eps) / Csum;
+          if(alk_obs(a, l, kk) > Type(0)) nll_alk -= alk_obs(a, l, kk) * log((C(a) + eps) / Csum);
+        }
+      }
+    }
+    nll += nll_alk;
+  }
+  REPORT(nll_alk);
+  REPORT(alk_pexp);
+  REPORT(kgr);
+  REPORT(t0g);
+
   // --- NORMAL PRIOR PENALTIES ---
   for(int i = 0; i < prior_mu.size(); i++) {
     Type x;
@@ -1536,6 +1645,8 @@ Type objective_function<Type>::operator() ()
       x = log_Mk_m;
     } else if(code == 7) {
       x = log_Galpha_m;
+    } else if(code == 9) {
+      x = t0g;                                    // von Bertalanffy t0 (ALK growth): normal prior on the natural scale
     } else if(code >= 100 && code < 200) {
       int g = code - 100;
       x = log_Fk(0, g);

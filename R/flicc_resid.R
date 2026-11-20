@@ -29,7 +29,7 @@ comp_data_flicc <- function(fit) {
     a0 <- if (!is.null(rp$dm_alpha0) && rp$dm_alpha0[y, g] > 0) rp$dm_alpha0[y, g] else n
     out[[length(out) + 1]] <- list(gear = td$gear_names[g], year = td$year_names[y],
                                    len = Lb, lmid = Lm, obs = o, p = p, n = n, a0 = a0,
-                                   part = "U", sexcell = NULL)
+                                   lenidx = seq_len(nb), part = "U", sexcell = NULL)
   }
   # sexed compositions (nsex = 2), as in the likelihood: joint F + M (SS3
   # code 3) or one sex (codes 1, 2); cells carry their sex in 'sexcell'
@@ -38,20 +38,23 @@ comp_data_flicc <- function(fit) {
     log_dm <- if (!is.null(pl$log_dm)) pl$log_dm else rep(0, ngear)
     dmt <- if (!is.null(td$dm_type)) td$dm_type else 0L
     ps <- rp$plen_sex
+    scomb <- if (!is.null(td$sex_comb)) td$sex_comb else rep(0L, ngear)
     for (g in seq_len(ngear)) for (y in seq_len(nyear)) {
       st <- td$sex_type[y, g]
       if (st == 0L) next
-      sx <- switch(st, 1L, 2L, 1:2)
-      o <- unlist(lapply(sx, function(k) as.numeric(tapply(td$obs_sex[seq_len(nkeep), y, g, k], grp, sum))))
-      p <- unlist(lapply(sx, function(k) as.numeric(tapply(ps[seq_len(nkeep), y, g, k], grp, sum))))
+      cl <- sex_cells_flicc(td$obs_sex[seq_len(nkeep), y, g, 1], td$obs_sex[seq_len(nkeep), y, g, 2],
+                            grp, nb, st, scomb[g])
+      o <- cl$v
+      p <- sex_cells_flicc(ps[seq_len(nkeep), y, g, 1], ps[seq_len(nkeep), y, g, 2], grp, nb, st, scomb[g])$v
       n <- sum(o)
       if (!(n > 0) || !(sum(p) > 0)) next
       p <- pmax(p / sum(p), 1e-12); p <- p / sum(p)
       a0 <- switch(as.character(dmt), "1" = exp(log_dm[g]) * n, "2" = exp(log_dm[g]), n)
       out[[length(out) + 1]] <- list(gear = td$gear_names[g], year = td$year_names[y],
-                                     len = rep(Lb, length(sx)), lmid = rep(Lm, length(sx)),
-                                     obs = o, p = p, n = n, a0 = a0,
-                                     part = c("F", "M", "F+M")[st], sexcell = rep(c("F", "M")[sx], each = nb))
+                                     len = Lb[cl$k], lmid = Lm[cl$k], lenidx = cl$k,
+                                     obs = o, p = p, n = n, a0 = a0, sexcomb = scomb[g],
+                                     part = if (scomb[g] > 0) "F+M" else c("F", "M", "F+M")[st],
+                                     sexcell = cl$sex)
     }
   }
   phi <- tryCatch(exp(fit$obj$env$parList()$log_phi), error = function(e) NA_real_)
@@ -59,12 +62,27 @@ comp_data_flicc <- function(fit) {
        nsex = if (!is.null(td$nsex)) td$nsex else 1L)
 }
 
+# cells of a sexed composition, as in the likelihood: one sex (st 1, 2), joint
+# F + M (st 3), or with the first cb retained bins combined over sexes (cell
+# sex "C"); vF, vM by length bin, grp maps bins to retained bins (internal)
+sex_cells_flicc <- function(vF, vM, grp, nb, st, cb = 0L) {
+  a <- as.numeric(tapply(vF, grp, sum)); b <- as.numeric(tapply(vM, grp, sum))
+  cb <- min(cb, nb)
+  if (cb > 0) {
+    up <- if (cb < nb) (cb + 1):nb else integer(0)
+    return(list(v = c(a[seq_len(cb)] + b[seq_len(cb)], a[up], b[up]),
+                k = c(seq_len(cb), up, up), sex = c(rep("C", cb), rep("F", length(up)), rep("M", length(up)))))
+  }
+  sx <- switch(st, 1L, 2L, 1:2)
+  list(v = unlist(list(a, b)[sx]), k = rep(seq_len(nb), length(sx)), sex = rep(c("F", "M")[sx], each = nb))
+}
+
 # panel labels for sex-structured fits: "gear" for unsexed compositions,
 # "gear F" / "gear M" for the sexed cells (one-sex fits unchanged)
 sex_panels_flicc <- function(d, gear_levels) {
   if (is.null(d$sex)) return(list(d = d, levels = gear_levels))
   lab <- ifelse(d$sex == "U", as.character(d$gear), paste(d$gear, d$sex))
-  lev <- unlist(lapply(gear_levels, function(g) c(g, paste(g, "F"), paste(g, "M"))))
+  lev <- unlist(lapply(gear_levels, function(g) c(g, paste(g, "C"), paste(g, "F"), paste(g, "M"))))
   lev <- lev[lev %in% lab]
   d$gear <- factor(lab, levels = lev)
   list(d = d, levels = lev)
@@ -546,11 +564,11 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
   rows <- lapply(cd_list, function(z) {
     gi <- match(z$gear, td$gear_names); yi <- match(z$year, td$year_names)
     n <- z$n; K <- length(z$p)
-    sxi <- if (is.null(z$sexcell)) NULL else match(unique(z$sexcell), c("F", "M"))
     cnts <- matrix(vapply(seq_len(nsim), function(i) {
       p <- if (is.null(p_draws)) z$p else {
-        pp <- if (is.null(sxi)) as.numeric(tapply(p_draws[[i]]$plen[seq_len(nkeep), yi, gi], grp, sum)) else
-          unlist(lapply(sxi, function(k) as.numeric(tapply(p_draws[[i]]$plen_sex[seq_len(nkeep), yi, gi, k], grp, sum))))
+        pp <- if (is.null(z$sexcell)) as.numeric(tapply(p_draws[[i]]$plen[seq_len(nkeep), yi, gi], grp, sum)) else
+          sex_cells_flicc(p_draws[[i]]$plen_sex[seq_len(nkeep), yi, gi, 1], p_draws[[i]]$plen_sex[seq_len(nkeep), yi, gi, 2],
+                          grp, nb, td$sex_type[yi, gi], if (is.null(z$sexcomb)) 0L else z$sexcomb)$v
         pmax(pp / sum(pp), 1e-12)
       }
       as.numeric(switch(om,
@@ -571,9 +589,9 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
                                                   len = z$len[k], lmid = z$lmid[k], obs = z$obs[k],
                                                   sim = cnts[k, , drop = FALSE])
       }
-      k1 <- z$sexcell == z$sexcell[1]
-      Ls <- z$lmid[k1]; lbs <- z$len[k1]
-      tot <- function(v) as.numeric(tapply(v, rep(seq_len(sum(k1)), length.out = length(v)), sum))
+      ki <- sort(unique(z$lenidx))
+      Ls <- z$lmid[match(ki, z$lenidx)]; lbs <- z$len[match(ki, z$lenidx)]
+      tot <- function(v) as.numeric(tapply(v, factor(z$lenidx, levels = ki), sum))
     }
     sims <- matrix(apply(cnts, 2, function(v) stats_of(tot(v), L = Ls, lb = lbs)), nrow = 4)
     ob <- stats_of(tot(z$obs), Ls, lbs)
@@ -586,7 +604,7 @@ ppc_flicc <- function(fit, nsim = 500, par_draws = FALSE, seed = 1) {
   tab <- do.call(rbind, rows)
   tab <- tab[is.finite(tab$obs), ]
   tab$outside <- tab$obs < tab$lo | tab$obs > tab$hi
-  glev <- unlist(lapply(td$gear_names, function(g) c(g, paste(g, c("F+M", "F", "M")))))
+  glev <- unlist(lapply(td$gear_names, function(g) c(g, paste(g, c("F+M", "F", "M", "C")))))
   tab$gear <- factor(tab$gear, levels = glev[glev %in% tab$gear])
   tab$stat <- factor(tab$stat, levels = c("Lmean", "L95", "Pmat", "Lmax"))
   cov <- stats::aggregate(outside ~ gear + stat, data = tab, FUN = function(v) round(mean(v), 2))

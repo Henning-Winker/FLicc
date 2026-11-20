@@ -41,6 +41,16 @@ lfd <- FLQuantLen(lfd_long_to_wide(df_long_with_sex), unit = "cm")
 `lfdess()` rescales females and males of a sample together, so the sex ratio is kept, and
 unsexed fish separately.
 
+**Small fish that cannot be sexed.** Often the fish below a certain length are not sexed. Stock
+Synthesis then combines the sexes in those length bins and stores the combined fish in the
+female columns. `settings$sex_minlen` does the same in FLicc, by gear (e.g.
+`sex_minlen = c(Survey = 21)`): in a sexed sample, each length bin below it is one cell of both
+sexes (observed F + M counts, predicted females + males), and the bins above are female and male
+cells, all in one composition. `plot_len()` and `plot_lfd(..., sex_minlen = )` show these bins in
+purple above the line, and `plot_sexratio()` leaves them out. Without the setting, the small fish
+stored as females would be read as a strong excess of females, which biases the male parameters
+when they are estimated.
+
 `plot_lfd()` shows length data with sexes in the style of r4ss: one panel per year and gear,
 females above the horizontal line (red), males below (blue), and unsexed samples in their own
 column (grey). This view is used automatically when any gear has F or M units (`sex = FALSE`

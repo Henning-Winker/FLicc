@@ -1,9 +1,19 @@
 # Installation
 
-`FLicc` depends on `FLCore`, `ggplotFL` and `TMB`. On Windows, compiling the TMB
-model requires Rtools (<https://cran.r-project.org/bin/windows/Rtools/>).
+FLicc is on the henning-winker r-universe, together with its FLR dependencies from the FLR
+r-universe. This installs FLicc and everything it needs, with ready-built binaries for Windows and
+macOS (no Rtools needed):
 
 ```{r install, eval = FALSE}
+install.packages("FLicc", repos = c("https://henning-winker.r-universe.dev",
+                                    "https://flr.r-universe.dev",
+                                    "https://cloud.r-project.org"))
+```
+
+The development version from GitHub needs the dependencies first and, on Windows, Rtools
+(<https://cran.r-project.org/bin/windows/Rtools/>) to compile the TMB model:
+
+```{r install-github, eval = FALSE}
 install.packages("TMB", type = "source")
 install.packages(c("FLCore", "ggplotFL"),
                  repos = c("https://flr.r-universe.dev", "https://cloud.r-project.org"))

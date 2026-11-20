@@ -158,3 +158,22 @@ right.
 Next: the right-hand limb. Options: a prior on the dome's right SD; the
 production model informing it (catch/CPUE already in the same objective, but
 not enough here); an index with logistic selectivity in the length data.
+
+## Merged with main (alk-growth 4903504), 20 Nov 2026
+
+`dev-spm` now contains main and `alk-growth` (ALK growth with `t0.prior` /
+`linf.prior`, `by_year` fixes, `sex_minlen`). Conflicts were additive (SPM and
+ALK declarations side by side in `FLicc.cpp`, `data_tmb_flicc`,
+`init_tmb_flicc`, the settings defaults and the refit helpers in `fliccit.R`).
+
+- **k in the SPM block** is `exp(log_k)`: the estimated k with an ALK, else
+  `brp_k` (log_k mapped at its input). The rest of FLicc keeps `brp_k`, which
+  the R side updates after an ALK fit.
+- **Sexes:** the SPM state is female SB (two sexes), so K is female SB0. The
+  `half8` K prior scale is multiplied by the female share of recruits
+  (`sex_ratio`); with identical sexes the two-sex FLicc-SPM fit reproduces the
+  one-sex objective exactly (was 0.79 apart, from the prior).
+- **Tests** (`ci/tests/test_spm.R`): sex identity with the SPM on; ALK + SPM
+  (k estimated 0.091 vs 0.080, converged). Full CI suite passes locally.
+- Merge order for Monday: merging `dev-spm` into main brings `alk-growth` too
+  (main is an ancestor of `alk-growth`, which is an ancestor of `dev-spm`).

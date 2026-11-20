@@ -212,3 +212,23 @@ s2 <- stocklen_sex(lfd_dimorph, lhpar_dimorph, m_model = "constant")
 stopifnot(isTRUE(all.equal(s1$M, s2$M)), isTRUE(all.equal(s1$F, s2$F)))
 stopifnot(dim(lhpar_sex(propagate(lhF, 3), linf = c(40, 45, 50)))[3] == 3)
 cat("lhpar_sex OK\n")
+
+# sexes combined below a length in sexed samples (settings$sex_minlen, as SS3)
+lcmb <- lfd_dimorph; Lc <- as.numeric(dimnames(lcmb$Survey)$len); smc <- Lc < 20
+lcmb$Survey[smc, , "F"] <- lfd_dimorph$Survey[smc, , "F"] + lfd_dimorph$Survey[smc, , "M"]; lcmb$Survey[smc, , "M"] <- 0
+lhFc <- FLPar(lhpar_dimorph@.Data[, "F", 1], params = dimnames(lhpar_dimorph)$params)
+stkc <- stocklen_sex(lfd_dimorph, lhFc, male = list(linf = 52, k = 0.25, L50 = 28), m_model = "constant")
+setc <- list(obs_model = "mn", surveys = "Survey", linf_m.sd = 0.3)
+fc_orig <- fiticc(lfd_dimorph, stkc, sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1, settings = setc, verbose = FALSE)
+fc_comb <- fiticc(lcmb, stkc, sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1,
+                  settings = modifyList(setc, list(sex_minlen = c(Survey = 20))), verbose = FALSE)
+fc_same <- fiticc(lfd_dimorph, stkc, sel_fun = c("dsnormal", "logistic"), catch_by_gear = 1,
+                  settings = modifyList(setc, list(sex_minlen = c(Survey = 20))), verbose = FALSE)
+stopifnot(fc_comb$opt$convergence == 0, fc_comb$tmb_data$sex_comb[2] == sum(smc))
+stopifnot(abs(fc_comb$opt$objective - fc_same$opt$objective) < 1e-6)        # storage of combined fish irrelevant
+stopifnot(abs(fc_comb$obj$report()$Linf_m - fc_orig$obj$report()$Linf_m) < 1)
+stopifnot(abs(tail(c(fc_comb$report$spr), 1) / tail(c(fc_orig$report$spr), 1) - 1) < 0.05)
+pc <- plot_len(fc_comb); stopifnot("C" %in% as.character(pc$data$sex))
+stopifnot(inherits(plot_sexratio(fc_comb), "ggplot"), inherits(ppc_flicc(fc_comb, nsim = 50), "flicc_ppc"))
+stopifnot("C" %in% resid_flicc(fc_comb, type = "osa")$sex)
+cat("sex_minlen OK\n")

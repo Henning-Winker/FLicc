@@ -556,21 +556,29 @@ plot_len <- function(fit,
   #-----------------------------
   # plot
   #-----------------------------
+  # bins of unequal width: proportions per unit length (no steps where the
+  # bins widen)
+  df$w <- bin_width_flicc(df$len)
+  ylab <- "Proportion"
+  if (length(unique(round(df$w, 6))) > 1) {
+    df$observed <- df$observed / df$w; df$fitted <- df$fitted / df$w
+    ylab <- "Proportion per cm"
+  }
   p <- ggplot2::ggplot(df, ggplot2::aes(x = len)) +
-    ggplot2::geom_col(
-      ggplot2::aes(y = observed),
+    ggplot2::geom_rect(
+      ggplot2::aes(xmin = len, xmax = len + w, ymin = 0, ymax = observed),
       fill = observed_fill,
-      colour = observed_colour
+      colour = observed_colour, na.rm = TRUE
     ) +
     ggplot2::geom_line(
-      ggplot2::aes(y = fitted, group = 1),
+      ggplot2::aes(x = len + w / 2, y = fitted, group = 1),
       colour = fitted_colour,
       linewidth = fitted_linewidth
     ) +
     ggplot2::scale_x_continuous(breaks = x_breaks) +
     ggplot2::labs(
       x = "Length",
-      y = "Proportion",
+      y = ylab,
       title = title
     ) +
     ggplot2::theme_bw() +
@@ -779,7 +787,10 @@ plot_LBIspr <- function(fit, gear = NULL, spr = 40, thresh = 0.8,
 #'   units. With `sex = TRUE`, `type = "prop"` gives proportions within each
 #'   gear-year (females and males jointly, so the sex ratio is kept).
 #' @param sex_cols Optional named colours replacing the defaults
-#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45")`.
+#'   `c(F = "#D7191C", M = "#2C7BB6", U = "grey45", C = "#7B3294")`.
+#' @param sex_minlen Optional length below which the sexes are combined in
+#'   the sexed samples (as `settings$sex_minlen` of [fiticc()]): those bins
+#'   are shown as combined (purple, above the line).
 #'
 #' @details
 #' Length bins are extracted from the \code{FLQuant} dimension names, ensuring
@@ -840,7 +851,8 @@ plot_lfd <- function(lfd,
                      ncol = NULL,
                      lwd = 0.5,
                      sex = NULL,
-                     sex_cols = NULL) {
+                     sex_cols = NULL,
+                     sex_minlen = NULL) {
 
   type <- match.arg(type)
 
@@ -848,7 +860,7 @@ plot_lfd <- function(lfd,
     sex <- any(unlist(lapply(lfd, function(q)
       sex_code_flicc(dimnames(q)$unit, strict = FALSE) %in% c("F", "M"))))
   if (isTRUE(sex)) {
-    df <- lfd_sex_long_flicc(lfd, scale = type, iter = iter)
+    df <- lfd_sex_long_flicc(lfd, scale = type, iter = iter, sex_minlen = sex_minlen)
     names(df)[names(df) == "data"] <- "observed"
     ylab <- c(raw = "Frequency", prop = "Proportion", relmax = "Relative frequency")[type]
     return(plot_sex_mirror_flicc(df, sex_cols_flicc(sex_cols), len_by = len_by, ylab = ylab,
@@ -2356,6 +2368,15 @@ epr_ci_flicc <- function(fit, level = 0.95) ratio_ci_flicc(fit, "epr", level)
 #' @noRd
 ratio_ci_flicc <- function(fit, what = c("spr", "epr"), level = 0.95) {
   what <- match.arg(what)
+  z <- stats::qnorm(1 - (1 - level) / 2)
+  bys <- fit$by_year_se[[what]]
+  if (!is.null(bys)) {                                     # by_year fits: standard errors of every year
+    est <- bys[[what]]
+    out <- data.frame(year = as.character(bys$year), est = est, se_log = bys$se_log,
+                      lwr = est * exp(-z * bys$se_log), upr = est * exp(z * bys$se_log), row.names = NULL)
+    names(out)[2] <- what
+    return(out)
+  }
   if (is.null(fit$rep)) return(NULL)
   s <- summary(fit$rep, "report")
   s <- s[rownames(s) == paste0("log_", what, "_y"), , drop = FALSE]
