@@ -27,7 +27,9 @@ spm_settings_flicc(
   newton.it = 12,
   P.bound = c(0.02, 1.3),
   sel.weights = "catch",
-  timing = c("start", "mean")
+  timing = c("start", "mean"),
+  re = TRUE,
+  sdi = NULL
 )
 }
 \arguments{
@@ -71,7 +73,8 @@ or \code{"spr"} (Fspr at \code{spr.tgt})}
 
 \item{bkinit}{prior on SB_1/SB0: c(median, log sd, on)}
 
-\item{sdb}{prior on the process error SD: c(median, log sd, on)}
+\item{sdb}{prior on the process error SD: c(median, log sd, on). With
+\code{re = FALSE} the SD is fixed at the median}
 
 \item{K}{prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
 catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
@@ -91,6 +94,22 @@ multiplied by the female share of recruits (\code{sex_ratio})}
 \item{timing}{biomass per recruit for the SPM (EB/SB curves, Hmsy):
 \code{"start"} of the year (default, as the discrete SPM's harvest rate
 C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)}
+
+\item{re}{logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
+random effects, integrated out by the Laplace approximation, and the process
+error SD is estimated. \code{FALSE}: penalised likelihood, as SS3 treats
+recruitment deviations; the states are fixed effects with the process error
+density as a penalty and the SD fixed at \code{sdb[1]} (an estimated SD
+collapses to zero without the Laplace approximation). About 10-20 times
+faster; for ensembles, sensitivity grids and MSE, with \code{re = TRUE} for
+final runs. Without \code{index.se} the additive index SD is then fixed
+too (\code{sdi}), since the free states would otherwise fit the index
+exactly and the SD would collapse}
+
+\item{sdi}{additive index SD (log scale), one value or one per index.
+\code{NULL} (default): estimated (total SD sqrt(se^2 + sdi^2)), except with
+\code{re = FALSE} and no \code{index.se}, where it is fixed at 0.2. A value
+fixes it}
 }
 \value{
 list of settings

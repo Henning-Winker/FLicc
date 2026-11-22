@@ -177,3 +177,28 @@ ALK declarations side by side in `FLicc.cpp`, `data_tmb_flicc`,
   (k estimated 0.091 vs 0.080, converged). Full CI suite passes locally.
 - Merge order for Monday: merging `dev-spm` into main brings `alk-growth` too
   (main is an ancestor of `alk-growth`, which is an ancestor of `dev-spm`).
+
+## Speed: penalised option and Hessian reuse, 22 Nov 2026
+
+Profile of the hake fit (sexed, 4 gears, 51 fixed parameters, 22 SPM states),
+about 170 s: `nlminb` ~90 s (226 iterations), Newton polish ~45 s (two
+finite-difference Hessians), `sdreport` ~27 s (a third). A Laplace evaluation
+costs 0.07 s (objective) / 0.14 s (gradient), the joint objective 0.006 / 0.018 s.
+A smaller F grid barely helps (and 31 or 21 points broke Laplace convergence);
+a penalised start does not cut the Laplace iterations (191).
+
+- **Hessian reuse:** `fiticc_core()` caches the last Hessian of the polish and
+  passes it to `sdreport(hessian.fixed = )` when the fit ends at that point.
+  Identical SEs; hake 168 → 155 s. Applies to all fits with `se = TRUE`.
+- **`spm_settings_flicc(re = FALSE)`:** penalised likelihood (as SS3's
+  recruitment deviations). States are fixed effects with the process density
+  as penalty; the process SD is fixed at `sdb[1]` (estimated, it collapses to
+  0.001). Without `index.se` the additive index SD is fixed as well (`sdi`,
+  default 0.2): otherwise it collapses (0.15 → 0.04 in the test) and biases the
+  states (SB/SB0 end 0.096 vs true 0.130; with sdi fixed 0.126). With
+  `index.se` the SE is a floor and sdi stays estimated. New argument `sdi` fixes
+  the additive SD in either mode.
+- Hake, `re = FALSE`: 15–16 s including SEs; SB/SB0 2024 0.238 [0.14–0.41] vs
+  Laplace 0.252 [0.15–0.41]; F/Fmsy 0.62 vs 0.59. Simulation test: 4 s vs 31 s.
+- The penalised objective has no log-determinant and is not comparable with the
+  Laplace objective.

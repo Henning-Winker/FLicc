@@ -40,7 +40,22 @@
 #'   \code{NA} estimates it (default \code{c(spr = 0, F = 0)}, independent errors)
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
-#' @param sdb prior on the process error SD: c(median, log sd, on)
+#' @param sdb prior on the process error SD: c(median, log sd, on). With
+#'   \code{re = FALSE} the SD is fixed at the median
+#' @param re logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
+#'   random effects, integrated out by the Laplace approximation, and the process
+#'   error SD is estimated. \code{FALSE}: penalised likelihood, as SS3 treats
+#'   recruitment deviations; the states are fixed effects with the process error
+#'   density as a penalty and the SD fixed at \code{sdb[1]} (an estimated SD
+#'   collapses to zero without the Laplace approximation). About 10-20 times
+#'   faster; for ensembles, sensitivity grids and MSE, with \code{re = TRUE} for
+#'   final runs. Without \code{index.se} the additive index SD is then fixed
+#'   too (\code{sdi}), since the free states would otherwise fit the index
+#'   exactly and the SD would collapse
+#' @param sdi additive index SD (log scale), one value or one per index.
+#'   \code{NULL} (default): estimated (total SD sqrt(se^2 + sdi^2)), except with
+#'   \code{re = FALSE} and no \code{index.se}, where it is fixed at 0.2. A value
+#'   fixes it
 #' @param K prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
 #'   catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
 #'   above, log sd 0.833), or c(median, log sd, on) in catch units (lognormal), or
@@ -62,12 +77,12 @@ spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, inde
                                lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
-                               timing = c("start", "mean")) {
+                               timing = c("start", "mean"), re = TRUE, sdi = NULL) {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
        h = h, shape = match.arg(shape), spr.tgt = spr.tgt, r.sd = r.sd, m.sd = m.sd, link = link,
        sigma.link = sigma.link, sigma.Flink = sigma.Flink, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
        xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights,
-       timing = match.arg(timing))
+       timing = match.arg(timing), re = isTRUE(re), sdi = sdi)
 }
 
 # gear weights of the per-recruit selectivity: "F" (0: F-weighted joint
@@ -210,8 +225,15 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
   map$spm_trho <- factor(ifelse(est_rho, seq_along(rl), NA))
   if (sp$r.sd <= 0) map$spm_logr <- factor(NA)
   if (sp$m.sd <= 0) map$spm_logm <- factor(NA)
-  if (sp$sdb[3] == 0 && FALSE) map$spm_logsdb <- factor(NA)
   if (nidx == 0) { map$spm_logq <- factor(NA); map$spm_logsdi <- factor(NA) }
+  sdi_fix <- if (!is.null(sp$sdi)) sp$sdi else if (isFALSE(sp$re) && is.null(sp$index.se)) 0.2 else NULL
+  if (nidx > 0 && !is.null(sdi_fix)) {
+    parameters$spm_logsdi <- log(rep_len(as.numeric(sdi_fix), nidx)); map$spm_logsdi <- factor(rep(NA, nidx))
+  }
+  if (isFALSE(sp$re)) {          # penalised likelihood: states fixed effects, process SD fixed
+    map$spm_logsdb <- factor(NA)
+    return(list(tmb_data = tmb_data, parameters = parameters, map = map, random = random))
+  }
   list(tmb_data = tmb_data, parameters = parameters, map = map, random = c(random, "spm_logP"))
 }
 

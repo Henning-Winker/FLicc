@@ -42,6 +42,16 @@ stopifnot(
 f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
                           settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3), se = FALSE)
 stopifnot(!any(grepl("^spm_", names(f0$opt$par))), is.null(f0$report$P))
+# penalised likelihood (re = FALSE): states as fixed effects, process SD fixed; close to the Laplace fit
+spm_p <- spm; spm_p$re <- FALSE; spm_p$sdb <- c(exp(fit$opt$par[["spm_logsdb"]]), 0.5, 1)
+tp <- system.time(fp <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                  settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm_p)))[3]
+rpp <- fp$report
+cat(sprintf("penalised: %.1f s, conv %d, SB/SB0 end %.3f (Laplace %.3f, true %.3f), SPR end %.3f (Laplace %.3f)\n", tp,
+            fp$opt$convergence, tail(rpp$P, 1), tail(rp$P, 1), tail(sim$depletion, 1), tail(rpp$spr_y, 1), tail(rp$spr_y, 1)))
+stopifnot(is.null(fp$obj$env$random) || !any(names(fp$obj$env$par)[fp$obj$env$random] == "spm_logP"),
+          !any(c("spm_logsdb", "spm_logsdi") %in% names(fp$opt$par)), fp$opt$convergence == 0,
+          abs(log(tail(rpp$P, 1) / tail(rp$P, 1))) < 0.15, abs(log(tail(rpp$spr_y, 1) / tail(rp$spr_y, 1))) < 0.1)
 # sex structure: identical sexes reproduce the one-sex FLicc-SPM fit
 stk2 <- stocklen_sex(lfd, list(F = lhp, M = lhp), m_model = "constant")
 fs <- fiticc(lfd, stk2, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,

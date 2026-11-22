@@ -1016,11 +1016,16 @@ fiticc_core <- function(lfd, stklen,
   # of the gradient with random effects). Steps that do not lower the
   # objective are rejected. Also gives the Hessian check and the Newton
   # decrement 0.5 g'H^-1 g (expected remaining improvement in log-likelihood).
+  # The last Hessian is cached with its parameters and reused by sdreport() when
+  # the fit ends there (saves one more finite-difference Hessian with random effects).
+  hcache <- new.env(); hcache$p <- NULL; hcache$H <- NULL
   hess_fun <- function(p) {
     H <- if (is.null(random)) tryCatch(obj$he(p), error = function(e) NULL) else NULL
     if (is.null(H)) H <- tryCatch(stats::optimHess(p, obj$fn, obj$gr), error = function(e) NULL)
     if (is.null(H) || any(!is.finite(H))) return(NULL)
-    (H + t(H)) / 2
+    H <- (H + t(H)) / 2
+    hcache$p <- as.numeric(p); hcache$H <- H
+    H
   }
   newton_state <- function(p) {
     g <- as.numeric(obj$gr(p))
@@ -1109,7 +1114,9 @@ fiticc_core <- function(lfd, stklen,
   }
 
   if (isTRUE(se)) {
-    rep <- TMB::sdreport(obj)
+    Hfix <- if (!is.null(hcache$H) && identical(hcache$p, as.numeric(opt$par))) hcache$H else NULL
+    rep <- if (is.null(Hfix)) TMB::sdreport(obj) else
+      tryCatch(TMB::sdreport(obj, hessian.fixed = Hfix), error = function(e) TMB::sdreport(obj))
     adrep <- summary(rep, "fixed")
   } else {
     # no standard errors requested (e.g. inside an MSE): skip sdreport
