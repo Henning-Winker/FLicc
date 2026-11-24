@@ -27,8 +27,14 @@
 #'   selectivity of the fishery, default) or \code{"SB"} (spawning biomass)
 #' @param index.units per index, \code{"biomass"} (default) or \code{"numbers"}
 #' @param h Beverton-Holt steepness (default \code{lhpar["s"]}, else 0.7)
-#' @param shape source of r and m: \code{"fmsy"} (maximum equilibrium yield, default)
-#'   or \code{"spr"} (Fspr at \code{spr.tgt})
+#' @param shape source of the reference harvest rate for r: \code{"fmsy"}
+#'   (maximum equilibrium yield, default) or \code{"spr"} (Fspr at \code{spr.tgt}).
+#'   With mean-year exploitable biomass the harvest rate equals F, so r = m Fmsy
+#'   (Schaefer: r = 2 Fmsy)
+#' @param BmsyK Bmsy/K of the production function. \code{"auto"} (default): from
+#'   the per-recruit equilibrium when steepness is given (\code{h}, or \code{s} in
+#'   the life-history parameters), else 0.4; a
+#'   value fixes the shape m; \code{NULL} always takes the per-recruit value
 #' @param spr.tgt SPR target for \code{shape = "spr"}
 #' @param r.sd log-scale SD of the penalty log r ~ N(log r(theta), r.sd); 0 fixes r at r(theta)
 #' @param m.sd as \code{r.sd} for the shape m (default 0: m = m(theta))
@@ -41,8 +47,12 @@
 #'   with the link SD fixed, rho runs to 1
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
-#' @param sdb prior on the process error SD: c(median, log sd, on). With
-#'   \code{re = FALSE} the SD is fixed at the median
+#' @param sdb prior on the process error SD: c(median, log sd, on), or
+#'   \code{"fishlife"}: centred on 0.8 sigR (2 Hmsy)^0.45, the FishLife relation at
+#'   the Schaefer-equivalent r = 2 Fmsy (log sd 0.3, as JABBA3; it follows the
+#'   estimated Fmsy). With \code{re = FALSE} the SD is fixed at the median (at the
+#'   FishLife value with \code{"fishlife"})
+#' @param sigR recruitment SD for \code{sdb = "fishlife"}
 #' @param re logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
 #'   random effects, integrated out by the Laplace approximation, and the process
 #'   error SD is estimated. \code{FALSE}: penalised likelihood, as SS3 treats
@@ -68,8 +78,8 @@
 #' @param sel.weights gear weights of the per-recruit selectivity: \code{"catch"}
 #'   (catch shares, default), \code{"F"} (F-weighted joint selectivity) or a vector
 #' @param timing biomass per recruit for the SPM (EB/SB curves, Hmsy):
-#'   \code{"start"} of the year (default, as the discrete SPM's harvest rate
-#'   C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)
+#'   \code{"mean"} of the year (default; C_t / EB_t = F, the common currency) or
+#'   \code{"start"} of the year (legacy)
 #' @param frw random walk on the log harvest rate H_t = C_t / EB_t (SPiCT-like F
 #'   process, as JABBA3 \code{frw}): \code{"none"} (default; catch-conditioned,
 #'   as JABBA), \code{"index"} (increments from the first index year on) or
@@ -83,15 +93,15 @@
 #' @return list of settings
 #' @export
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
-                               index.units = "biomass", h = NULL, shape = c("fmsy", "spr"), spr.tgt = 0.4,
+                               index.units = "biomass", h = NULL, shape = c("fmsy", "spr"), spr.tgt = 0.4, BmsyK = "auto",
                                r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, link.rho = 0,
-                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
+                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), sigR = 0.5, K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
-                               timing = c("start", "mean"), re = TRUE, sdi = NULL,
+                               timing = c("mean", "start"), re = TRUE, sdi = NULL,
                                frw = c("none", "index", "all"), catch.error = FALSE, sdc = 0.1, sdf = c(0.3, 1, 1)) {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
-       h = h, shape = match.arg(shape), spr.tgt = spr.tgt, r.sd = r.sd, m.sd = m.sd, link = link,
+       h = h, shape = match.arg(shape), spr.tgt = spr.tgt, BmsyK = BmsyK, sigR = sigR, r.sd = r.sd, m.sd = m.sd, link = link,
        sigma.link = sigma.link, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
        xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights,
        timing = match.arg(timing), re = isTRUE(re), sdi = sdi,
@@ -147,7 +157,8 @@ spm_defaults_tmb_flicc <- function(td) {
             spm_spr_tgt = 0.4, spm_r_sd = 0, spm_m_sd = 0, spm_link_spr = 0L, spm_sigma_link = 1,
             spm_lagidx = 0L, spm_bk_pr = c(1, 1, 0),
             spm_sdb_pr = c(1, 1, 0), spm_K_pr = c(1, 1, 0), spm_xgrid = c(0, 1), spm_newton_it = 1L,
-            spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 1L,
+            spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 0L,
+            spm_bmsyk = -1, spm_sdb_fl = 0L, spm_sigR = 0.5,
             spm_catch_err = 0L, spm_sdc = 0.1, spm_frw_t = integer(0), spm_sdf_pr = c(0.3, 1, 0))
   for (n in names(d)) if (is.null(td[[n]])) td[[n]] <- d[[n]]
   td
@@ -206,6 +217,7 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
   lh <- tryCatch(attr(stklen, "lhpar"), error = function(e) NULL)
   if (is.null(lh)) lh <- tryCatch(stklen@lhpar, error = function(e) NULL)
   h <- sp$h
+  h_given <- !is.null(h) || (!is.null(lh) && "s" %in% dimnames(lh)$params)
   if (is.null(h)) h <- if (!is.null(lh) && "s" %in% dimnames(lh)$params) as.numeric(lh["s"])[1] else 0.7
   mucatch <- mean(catch)
   fsr <- if (isTRUE(tmb_data$nsex == 2L)) as.numeric(tmb_data$sex_ratio) else 1   # K is female SB0 with two sexes
@@ -223,7 +235,11 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_r_sd = as.numeric(sp$r.sd), spm_m_sd = as.numeric(sp$m.sd),
     spm_link_spr = as.integer("spr" %in% lk), spm_sigma_link = as.numeric(sp$sigma.link),
     spm_lagidx = as.integer(pmax(seq_len(NT) - 1L - round(sp$lag), 0L)),
-    spm_bk_pr = as.numeric(sp$bkinit), spm_sdb_pr = as.numeric(sp$sdb),
+    spm_bk_pr = as.numeric(sp$bkinit),
+    spm_sdb_pr = if (identical(sp$sdb, "fishlife")) c(0.15, 0.3, as.numeric(!isFALSE(sp$re))) else as.numeric(sp$sdb),
+    spm_sdb_fl = as.integer(identical(sp$sdb, "fishlife")), spm_sigR = as.numeric(sp$sigR %||% 0.5),
+    spm_bmsyk = if (is.numeric(sp$BmsyK)) as.numeric(sp$BmsyK) else
+                if (identical(sp$BmsyK, "auto") && !h_given) 0.4 else -1,
     spm_K_pr = if (is.null(sp$K)) c(1, 1, 0) else if (identical(sp$K, "half8"))
                  c(5.7 * max(catch) / mucatch * fsr, 0.833, 2)
                else c(sp$K[1] / mucatch, sp$K[2], sp$K[3]),
@@ -237,7 +253,7 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_info = list(years = yrs, mucatch = mucatch, index.names = if (nidx) colnames(I) else character(0),
                     obs = ok, settings = sp)))
   bk <- min(max(sp$bkinit[1], 0.05), 1.2)
-  parameters[spm_names] <- list(log(10), log(0.3), log(2), log(bk), log(sp$sdb[1]),
+  parameters[spm_names] <- list(log(10), log(0.3), log(2), log(bk), log(if (is.numeric(sp$sdb)) sp$sdb[1] else 0.15),
                                 rep(0, max(nidx, 1)), rep(log(0.2), max(nidx, 1)), rep(log(bk), NT), 0,
                                 rep(0, NT), log((sp$sdf %||% 0.3)[1]))
   rl <- sp$link.rho

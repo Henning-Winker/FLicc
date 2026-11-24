@@ -3,7 +3,7 @@
 # Fast per-recruit engine at the fitted life history: returns a function of
 # fishing mortality at length (annual, length nlen) giving SPR and YPR. Mirrors
 # the reference-point block of the TMB template (GTG or gamma recursion, catch
-# N F / Z (1 - exp(-Z)), SBPR = sum(N mat w)).
+# N F for numbers integrated over the time in each length class, SBPR = sum(N mat w)).
 pr_engine_flicc <- function(fit, nyears = 1) {
   rp <- fit$report
   td <- fit$tmb_data
@@ -64,14 +64,12 @@ pr_engine_flicc <- function(fit, nyears = 1) {
   two <- exists("popNm", inherits = FALSE)
   function(Fl, detail = FALSE) {
     N <- popN(Fl) / s0
-    Z <- M + Fl
-    C <- ifelse(Z > 0, N * Fl / Z * (1 - exp(-Z)), 0)
+    C <- N * Fl
     Cw <- C * w
     if (two) {
       # per total recruit: females sex_ratio, males 1 - sex_ratio; SPR female
       Nm <- popNm(Fl) / s0
-      Zm <- M_m + Fl
-      Cm <- ifelse(Zm > 0, Nm * Fl / Zm * (1 - exp(-Zm)), 0)
+      Cm <- Nm * Fl
       Cw <- sr * Cw + (1 - sr) * Cm * w_m
     }
     out <- c(SPR = sum(N * mat * w) / SB0, YPR = sum(Cw))

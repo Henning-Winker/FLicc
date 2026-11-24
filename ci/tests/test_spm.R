@@ -42,6 +42,8 @@ stopifnot(
 f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
                           settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3), se = FALSE)
 stopifnot(!any(grepl("^spm_", names(f0$opt$par))), is.null(f0$report$P))
+# common currency: with mean-year exploitable biomass and catch = N F, the per-recruit harvest rate equals F
+stopifnot(abs(rp$Hmsy_pr / rp$Fref - 1) < 1e-6)
 # penalised likelihood (re = FALSE): states as fixed effects, process SD fixed; close to the Laplace fit
 spm_p <- spm; spm_p$re <- FALSE; spm_p$sdb <- c(exp(fit$opt$par[["spm_logsdb"]]), 0.5, 1)
 tp <- system.time(fp <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,

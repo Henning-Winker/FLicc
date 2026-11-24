@@ -212,3 +212,22 @@ good as or better than any F-link variant, including a lag-weighted F link.
 `link.rho` is now one fixed value (default 0); estimating it was degenerate
 (rho -> 1 with the marginal link SD fixed). The F link, the lag weights
 (`lag.F`) and the comparisons are kept on branch `memory/spm-flink`.
+
+## Common currency: catch per recruit fixed, mean-year EB, r from Fmsy, 24 Nov 2026
+
+- **Bug:** numbers at length from `pop_len_gtg()` are integrated over the time in
+  each class (deaths / Z), but catch per recruit applied Baranov on top
+  (N F / Z (1 - exp(-Z))), underestimating catch by (1 - exp(-Z)) / Z. Affected
+  the reference points (YPR, Fmsy, MSY), the SPM block (Hmsy, r, K) and the R
+  per-recruit code. The likelihood (catch at length = N x selectivity) was
+  already consistent. Fixed: catch = N F everywhere (`compute_catch.n(integrated
+  = TRUE)` for FLicc numbers).
+- **SPM currency:** exploitable biomass is the mean over the year by default
+  (`timing = "mean"`), so C / EB = F and Hmsy = Fmsy; r = m Fmsy.
+- **Shape:** `BmsyK = "auto"` (per recruit when steepness is given, else 0.4), a
+  value fixes it, `NULL` always per recruit.
+- **Process error:** optional `sdb = "fishlife"`, centred on 0.8 sigR (2 Fmsy)^0.45.
+- **Validation:** Hmsy/Fref = 1; reef OMs, per-recruit MSY/SB0 and Bmsy/SB0 against
+  FLOSS morph refpts: rabbitfish 0.569/0.271 vs 0.577/0.273, emperor 0.080/0.294 vs
+  0.080/0.295, snapper 0.076/0.303 vs 0.072/0.302; SPM K/B0 0.98-1.20 (was up to
+  3.1). Alfonsino per-recruit Bmsy/K 0.277 vs true 0.275 (was 0.295).

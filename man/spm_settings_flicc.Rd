@@ -13,6 +13,7 @@ spm_settings_flicc(
   h = NULL,
   shape = c("fmsy", "spr"),
   spr.tgt = 0.4,
+  BmsyK = "auto",
   r.sd = 0.2,
   m.sd = 0,
   link = "spr",
@@ -21,12 +22,13 @@ spm_settings_flicc(
   lag = 0,
   bkinit = c(0.9, 0.25, 1),
   sdb = c(0.15, 0.5, 1),
+  sigR = 0.5,
   K = "half8",
   xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
   newton.it = 12,
   P.bound = c(0.02, 1.3),
   sel.weights = "catch",
-  timing = c("start", "mean"),
+  timing = c("mean", "start"),
   re = TRUE,
   sdi = NULL,
   frw = c("none", "index", "all"),
@@ -53,10 +55,17 @@ selectivity of the fishery, default) or \code{"SB"} (spawning biomass)}
 
 \item{h}{Beverton-Holt steepness (default \code{lhpar["s"]}, else 0.7)}
 
-\item{shape}{source of r and m: \code{"fmsy"} (maximum equilibrium yield, default)
-or \code{"spr"} (Fspr at \code{spr.tgt})}
+\item{shape}{source of the reference harvest rate for r: \code{"fmsy"}
+(maximum equilibrium yield, default) or \code{"spr"} (Fspr at \code{spr.tgt}).
+With mean-year exploitable biomass the harvest rate equals F, so r = m Fmsy
+(Schaefer: r = 2 Fmsy)}
 
 \item{spr.tgt}{SPR target for \code{shape = "spr"}}
+
+\item{BmsyK}{Bmsy/K of the production function. \code{"auto"} (default): from
+the per-recruit equilibrium when steepness is given (\code{h}, or \code{s} in
+the life-history parameters), else 0.4; a
+value fixes the shape m; \code{NULL} always takes the per-recruit value}
 
 \item{r.sd}{log-scale SD of the penalty log r ~ N(log r(theta), r.sd); 0 fixes r at r(theta)}
 
@@ -76,8 +85,13 @@ with the link SD fixed, rho runs to 1}
 
 \item{bkinit}{prior on SB_1/SB0: c(median, log sd, on)}
 
-\item{sdb}{prior on the process error SD: c(median, log sd, on). With
-\code{re = FALSE} the SD is fixed at the median}
+\item{sdb}{prior on the process error SD: c(median, log sd, on), or
+\code{"fishlife"}: centred on 0.8 sigR (2 Hmsy)^0.45, the FishLife relation at
+the Schaefer-equivalent r = 2 Fmsy (log sd 0.3, as JABBA3; it follows the
+estimated Fmsy). With \code{re = FALSE} the SD is fixed at the median (at the
+FishLife value with \code{"fishlife"})}
+
+\item{sigR}{recruitment SD for \code{sdb = "fishlife"}}
 
 \item{K}{prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
 catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
@@ -95,8 +109,8 @@ multiplied by the female share of recruits (\code{sex_ratio})}
 (catch shares, default), \code{"F"} (F-weighted joint selectivity) or a vector}
 
 \item{timing}{biomass per recruit for the SPM (EB/SB curves, Hmsy):
-\code{"start"} of the year (default, as the discrete SPM's harvest rate
-C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)}
+\code{"mean"} of the year (default; C_t / EB_t = F, the common currency) or
+\code{"start"} of the year (legacy)}
 
 \item{re}{logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
 random effects, integrated out by the Laplace approximation, and the process

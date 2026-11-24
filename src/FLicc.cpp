@@ -427,6 +427,9 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR(spm_idx_units); // nidx: 1 biomass, 0 numbers
   DATA_SCALAR(spm_h);          // Beverton-Holt steepness
   DATA_INTEGER(spm_shape);     // source of r and m: 0 Fmsy, 1 Fspr (spm_spr_tgt)
+  DATA_SCALAR(spm_bmsyk);      // > 0: fixed Bmsy/K of the production function (shape m from it); <= 0: per recruit
+  DATA_INTEGER(spm_sdb_fl);    // 1: process SD centred on 0.8 sigR (2 Hmsy)^0.45 (FishLife, Schaefer-equivalent r = 2 Fmsy)
+  DATA_SCALAR(spm_sigR);       // recruitment SD for spm_sdb_fl
   DATA_SCALAR(spm_spr_tgt);
   DATA_SCALAR(spm_r_sd);       // > 0: log r ~ N(log r(theta), spm_r_sd); <= 0: r = r(theta)
   DATA_SCALAR(spm_m_sd);       // > 0: log m ~ N(log m(theta), spm_m_sd); <= 0: m = m(theta)
@@ -1110,9 +1113,9 @@ Type objective_function<Type>::operator() ()
     // fishery (both sexes, weight) and of each index (biomass or numbers)
     // out: 0 SBPR (FLicc convention, for SPR, Fref, BmsyK), 1 YPR, 2 EBPR of the
     // fishery, 3.. EBPR of each index, last SBPR for the EB/SB ratios. With
-    // spm_timing = 1 the biomasses for the SPM (EB, index, last SB) are at the
-    // start of the year: mean numbers x Z / (1 - exp(-Z)), so that Hmsy =
-    // YPR / EBPR matches the harvest rate C_t / EB_t of the discrete SPM.
+    // spm_timing = 0 (default) the biomasses are means over the year, so that
+    // C / EB = F (Hmsy = Fmsy, the common currency with F). spm_timing = 1
+    // (legacy) converts them to the start of the year (x Z / (1 - exp(-Z))).
     int nq_out = 4 + spm_nidx;
     auto prq = [&](Type x) {
       vector<Type> out(nq_out);
@@ -1124,7 +1127,7 @@ Type objective_function<Type>::operator() ()
       if(nsex == 2) NIm = popM(x, Zlm);
       for(int l = 0; l < nlen; l++) {
         Type n = NI(l) / scale0;
-        Type c = n * x * sA(l) / Zl(l) * (Type(1) - exp(-Zl(l)));
+        Type c = n * x * sA(l);                          // catch = N F (time-integrated numbers)
         out(0) += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
         Type cf = (spm_timing == 1) ? Type(Zl(l) / (Type(1) - exp(-Zl(l)))) : Type(1);
         Type cfm = cf;
@@ -1135,7 +1138,7 @@ Type objective_function<Type>::operator() ()
         Type nm = Type(0), cm = Type(0);
         if(nsex == 2) {
           nm = NIm(l) / scale0;
-          cm = nm * x * sA(l) / Zlm(l) * (Type(1) - exp(-Zlm(l)));
+          cm = nm * x * sA(l);
           out(1) += male_w * cm * wtA_m(l);
           if(spm_timing == 1) cfm = Zlm(l) / (Type(1) - exp(-Zlm(l)));
           out(2) += male_w * nm * cfm * wtA_m(l) * sA(l);
@@ -1240,7 +1243,7 @@ Type objective_function<Type>::operator() ()
     Type Hmsy_pr = qr(1) / qr(2);                      // yield / exploitable biomass at Fref
     Type Yref = recbh(spr_ref) * qr(1);                // equilibrium yield per R0 at Fref
     // Pella-Tomlinson shape from BmsyK = m^(-1/(m-1)): Newton on v = log m
-    Type lbk_ref = log(BmsyK_pr);
+    Type lbk_ref = (spm_bmsyk > Type(0)) ? Type(log(spm_bmsyk)) : Type(log(BmsyK_pr));
     auto fv = [&](Type v) {
       Type ev = exp(v) - Type(1);
       Type av = CppAD::CondExpLt(fabs(v), Type(1e-6), Type(1) - v / Type(2), v / (ev + Type(1e-30)));
@@ -1256,7 +1259,8 @@ Type objective_function<Type>::operator() ()
       vm += step;
     }
     Type m_pr = exp(vm);
-    Type r_pr = m_pr * Hmsy_pr;                        // JABBA3: Hmsy = r / (m - 1) (1 - 1/m)
+    Type r_pr = m_pr * Hmsy_pr;                        // Hmsy = r / m (JABBA3); Hmsy = Fmsy with mean-year EB
+    Type sdb_fl = Type(0.8) * spm_sigR * pow(Type(2) * Hmsy_pr, Type(0.45));   // FishLife SD at r_Schaefer = 2 Hmsy
 
     // ---- state-space surplus production model (JABBA3 Selex, SB state) ----
     Type K = exp(spm_logK);
@@ -1272,7 +1276,10 @@ Type objective_function<Type>::operator() ()
     }
     if(spm_bk_pr(2) > Type(0)) nll -= dnorm(spm_lbk, log(spm_bk_pr(0)), spm_bk_pr(1), true);
     Type sdb = exp(spm_logsdb);
-    if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);
+    if(spm_sdb_fl == 1) {
+      if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(sdb_fl), spm_sdb_pr(1), true);
+      else sdb = sdb_fl;                               // penalised fit: SD fixed at the FishLife value
+    } else if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);
     vector<Type> sdi = exp(spm_logsdi);
     for(int i = 0; i < spm_nidx; i++) {
       // JABBA: gamma(0.001, 0.001) on 1/sdi^2 (with Jacobian), soft upper bound 1
@@ -1357,7 +1364,7 @@ Type objective_function<Type>::operator() ()
     Type spm_logMSY = log(MSY_spm);
     Type spm_r = r, spm_m = m, spm_K = K, spm_sdb = sdb;
     vector<Type> spm_q = exp(spm_logq);
-    REPORT(Fref); REPORT(Yref); REPORT(spr_ref); REPORT(BmsyK_pr); REPORT(Hmsy_pr); REPORT(m_pr); REPORT(r_pr);
+    REPORT(SBPR0); REPORT(Fref); REPORT(Yref); REPORT(spr_ref); REPORT(BmsyK_pr); REPORT(Hmsy_pr); REPORT(m_pr); REPORT(r_pr); REPORT(sdb_fl);
     vector<Type> spm_sdi = sdi;
     REPORT(spm_r); REPORT(spm_m); REPORT(spm_K); REPORT(spm_sdb); REPORT(spm_sdi); REPORT(spm_q);
     REPORT(BmsyK_spm); REPORT(Hmsy_spm); REPORT(MSY_spm);
@@ -1373,7 +1380,8 @@ Type objective_function<Type>::operator() ()
   // Mirrors the R functions pr_flicc() / spr_flicc(): terminal-year averages
   // of joint selectivity (scaled to apical 1), M, maturity and weight;
   // numbers per recruit scaled to the first bin of the unfished state;
-  // Baranov catch; SBPR = sum(N * mat * exp(-Z * spawn) * w).
+  // catch = N F: the numbers at length are integrated over the time spent in
+  // each class (deaths / Z), so no Baranov factor; SBPR = sum(N * mat * exp(-Z * spawn) * w).
   if(isDouble<Type>::value && (brp_F.size() > 0 || brp_spr.size() > 0)) {
     int ny = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
     int y0 = nyear - ny;
@@ -1466,7 +1474,7 @@ Type objective_function<Type>::operator() ()
       Type sb = Type(0), yp = Type(0);
       for(int l = 0; l < nlen; l++) {
         Type n = NI(l) / scale0;
-        Type c = (Zl(l) > Type(0)) ? n * Fl(l) / Zl(l) * (Type(1) - exp(-Zl(l))) : Type(0);
+        Type c = n * Fl(l);
         brp_N(l, i) = n; brp_C(l, i) = c; brp_Fl(l, i) = Fl(l);
         sb += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
         yp += sex_ratio * c * wtA(l);
@@ -1476,7 +1484,7 @@ Type objective_function<Type>::operator() ()
         vector<Type> NIm = popNm(brp_F(i), Flm, Zlm);
         for(int l = 0; l < nlen; l++) {
           Type n = NIm(l) / scale0;
-          Type c = (Zlm(l) > Type(0)) ? n * Flm(l) / Zlm(l) * (Type(1) - exp(-Zlm(l))) : Type(0);
+          Type c = n * Flm(l);
           brp_N_m(l, i) = n; brp_C_m(l, i) = c;
           yp += male_w * c * wtA_m(l);
         }

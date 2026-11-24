@@ -786,7 +786,8 @@ nf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
 #'
 #' Computes equilibrium catch-at-length from a fitted
 #' \code{"flicc_tmb_fit"} object under a specified fishing mortality,
-#' using the Baranov catch equation.
+#' as catch = N F (FLicc numbers at length are integrated over the time spent
+#' in each class).
 #'
 #' @param fit A fitted \code{"flicc_tmb_fit"} object.
 #' @param nyears Integer. Number of terminal years to average over.
@@ -844,7 +845,7 @@ cf_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
     R0 = R0
   )
 
-  Cl <- Nl * zobj$F_l / zobj$Z_l * (1 - exp(-zobj$Z_l))
+  Cl <- Nl * zobj$F_l
   Cl[!is.finite(Cl)] <- 0
   units(Cl) <- "1000"
 
