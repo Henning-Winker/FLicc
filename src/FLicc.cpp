@@ -428,7 +428,7 @@ Type objective_function<Type>::operator() ()
   DATA_SCALAR(spm_h);          // Beverton-Holt steepness
   DATA_INTEGER(spm_shape);     // source of r and m: 0 Fmsy, 1 Fspr (spm_spr_tgt)
   DATA_SCALAR(spm_bmsyk);      // > 0: fixed Bmsy/K of the production function (shape m from it); <= 0: per recruit
-  DATA_INTEGER(spm_sdb_fl);    // 1: process SD centred on 0.8 sigR (2 Hmsy)^0.45 (FishLife, Schaefer-equivalent r = 2 Fmsy)
+  DATA_INTEGER(spm_sdb_fl);    // 1: process SD centred on sigR min(0.9 Hmsy, 1.15) (life-history relation on Hmsy = Fmsy, as JABBA3)
   DATA_SCALAR(spm_sigR);       // recruitment SD for spm_sdb_fl
   DATA_SCALAR(spm_spr_tgt);
   DATA_SCALAR(spm_r_sd);       // > 0: log r ~ N(log r(theta), spm_r_sd); <= 0: r = r(theta)
@@ -1260,7 +1260,10 @@ Type objective_function<Type>::operator() ()
     }
     Type m_pr = exp(vm);
     Type r_pr = m_pr * Hmsy_pr;                        // Hmsy = r / m (JABBA3); Hmsy = Fmsy with mean-year EB
-    Type sdb_fl = Type(0.8) * spm_sigR * pow(Type(2) * Hmsy_pr, Type(0.45));   // FishLife SD at r_Schaefer = 2 Hmsy
+    // process SD at Bmsy from the life-history relation on Hmsy (= Fmsy in the common currency): sigR min(0.9 Hmsy, 1.15)
+    // (496 FishLife species x 2 selectivities, R2 0.96; JABBA3 .sdb_hmsy)
+    Type h09 = Type(0.9) * Hmsy_pr;
+    Type sdb_fl = spm_sigR * CppAD::CondExpLt(h09, Type(1.15), h09, Type(1.15));
 
     // ---- state-space surplus production model (JABBA3 Selex, SB state) ----
     Type K = exp(spm_logK);

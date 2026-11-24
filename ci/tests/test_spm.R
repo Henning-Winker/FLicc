@@ -54,6 +54,13 @@ cat(sprintf("penalised: %.1f s, conv %d, SB/SB0 end %.3f (Laplace %.3f, true %.3
 stopifnot(is.null(fp$obj$env$random) || !any(names(fp$obj$env$par)[fp$obj$env$random] == "spm_logP"),
           !any(c("spm_logsdb", "spm_logsdi") %in% names(fp$opt$par)), fp$opt$convergence == 0,
           abs(log(tail(rpp$P, 1) / tail(rp$P, 1))) < 0.15, abs(log(tail(rpp$spr_y, 1) / tail(rp$spr_y, 1))) < 0.1)
+# process-error prior on Hmsy (= Fmsy): sdb = "fishlife" in a penalised fit fixes the SD at sigR min(0.9 Fmsy, 1.15)
+spm_f <- spm; spm_f$re <- FALSE; spm_f$sdb <- "fishlife"; spm_f$sigR <- 0.6
+ff <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                          settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm_f), se = FALSE)
+cat(sprintf("fishlife sdb: %.4f (sigR min(0.9 Fmsy, 1.15) = %.4f), conv %d\n", ff$report$spm_sdb,
+            0.6 * min(0.9 * ff$report$Fref, 1.15), ff$opt$convergence))
+stopifnot(abs(ff$report$spm_sdb / (0.6 * min(0.9 * ff$report$Fref, 1.15)) - 1) < 1e-6, ff$opt$convergence == 0)
 # sex structure: identical sexes reproduce the one-sex FLicc-SPM fit
 stk2 <- stocklen_sex(lfd, list(F = lhp, M = lhp), m_model = "constant")
 fs <- fiticc(lfd, stk2, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,

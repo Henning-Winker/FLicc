@@ -48,10 +48,10 @@
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
 #' @param sdb prior on the process error SD: c(median, log sd, on), or
-#'   \code{"fishlife"}: centred on 0.8 sigR (2 Hmsy)^0.45, the FishLife relation at
-#'   the Schaefer-equivalent r = 2 Fmsy (log sd 0.3, as JABBA3; it follows the
-#'   estimated Fmsy). With \code{re = FALSE} the SD is fixed at the median (at the
-#'   FishLife value with \code{"fishlife"})
+#'   \code{"fishlife"}: centred on sigR min(0.9 Hmsy, 1.15), the life-history
+#'   relation of the SD at Bmsy on Hmsy (= Fmsy in the common currency; log sd 0.3,
+#'   as JABBA3; it follows the estimated Fmsy). With \code{re = FALSE} the SD is
+#'   fixed at the median (at the life-history value with \code{"fishlife"})
 #' @param sigR recruitment SD for \code{sdb = "fishlife"}
 #' @param re logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
 #'   random effects, integrated out by the Laplace approximation, and the process

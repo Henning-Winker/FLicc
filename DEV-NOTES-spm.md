@@ -226,7 +226,10 @@ good as or better than any F-link variant, including a lag-weighted F link.
   (`timing = "mean"`), so C / EB = F and Hmsy = Fmsy; r = m Fmsy.
 - **Shape:** `BmsyK = "auto"` (per recruit when steepness is given, else 0.4), a
   value fixes it, `NULL` always per recruit.
-- **Process error:** optional `sdb = "fishlife"`, centred on 0.8 sigR (2 Fmsy)^0.45.
+- **Process error:** optional `sdb = "fishlife"`, centred on sigR min(0.9 Fmsy, 1.15)
+  (life-history relation on Hmsy = Fmsy, as JABBA3 PR #27 d515e43; replaces the
+  first version 0.8 sigR (2 Fmsy)^0.45, which assumed the FishLife relation was on
+  a Schaefer-equivalent r; it was on the Leslie r, and Hmsy predicts better).
 - **Validation:** Hmsy/Fref = 1; reef OMs, per-recruit MSY/SB0 and Bmsy/SB0 against
   FLOSS morph refpts: rabbitfish 0.569/0.271 vs 0.577/0.273, emperor 0.080/0.294 vs
   0.080/0.295, snapper 0.076/0.303 vs 0.072/0.302; SPM K/B0 0.98-1.20 (was up to
