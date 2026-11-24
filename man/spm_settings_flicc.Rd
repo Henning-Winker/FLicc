@@ -21,7 +21,7 @@ spm_settings_flicc(
   link.rho = 0,
   lag = 0,
   bkinit = c(0.9, 0.25, 1),
-  sdb = c(0.15, 0.5, 1),
+  sdb = "fishlife",
   sigR = 0.5,
   K = "half8",
   xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
@@ -85,11 +85,13 @@ with the link SD fixed, rho runs to 1}
 
 \item{bkinit}{prior on SB_1/SB0: c(median, log sd, on)}
 
-\item{sdb}{prior on the process error SD: c(median, log sd, on), or
-\code{"fishlife"}: centred on sigR min(0.9 Hmsy, 1.15), the life-history
-relation of the SD at Bmsy on Hmsy (= Fmsy in the common currency; log sd 0.3,
-as JABBA3; it follows the estimated Fmsy). With \code{re = FALSE} the SD is
-fixed at the median (at the life-history value with \code{"fishlife"})}
+\item{sdb}{process error SD. \code{"fishlife"} (default): centred on
+sigR min(0.9 Hmsy, 1.15), the life-history relation of the SD at Bmsy on Hmsy
+(= Fmsy in the common currency; log sd 0.3, as JABBA3), following the
+estimated Fmsy, so that resilient (high Fmsy) stocks get a larger process
+error. With \code{re = FALSE} the SD is fixed at that value. Or c(median,
+log sd, on): a lognormal prior (with \code{re = FALSE} the SD is fixed at the
+median)}
 
 \item{sigR}{recruitment SD for \code{sdb = "fishlife"}}
 

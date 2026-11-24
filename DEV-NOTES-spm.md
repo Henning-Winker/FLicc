@@ -234,3 +234,10 @@ good as or better than any F-link variant, including a lag-weighted F link.
   FLOSS morph refpts: rabbitfish 0.569/0.271 vs 0.577/0.273, emperor 0.080/0.294 vs
   0.080/0.295, snapper 0.076/0.303 vs 0.072/0.302; SPM K/B0 0.98-1.20 (was up to
   3.1). Alfonsino per-recruit Bmsy/K 0.277 vs true 0.275 (was 0.295).
+
+## Default process-error SD from Fmsy, 24 Nov 2026
+
+`spm_settings_flicc(sdb = "fishlife")` is now the default: sigR min(0.9 Fmsy, 1.15)
+(log sd 0.3 with random effects; fixed at that value in penalised fits, following the
+estimated Fmsy). The fixed 0.15 of the penalised fit was too small for resilient
+stocks (rabbitfish in the reef simulation). A numeric `sdb` gives the old behaviour.

@@ -47,11 +47,13 @@
 #'   with the link SD fixed, rho runs to 1
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
-#' @param sdb prior on the process error SD: c(median, log sd, on), or
-#'   \code{"fishlife"}: centred on sigR min(0.9 Hmsy, 1.15), the life-history
-#'   relation of the SD at Bmsy on Hmsy (= Fmsy in the common currency; log sd 0.3,
-#'   as JABBA3; it follows the estimated Fmsy). With \code{re = FALSE} the SD is
-#'   fixed at the median (at the life-history value with \code{"fishlife"})
+#' @param sdb process error SD. \code{"fishlife"} (default): centred on
+#'   sigR min(0.9 Hmsy, 1.15), the life-history relation of the SD at Bmsy on Hmsy
+#'   (= Fmsy in the common currency; log sd 0.3, as JABBA3), following the
+#'   estimated Fmsy, so that resilient (high Fmsy) stocks get a larger process
+#'   error. With \code{re = FALSE} the SD is fixed at that value. Or c(median,
+#'   log sd, on): a lognormal prior (with \code{re = FALSE} the SD is fixed at the
+#'   median)
 #' @param sigR recruitment SD for \code{sdb = "fishlife"}
 #' @param re logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
 #'   random effects, integrated out by the Laplace approximation, and the process
@@ -95,7 +97,7 @@
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
                                index.units = "biomass", h = NULL, shape = c("fmsy", "spr"), spr.tgt = 0.4, BmsyK = "auto",
                                r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, link.rho = 0,
-                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), sigR = 0.5, K = "half8",
+                               lag = 0, bkinit = c(0.9, 0.25, 1), sdb = "fishlife", sigR = 0.5, K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
                                timing = c("mean", "start"), re = TRUE, sdi = NULL,
