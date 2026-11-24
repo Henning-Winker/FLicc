@@ -9,8 +9,7 @@ stk <- stocklen(lfd, lhp, m_model = "constant")
 kd <- match(sim$data_years, sim$years); cbg <- colSums(sim$catch_w[kd, , drop = FALSE]); cbg <- cbg / sum(cbg)
 base <- list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3)
 f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg, settings = base, se = FALSE)
-lk <- switch(cfg, spr0 = list(link = "spr", link.rho = c(0, 0)), sprAR = list(link = "spr", link.rho = c(0.7, 0)),
-  FAR = list(link = "F", link.rho = c(0, 0.7)), bothAR = list(link = c("spr", "F"), link.rho = c(0.7, 0.7)))
+lk <- switch(cfg, spr0 = list(link = "spr", link.rho = 0), sprAR = list(link = "spr", link.rho = 0.7))   # F link: memory/spm-flink
 spm <- list(catch = sim$catch, index = sim$index, index.gear = "Gillnet", h = lh$h, link = lk$link, link.rho = lk$link.rho, sel.weights = if (length(args) > 3) args[4] else "F",
             xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 20))), newton.it = 6)
 t0 <- Sys.time()
@@ -28,5 +27,5 @@ cat(sprintf("seed %d %s: %.1f s conv %d tier %s maxgrad %.2g | BmsyK pr %.3f tru
 print(round(d[d$year %in% c(1975, 1990, 2000, 2005, 2010, kd + 1970), ], 3), row.names = FALSE)
 saveRDS(list(sim = sim, f0 = f0, f1 = f1, d = d), sprintf("ci/spm/fits/spm_eval_%d_%s_%s.rds", seed, shape, cfg))
 ty <- nrow(d)
-cat(sprintf("SUMMARY %s %s seed %d |", cfg, shape, seed)); cat(sprintf(" time %.0fs rho %.2f/%.2f |", secs, s$refpts["rho_spr"], s$refpts["rho_F"])); cat(sprintf("%s seed %d | terminal dep true %.3f spm %.3f flicc-Dspr %.3f | B/Bmsy true %.2f spm %.2f | F/Fmsy true %.2f spm %.2f | conv %s\n",
+cat(sprintf("SUMMARY %s %s seed %d |", cfg, shape, seed)); cat(sprintf(" time %.0fs rho %.2f |", secs, s$refpts["rho_link"])); cat(sprintf("%s seed %d | terminal dep true %.3f spm %.3f flicc-Dspr %.3f | B/Bmsy true %.2f spm %.2f | F/Fmsy true %.2f spm %.2f | conv %s\n",
   shape, seed, d$dep[ty], d$dep_spm[ty], d$dspr_flicc[ty], d$bbmsy[ty], d$bbmsy_spm[ty], d$ffmsy[ty], d$ffmsy_spm[ty], f1$diagnostics$conv_tier))

@@ -32,12 +32,13 @@
 #' @param spr.tgt SPR target for \code{shape = "spr"}
 #' @param r.sd log-scale SD of the penalty log r ~ N(log r(theta), r.sd); 0 fixes r at r(theta)
 #' @param m.sd as \code{r.sd} for the shape m (default 0: m = m(theta))
-#' @param link \code{"spr"} (default), \code{"F"}, \code{c("spr", "F")} or \code{"none"}
+#' @param link \code{"spr"} (default): the depletion implied by the length
+#'   model's SPR under steepness, log D_spr ~ N(log SB/SB0, sigma.link), links
+#'   the two models; \code{"none"}: no link
 #' @param sigma.link SD of log D_spr around log SB/SB0
-#' @param sigma.Flink SD of log H_t around the equilibrium harvest rate at the length model's F
-#' @param link.rho AR1 correlation of the link errors over the length-data years
-#'   (absorbs the equilibrium lag), \code{c(spr = , F = )}: a value fixes it,
-#'   \code{NA} estimates it (default \code{c(spr = 0, F = 0)}, independent errors)
+#' @param link.rho fixed AR1 correlation of the link errors over the
+#'   length-data years (default 0, independent errors). It cannot be estimated:
+#'   with the link SD fixed, rho runs to 1
 #' @param lag production lag in years
 #' @param bkinit prior on SB_1/SB0: c(median, log sd, on)
 #' @param sdb prior on the process error SD: c(median, log sd, on). With
@@ -73,14 +74,14 @@
 #' @export
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
                                index.units = "biomass", h = NULL, shape = c("fmsy", "spr"), spr.tgt = 0.4,
-                               r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, sigma.Flink = 0.2, link.rho = c(spr = 0, F = 0),
+                               r.sd = 0.2, m.sd = 0, link = "spr", sigma.link = 0.2, link.rho = 0,
                                lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
                                timing = c("start", "mean"), re = TRUE, sdi = NULL) {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
        h = h, shape = match.arg(shape), spr.tgt = spr.tgt, r.sd = r.sd, m.sd = m.sd, link = link,
-       sigma.link = sigma.link, sigma.Flink = sigma.Flink, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
+       sigma.link = sigma.link, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
        xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights,
        timing = match.arg(timing), re = isTRUE(re), sdi = sdi)
 }
@@ -132,7 +133,7 @@ spm_defaults_tmb_flicc <- function(td) {
             spm_logI = numeric(0), spm_obs_t = integer(0), spm_obs_i = integer(0), spm_se2 = numeric(0),
             spm_idx_gear = integer(0), spm_idx_units = integer(0), spm_h = 0.7, spm_shape = 0L,
             spm_spr_tgt = 0.4, spm_r_sd = 0, spm_m_sd = 0, spm_link_spr = 0L, spm_sigma_link = 1,
-            spm_link_F = 0L, spm_sigma_Flink = 1, spm_lagidx = 0L, spm_bk_pr = c(1, 1, 0),
+            spm_lagidx = 0L, spm_bk_pr = c(1, 1, 0),
             spm_sdb_pr = c(1, 1, 0), spm_K_pr = c(1, 1, 0), spm_xgrid = c(0, 1), spm_newton_it = 1L,
             spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 1L)
   for (n in names(d)) if (is.null(td[[n]])) td[[n]] <- d[[n]]
@@ -142,7 +143,7 @@ spm_par_defaults_flicc <- function(pl, td) {
   nidx <- if (is.null(td$spm_nidx)) 0L else td$spm_nidx
   d <- list(spm_logK = 0, spm_logr = 0, spm_logm = log(2), spm_lbk = 0, spm_logsdb = log(0.1),
             spm_logq = rep(0, max(nidx, 1L)), spm_logsdi = rep(log(0.2), max(nidx, 1L)),
-            spm_logP = rep(0, if (is.null(td$spm_nyear)) 1L else td$spm_nyear), spm_trho = c(0, 0))
+            spm_logP = rep(0, if (is.null(td$spm_nyear)) 1L else td$spm_nyear), spm_trho = 0)
   for (n in names(d)) if (is.null(pl[[n]])) pl[[n]] <- d[[n]]
   pl
 }
@@ -195,6 +196,9 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
   fsr <- if (isTRUE(tmb_data$nsex == 2L)) as.numeric(tmb_data$sex_ratio) else 1   # K is female SB0 with two sexes
   NT <- length(yrs)
   lk <- c(sp$link)
+  if (!all(lk %in% c("spr", "none")))
+    stop("settings$spm$link: \"spr\" or \"none\" (the F link was removed; it is kept on branch memory/spm-flink)",
+         call. = FALSE)
   tmb_data <- c(tmb_data[!grepl("^spm_", names(tmb_data))], list(
     spm_use = 1L, spm_nyear = NT, spm_catch = pmax(catch / mucatch, 1e-8), spm_lfd_t = as.integer(lt - 1L),
     spm_nidx = as.integer(nidx), spm_logI = log(Im[ok]), spm_obs_t = as.integer(ok[, 1] - 1L),
@@ -203,7 +207,6 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_shape = as.integer(sp$shape == "spr"), spm_spr_tgt = as.numeric(sp$spr.tgt),
     spm_r_sd = as.numeric(sp$r.sd), spm_m_sd = as.numeric(sp$m.sd),
     spm_link_spr = as.integer("spr" %in% lk), spm_sigma_link = as.numeric(sp$sigma.link),
-    spm_link_F = as.integer("F" %in% lk), spm_sigma_Flink = as.numeric(sp$sigma.Flink),
     spm_lagidx = as.integer(pmax(seq_len(NT) - 1L - round(sp$lag), 0L)),
     spm_bk_pr = as.numeric(sp$bkinit), spm_sdb_pr = as.numeric(sp$sdb),
     spm_K_pr = if (is.null(sp$K)) c(1, 1, 0) else if (identical(sp$K, "half8"))
@@ -217,12 +220,14 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
                     obs = ok, settings = sp)))
   bk <- min(max(sp$bkinit[1], 0.05), 1.2)
   parameters[spm_names] <- list(log(10), log(0.3), log(2), log(bk), log(sp$sdb[1]),
-                                rep(0, max(nidx, 1)), rep(log(0.2), max(nidx, 1)), rep(log(bk), NT), c(0, 0))
-  rl <- rep_len(as.numeric(sp$link.rho), 2)
-  if (any(abs(rl[is.finite(rl)]) >= 1)) stop("settings$spm$link.rho must be in (-1, 1)", call. = FALSE)
-  parameters$spm_trho <- ifelse(is.finite(rl), stats::qlogis((rl + 1) / 2), 0)
-  est_rho <- !is.finite(rl) & c("spr" %in% lk, "F" %in% lk)
-  map$spm_trho <- factor(ifelse(est_rho, seq_along(rl), NA))
+                                rep(0, max(nidx, 1)), rep(log(0.2), max(nidx, 1)), rep(log(bk), NT), 0)
+  rl <- sp$link.rho
+  if (length(rl) > 1) rl <- if ("spr" %in% names(rl)) rl[["spr"]] else rl[[1]]   # old c(spr = , F = )
+  rl <- as.numeric(rl)
+  if (length(rl) != 1 || !is.finite(rl) || abs(rl) >= 1)
+    stop("settings$spm$link.rho: one fixed value in (-1, 1); it cannot be estimated", call. = FALSE)
+  parameters$spm_trho <- stats::qlogis((rl + 1) / 2)
+  map$spm_trho <- factor(NA)
   if (sp$r.sd <= 0) map$spm_logr <- factor(NA)
   if (sp$m.sd <= 0) map$spm_logm <- factor(NA)
   if (nidx == 0) { map$spm_logq <- factor(NA); map$spm_logsdi <- factor(NA) }
@@ -314,7 +319,7 @@ spm_flicc <- function(fit) {
   refpts <- c(K = rp$spm_K * mu, r = rp$spm_r, m = rp$spm_m, BmsyK = rp$BmsyK_spm, Hmsy = rp$Hmsy_spm,
               MSY = rp$MSY_spm * mu, r_pr = rp$r_pr, m_pr = rp$m_pr, BmsyK_pr = rp$BmsyK_pr, Hmsy_pr = rp$Hmsy_pr,
               Fref = rp$Fref, spr_ref = rp$spr_ref, sdb = rp$spm_sdb,
-              rho_spr = rp$rho_link[1], rho_F = rp$rho_link[2])
+              rho_link = rp$rho_link)
   idx <- if (length(td$spm_logI)) data.frame(year = yrs[td$spm_obs_t + 1],
                                              index = info$index.names[td$spm_obs_i + 1],
                                              obs = exp(td$spm_logI), fit = exp(rp$spm_Imean)) else NULL

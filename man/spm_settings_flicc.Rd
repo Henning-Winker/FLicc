@@ -17,8 +17,7 @@ spm_settings_flicc(
   m.sd = 0,
   link = "spr",
   sigma.link = 0.2,
-  sigma.Flink = 0.2,
-  link.rho = c(spr = 0, F = 0),
+  link.rho = 0,
   lag = 0,
   bkinit = c(0.9, 0.25, 1),
   sdb = c(0.15, 0.5, 1),
@@ -59,15 +58,15 @@ or \code{"spr"} (Fspr at \code{spr.tgt})}
 
 \item{m.sd}{as \code{r.sd} for the shape m (default 0: m = m(theta))}
 
-\item{link}{\code{"spr"} (default), \code{"F"}, \code{c("spr", "F")} or \code{"none"}}
+\item{link}{\code{"spr"} (default): the depletion implied by the length
+model's SPR under steepness, log D_spr ~ N(log SB/SB0, sigma.link), links
+the two models; \code{"none"}: no link}
 
 \item{sigma.link}{SD of log D_spr around log SB/SB0}
 
-\item{sigma.Flink}{SD of log H_t around the equilibrium harvest rate at the length model's F}
-
-\item{link.rho}{AR1 correlation of the link errors over the length-data years
-(absorbs the equilibrium lag), \code{c(spr = , F = )}: a value fixes it,
-\code{NA} estimates it (default \code{c(spr = 0, F = 0)}, independent errors)}
+\item{link.rho}{fixed AR1 correlation of the link errors over the
+length-data years (default 0, independent errors). It cannot be estimated:
+with the link SD fixed, rho runs to 1}
 
 \item{lag}{production lag in years}
 

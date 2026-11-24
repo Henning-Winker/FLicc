@@ -70,4 +70,11 @@ ka <- exp(fa$opt$par[["log_k"]]); ra <- fa$obj$report()
 cat(sprintf("ALK + SPM: conv %s, k est %.3f (true %.3f), r_pr %.3f\n", fa$diagnostics$conv_tier, ka, lh$k, ra$r_pr))
 stopifnot(fa$tmb_data$alk_on == 1, "log_k" %in% names(fa$opt$par), abs(log(ka / lh$k)) < 0.3,
           fa$diagnostics$conv_tier == "ok", is.finite(ra$r_pr), all(is.finite(ra$P)))
+# removed / not estimable options fail with a clear message
+for (bad in list(list(link = c("spr", "F")), list(link.rho = NA))) {
+  e <- tryCatch(FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = modifyList(spm, bad)),
+                se = FALSE), error = function(e) conditionMessage(e))
+  stopifnot(is.character(e), grepl("memory/spm-flink|cannot be estimated", e))
+}
 cat("test_spm passed\n")

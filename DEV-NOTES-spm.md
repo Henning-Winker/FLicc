@@ -202,3 +202,13 @@ a penalised start does not cut the Laplace iterations (191).
   Laplace 0.252 [0.15–0.41]; F/Fmsy 0.62 vs 0.59. Simulation test: 4 s vs 31 s.
 - The penalised objective has no log-determinant and is not comparable with the
   Laplace objective.
+
+## F link removed, 24 Nov 2026
+
+The F link (`link = "F"` / `c("spr", "F")`, `sigma.Flink`) and its AR1 term were
+removed to keep FLicc-SPM simple: in the link-variant simulations (step up/down,
+rebuild, decline; FLicc branch `spm-lagw`, `ci/lag/`) the SPR link alone was as
+good as or better than any F-link variant, including a lag-weighted F link.
+`link.rho` is now one fixed value (default 0); estimating it was degenerate
+(rho -> 1 with the marginal link SD fixed). The F link, the lag weights
+(`lag.F`) and the comparisons are kept on branch `memory/spm-flink`.
