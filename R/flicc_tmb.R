@@ -4,13 +4,13 @@
 #' @param stklen FLStockLen-like object with matching years
 #' @param sel_fun selectivity function per gear
 #' @param catch_by_gear numeric vector of relative catch by gear (in weight unless settings$catch_units = "numbers")
-#' @param settings list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd
+#' @param settings list with CVL, GL, catch.sd, optional linf.sd, linf.prior, t0.prior, Mk.sd, CVL.sd
 #' @param years optional vector of years to include
 #'
 #' @return list for TMB::MakeADFun
 data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
                              settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
-                             years = NULL, stklen_m = NULL) {
+                             years = NULL, stklen_m = NULL, alk = NULL) {
 
   stopifnot(is.list(lfd))
   if (is.null(names(lfd))) {
@@ -313,7 +313,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
   prior_sd <- numeric()
   prior_code <- integer()
 
-  if (!is.null(settings$linf.sd)) {
+  # Linf prior independent of the start value: settings$linf.prior = c(median, log sd) (lognormal); takes the
+  # place of linf.sd (prior centred on the start value)
+  if (!is.null(settings$linf.prior)) {
+    prior_mu   <- c(prior_mu, log(as.numeric(settings$linf.prior[1])))
+    prior_sd   <- c(prior_sd, as.numeric(settings$linf.prior[2]))
+    prior_code <- c(prior_code, 1L)
+  } else if (!is.null(settings$linf.sd)) {
     prior_mu   <- c(prior_mu, log(Linf_init))
     prior_sd   <- c(prior_sd, as.numeric(settings$linf.sd))
     prior_code <- c(prior_code, 1L)
@@ -323,6 +329,13 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_mu   <- c(prior_mu, log(Mk_init))
     prior_sd   <- c(prior_sd, as.numeric(settings$Mk.sd))
     prior_code <- c(prior_code, 3L)
+  }
+
+  # t0 of the ALK growth model: settings$t0.prior = c(mean, sd), normal on the natural scale (years)
+  if (!is.null(settings$t0.prior)) {
+    prior_mu   <- c(prior_mu, as.numeric(settings$t0.prior[1]))
+    prior_sd   <- c(prior_sd, as.numeric(settings$t0.prior[2]))
+    prior_code <- c(prior_code, 9L)
   }
 
   if (!is.null(settings$CVL.sd)) {
@@ -348,7 +361,7 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     prior_code <- c(prior_code, 7L)
   }
 
-  list(
+  c(list(
     nlen       = nlen,
     nyear      = nyear,
     ngear      = ngear,
@@ -412,9 +425,11 @@ data_tmb_flicc <- function(lfd, stklen, sel_fun, catch_by_gear,
     Mk_init     = Mk_init,
     CVL_init    = CVL_init,
     Galpha_init = Galpha_init,
+    k_init      = as.numeric(lhpar["k"]),
     gear_names  = gear_names,
     year_names  = years
-  )
+  ), alk_tmb_data_flicc(alk, as.numeric(LLB), years, lhpar, settings)) -> td
+  spm_defaults_tmb_flicc(td)          # FLicc-SPM off (spm_use = 0); see spm_setup_flicc()
 }
 
 #' Tail cut as a length (internal)
@@ -577,8 +592,11 @@ init_tmb_flicc <- function(tmb_data) {
     log_sigmaF = tmb_data$prior_sigmaF_mean,
     log_Linf_m = log(if (!is.null(tmb_data$Linf_m_init)) tmb_data$Linf_m_init else tmb_data$Linf_init),
     log_Mk_m   = log(if (!is.null(tmb_data$Mk_m_init)) tmb_data$Mk_m_init else tmb_data$Mk_init),
-    log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init)
-  )
+    log_Galpha_m = -2 * log(if (!is.null(tmb_data$CVL_m_init)) tmb_data$CVL_m_init else tmb_data$CVL_init),
+    log_k      = log(if (!is.null(tmb_data$k_init)) tmb_data$k_init else tmb_data$brp_k),
+    t0g        = if (!is.null(tmb_data$alk_t0)) tmb_data$alk_t0 else 0
+  ) -> pl
+  spm_par_defaults_flicc(pl, tmb_data)
 }
 
 #' Fit the FLicc model in a single optimizer pass
@@ -663,7 +681,8 @@ fiticc_core <- function(lfd, stklen,
                      FLRreport=FALSE,
                      se = TRUE,
                      newton = 3,
-                     stklen_m = NULL) {
+                     stklen_m = NULL,
+                     alk = NULL) {
 
   if (!requireNamespace("TMB", quietly = TRUE)) {
     stop("Package 'TMB' is required")
@@ -686,8 +705,14 @@ fiticc_core <- function(lfd, stklen,
     Mpow = 0,
     prior_sigmaF = c(log(0.5), 0.3, 1),
     linf.sd = NULL,
+    t0.prior = NULL,
+    linf.prior = NULL,
     Mk.sd = NULL,
     CVL.sd = NULL,
+    alk_t0 = NULL,
+    alk_fixM = NULL,
+    alk_growth = NULL,
+    alk_nq = NULL,
     rob_eps = 0,
     Lplus = NULL,
     F_re = FALSE,
@@ -704,7 +729,8 @@ fiticc_core <- function(lfd, stklen,
     CVL_m = NULL,
     CVL_m.sd = NULL,
     surveys = NULL,
-    sex_minlen = NULL
+    sex_minlen = NULL,
+    spm = NULL
   )
   # ---- merge user settings with defaults ----
   if (is.null(settings)) settings <- list()
@@ -807,7 +833,8 @@ fiticc_core <- function(lfd, stklen,
     catch_by_gear = catch_by_gear,
     settings = settings,
     years = years,
-    stklen_m = stkm_i
+    stklen_m = stkm_i,
+    alk = alk
   )
 
   # Set priors for random walk on F (if nyear > 0)
@@ -846,6 +873,20 @@ fiticc_core <- function(lfd, stklen,
   }
   if (is.null(settings$CVL.sd)) {
     map$log_Galpha <- factor(NA)
+  }
+  # growth from age-length keys: Linf, k and t0 estimated (settings$alk_growth); M fixed and M/k = M / k (default) or,
+  # with alk_fixM = FALSE, M/k fixed
+  if (isTRUE(tmb_data$alk_on == 1L)) {
+    if (tmb_data$nsex == 2L) stop("The ALK option is not yet available with sex structure (growth by sex): ",
+                                  "fit one sex, with the ALK of the selected sexes pooled (alk_flicc(sex = )).")
+    ag <- if (!is.null(settings$alk_growth)) settings$alk_growth else c("linf", "k", "t0")
+    if ("linf" %in% ag) map$log_Linf <- NULL
+    if (!"k" %in% ag) map$log_k <- factor(NA)
+    if (!"t0" %in% ag) map$t0g <- factor(NA)
+    if (isTRUE(tmb_data$alk_mkk == 1L)) map$log_Mk <- factor(NA)
+  } else {
+    map$log_k <- factor(NA)
+    map$t0g <- factor(NA)
   }
   # male life history: fixed at the input values unless a penalty (prior SD)
   # is given, independently of the female parameters
@@ -899,6 +940,10 @@ fiticc_core <- function(lfd, stklen,
   if (!is.null(fix_res$map_Sm)) {
     map$Sm <- fix_res$map_Sm
   }
+  # FLicc-SPM data, parameters, map and random effects (spm_use = 0 without settings$spm)
+  spm_res <- spm_setup_flicc(settings$spm, tmb_data, parameters, map, random, stklen)
+  tmb_data <- spm_res$tmb_data; parameters <- spm_res$parameters
+  map <- spm_res$map; random <- spm_res$random
   if (length(map) == 0) {
     map <- NULL
   }
@@ -911,13 +956,23 @@ fiticc_core <- function(lfd, stklen,
   obj <- TMB::MakeADFun(
     data = tmb_data[setdiff(names(tmb_data),
                             c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
-                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init"))],
+                              "Linf_init", "Mk_init", "CVL_init", "Galpha_init", "k_init", "spm_info"))],
     parameters = parameters,
     map = map,
     random = random,
     DLL = dll,
     silent = silent
   )
+  # FLicc-SPM: starting values of K, q and the states from a deterministic
+  # trajectory with r and m of the per-recruit model at the initial values
+  if (isTRUE(tmb_data$spm_use == 1L)) {
+    parameters <- spm_inits_flicc(obj, tmb_data, parameters)
+    obj <- TMB::MakeADFun(
+      data = tmb_data[setdiff(names(tmb_data),
+                              c("gear_names", "year_names", "Linf_m_init", "Mk_m_init", "CVL_m_init",
+                                "Linf_init", "Mk_init", "CVL_init", "Galpha_init", "spm_info"))],
+      parameters = parameters, map = map, random = random, DLL = dll, silent = silent)
+  }
 
   # Optional restart from user-supplied starting values.
   # This is useful for reducing gradients by restarting from a previous optimum,
@@ -961,11 +1016,16 @@ fiticc_core <- function(lfd, stklen,
   # of the gradient with random effects). Steps that do not lower the
   # objective are rejected. Also gives the Hessian check and the Newton
   # decrement 0.5 g'H^-1 g (expected remaining improvement in log-likelihood).
+  # The last Hessian is cached with its parameters and reused by sdreport() when
+  # the fit ends there (saves one more finite-difference Hessian with random effects).
+  hcache <- new.env(); hcache$p <- NULL; hcache$H <- NULL
   hess_fun <- function(p) {
     H <- if (is.null(random)) tryCatch(obj$he(p), error = function(e) NULL) else NULL
     if (is.null(H)) H <- tryCatch(stats::optimHess(p, obj$fn, obj$gr), error = function(e) NULL)
     if (is.null(H) || any(!is.finite(H))) return(NULL)
-    (H + t(H)) / 2
+    H <- (H + t(H)) / 2
+    hcache$p <- as.numeric(p); hcache$H <- H
+    H
   }
   newton_state <- function(p) {
     g <- as.numeric(obj$gr(p))
@@ -1054,7 +1114,9 @@ fiticc_core <- function(lfd, stklen,
   }
 
   if (isTRUE(se)) {
-    rep <- TMB::sdreport(obj)
+    Hfix <- if (!is.null(hcache$H) && identical(hcache$p, as.numeric(opt$par))) hcache$H else NULL
+    rep <- if (is.null(Hfix)) TMB::sdreport(obj) else
+      tryCatch(TMB::sdreport(obj, hessian.fixed = Hfix), error = function(e) TMB::sdreport(obj))
     adrep <- summary(rep, "fixed")
   } else {
     # no standard errors requested (e.g. inside an MSE): skip sdreport
@@ -1094,6 +1156,23 @@ fiticc_core <- function(lfd, stklen,
   fit$n_restarts <- opt$n_restarts
   fit$restart_log <- opt$restart_log
   fit$sel_fixed <- sel_fixed
+
+  # growth estimated from age-length keys: estimates written back to the life history of the fit, so that F
+  # (= F/k x k), reference points and outputs use the estimated growth
+  if (isTRUE(tmb_data$alk_on == 1L)) {
+    pl <- obj$env$parList(opt$par)
+    linf_e <- exp(pl$log_Linf); k_e <- exp(pl$log_k)
+    mk_e <- if (tmb_data$alk_mkk == 1L) exp(tmb_data$alk_logM) / k_e else exp(pl$log_Mk)
+    fit$growth <- c(linf = linf_e, k = k_e, t0 = pl$t0g, Mk = mk_e, M = mk_e * k_e)
+    fit$alk <- alk_list_flicc(alk)                         # the keys, for the ALK diagnostics
+    fit$alk_pexp <- report$alk_pexp                        # expected age proportions by length bin and key
+    fit$alk_cvl <- as.numeric(report$CVL)[1]
+    lh <- fit$stklen@lhpar
+    lh["linf"] <- linf_e; lh["k"] <- k_e; lh["Mk"] <- mk_e; lh["M"] <- mk_e * k_e
+    attr(fit$stklen, "lhpar") <- lh
+    fit$tmb_data$brp_k <- k_e
+    stklen <- fit$stklen
+  }
 
   fit$logLik <- LLflicc(fit)
   fit$diagnostics <- diagnostics_flicc(fit)
@@ -1280,6 +1359,11 @@ fiticc_core <- function(lfd, stklen,
 #'       estimated Linf, M/K and CVL all enter GTG survival: the Linf groups are
 #'       \code{Linf * (1 + CVL * z)} on a fixed standardised grid \code{z}, and
 #'       M/K is \code{Mk * (Linf / L)^Mpow}.}
+#'     \item{\code{linf.prior}}{Lognormal prior on Linf independent of the start value,
+#'       \code{c(median, log sd)}; takes the place of \code{linf.sd}. With the ALK option a vague prior such as
+#'       \code{c(Lmax, 0.5)} (largest observed length) is recommended.}
+#'     \item{\code{t0.prior}}{Normal prior on the von Bertalanffy t0 of the ALK growth model,
+#'       \code{c(mean, sd)} in years; e.g. \code{c(0, 1)}.}
 #'   }
 #'
 #' @param years Optional vector of years to fit (default all years in \code{lfd}).
@@ -1330,6 +1414,12 @@ fiticc_core <- function(lfd, stklen,
 #'   for each year (LBSPR-style). Only the final fit object is retained, while
 #'   annual report quantities are updated and combined across years.
 #'   Default is \code{FALSE}.
+#' @param alk Optional age-length key(s) from \code{alk_flicc()} (conditional age at length). Growth is then
+#'   estimated inside the model: Linf, k and t0 by default (\code{settings$alk_growth}; e.g.
+#'   \code{c("linf", "k")} fixes t0 at \code{settings$alk_t0}). By default M is held at its
+#'   input value and M/k = M / k follows the estimated k, so k is informed by both the ALK and the length
+#'   compositions; with \code{settings$alk_fixM = FALSE}, M/k is held at its input value and M follows k. \code{settings$alk_t0} gives the start value of t0 (or its fixed value; default 0); \code{settings$alk_nq} the number of quadrature nodes. Recommended: start values from a
+#'   naive VB fit to the ALK and vague priors \code{t0.prior = c(0, 1)}, \code{linf.prior = c(Lmax, 0.5)}.
 #'
 #' @details
 #' The FLicc model separates:
@@ -1398,7 +1488,7 @@ fiticc <- function(lfd, stklen,
                      ngtg = 13,
                      maxsd = 3,
                      Mpow = 0,
-                     linf.sd = NULL,
+                     linf.sd = NULL, t0.prior = NULL, linf.prior = NULL,
                      Mk.sd = NULL,
                      CVL.sd = NULL
                    ),
@@ -1409,6 +1499,7 @@ fiticc <- function(lfd, stklen,
                    dll = "FLicc",
                    start = NULL,
                    by_year = FALSE,
+                   alk = NULL,
                    sel_fixed = NULL,
                    FLRreport = TRUE,
                    safe_fit = TRUE,
@@ -1431,6 +1522,8 @@ fiticc <- function(lfd, stklen,
   }
 
 
+     if(by_year && !is.null(alk))
+       stop("by_year = TRUE with alk: fit growth jointly first, then by year with stklen = fit$stklen.")
      if(by_year){
       if (!is.null(start)) {
         warning("Argument 'start' is currently ignored when by_year = TRUE.")
@@ -1444,17 +1537,35 @@ fiticc <- function(lfd, stklen,
       # Loops through years
       fity <- lapply(yrs,function(y){
 
-           if (inherits(catch_by_gear, "FLQuants")){
-             cbg <- window(catch_by_gear,start= yrs[nyrs],end=yrs[nyrs])
-           } else {
-             cbg <- catch_by_gear
-           }
+         # gears without length samples in year y are dropped for that year (their selectivity is not
+         # identifiable from one year); catch shares of year y among the gears that remain
+         ly <- window(lfd, start = y, end = y)
+         has <- vapply(ly, function(q) sum(q, na.rm = TRUE) > 0, TRUE)
+         if (!any(has)) {
+           warning("No length samples in year ", y, ": year skipped.")
+           return(NULL)
+         }
+         if (!all(has) && !silent)
+           message("Year ", y, ": gear(s) without samples dropped: ", paste(names(ly)[!has], collapse = ", "))
+         if (inherits(catch_by_gear, "FLQuants")) {
+           cbg <- catch_by_gear
+           if (!is.null(names(cbg)) && all(names(ly) %in% names(cbg))) cbg <- cbg[names(ly)]
+           cbg <- FLQuants(lapply(cbg, function(q) window(q, start = y, end = y)))[has]
+         } else if (length(catch_by_gear) == length(ly)) {
+           cbg <- catch_by_gear[has]
+         } else {
+           cbg <- catch_by_gear
+         }
+         sf <- if (length(sel_fun) == length(ly)) sel_fun[has] else sel_fun
+         sfx <- sel_fixed
+         if (!is.null(sfx) && is.list(sfx) && length(sfx) == length(ly)) sfx <- sfx[has]
 
          fiticc_core(
-         lfd = window(lfd,start= y,end=y),
+         alk = alk,
+         lfd = ly[has],
          stklen = window(stklen,start= y,y),
          stklen_m = if (!is.null(stklen_m)) window(stklen_m, start = y, end = y) else NULL,
-         sel_fun = sel_fun,
+         sel_fun = sf,
          catch_by_gear =cbg,
          settings = settings,
          years = NULL,
@@ -1462,7 +1573,7 @@ fiticc <- function(lfd, stklen,
          compile = compile,
          silent = silent,
          dll = dll,
-         sel_fixed = sel_fixed,
+         sel_fixed = sfx,
          n_restart = n_restart,
          se = se,
          grad_tol = grad_tol,
@@ -1471,25 +1582,41 @@ fiticc <- function(lfd, stklen,
          newton = newton
          )}
       )
+      # standard errors of log SPR and log EPR of every year (the combined fit keeps the last year's sdreport)
+      by_year_se <- lapply(c(spr = "spr", epr = "epr"), function(w) {
+        d <- do.call(rbind, lapply(fity, function(f) if (is.null(f)) NULL else ratio_ci_flicc(f, w)))
+        if (is.null(d) || !nrow(d)) NULL else d[, c("year", w, "se_log")]
+      })
+      keep <- !vapply(fity, is.null, TRUE)
+      fity <- fity[keep]; yrs <- yrs[keep]; nyrs <- length(yrs)
+      if (!nyrs) stop("No year with length samples.")
       repy <-  fity[[1]]$report
       fit_final = fity[[nyrs]]
       dn <-  names(fity[[1]]$report)[-c(3)]
       qs <- dn[c(1:14)]
 
-      for(y in 2:nyrs){
-       for(i in seq(qs)){
-        flq <- repy[[qs[i]]]
+      # combine the years; quantities by gear are matched by gear name, because a gear without samples in a
+      # year is dropped from that year's fit (its years are left out of that gear's series)
+      for(i in seq(qs)){
         if(!inherits(repy[[qs[i]]], "FLQuants")){
-        repy[[qs[i]]] <- append(repy[[qs[i]]],fity[[y]]$report[[qs[i]]])
+          if (nyrs > 1) for(y in 2:nyrs) repy[[qs[i]]] <- append(repy[[qs[i]]], fity[[y]]$report[[qs[i]]])
         } else {
-        for(f in 1:length(repy[[qs[i]]])){
-          repy[[qs[i]]][[f]] <- append(repy[[qs[i]]][[f]],fity[[y]]$report[[qs[i]]][[f]])
-        }}
-       }
+          gn <- unique(unlist(lapply(fity, function(fy) names(fy$report[[qs[i]]]))))
+          gn <- c(intersect(names(lfd), gn), setdiff(gn, names(lfd)))
+          by_g <- lapply(gn, function(g) {
+            xs <- Filter(Negate(is.null), lapply(fity, function(fy) fy$report[[qs[i]]][[g]]))
+            Reduce(append, xs)
+          })
+          names(by_g) <- gn
+          repy[[qs[i]]] <- FLQuants(by_g)
+        }
       }
       fit_final <- fity[[nyrs]]
       fit_final$stklen <- stklen
       fit_final$report[qs] <- repy[qs]
+      fit_final$by_year_se <- by_year_se
+      fit_final$by_year_conv <- vapply(fity, function(f) f$diagnostics$conv_tier %||% NA_character_, "")
+      names(fit_final$by_year_conv) <- yrs
       if (!is.null(fity[[1]]$report$epr)) {
         ep <- fity[[1]]$report$epr
         for (y in 2:nyrs) ep <- append(ep, fity[[y]]$report$epr)
@@ -1500,6 +1627,7 @@ fiticc <- function(lfd, stklen,
 
   if(!by_year){
   fit1 <- fiticc_core(
+         alk = alk,
     lfd = lfd,
     stklen = stklen,
     stklen_m = stklen_m,
@@ -1533,6 +1661,7 @@ fiticc <- function(lfd, stklen,
 
     fit2 <- tryCatch(
       fiticc_core(
+         alk = alk,
         lfd = lfd,
         stklen = stklen,
         stklen_m = stklen_m,

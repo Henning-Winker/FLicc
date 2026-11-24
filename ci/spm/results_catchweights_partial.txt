@@ -1,0 +1,15 @@
+SUMMARY spr0 rebuild seed 11 | time 72s rho 0.00/0.00 |rebuild seed 11 | terminal dep true 0.164 spm 0.123 flicc-Dspr 0.126 | B/Bmsy true 0.60 spm 0.41 | F/Fmsy true 0.78 spm 1.23 | conv ok
+SUMMARY spr0 fudc seed 2001 | time 107s rho 0.00/0.00 |fudc seed 2001 | terminal dep true 0.130 spm 0.134 flicc-Dspr 0.130 | B/Bmsy true 0.47 spm 0.46 | F/Fmsy true 1.33 spm 0.17 | conv fail
+SUMMARY spr0 rebuild seed 12 | time 58s rho 0.00/0.00 |rebuild seed 12 | terminal dep true 0.282 spm 0.178 flicc-Dspr 0.116 | B/Bmsy true 1.02 spm 0.61 | F/Fmsy true 0.77 spm 1.39 | conv ok
+SUMMARY spr0 decline seed 11 | time 45s rho 0.00/0.00 |decline seed 11 | terminal dep true 0.105 spm 0.130 flicc-Dspr 0.239 | B/Bmsy true 0.38 spm 0.45 | F/Fmsy true 2.78 spm 2.04 | conv ok
+SUMMARY spr0 flat seed 11 | time 60s rho 0.00/0.00 |flat seed 11 | terminal dep true 0.131 spm 0.096 flicc-Dspr 0.111 | B/Bmsy true 0.47 spm 0.33 | F/Fmsy true 1.67 spm 2.59 | conv ok
+SUMMARY spr0 decline seed 12 | time 101s rho 0.00/0.00 |decline seed 12 | terminal dep true 0.185 spm 0.177 flicc-Dspr 0.185 | B/Bmsy true 0.67 spm 0.61 | F/Fmsy true 2.74 spm 2.50 | conv fail
+SUMMARY spr0 flat seed 12 | time 47s rho 0.00/0.00 |flat seed 12 | terminal dep true 0.226 spm 0.162 flicc-Dspr 0.121 | B/Bmsy true 0.82 spm 0.56 | F/Fmsy true 1.65 spm 2.57 | conv ok
+SUMMARY sprAR fudc seed 2001 | time 149s rho 0.70/0.00 |fudc seed 2001 | terminal dep true 0.130 spm 0.123 flicc-Dspr 0.130 | B/Bmsy true 0.47 spm 0.42 | F/Fmsy true 1.33 spm 1.75 | conv fail
+SUMMARY sprAR rebuild seed 11 | time 129s rho 0.70/0.00 |rebuild seed 11 | terminal dep true 0.164 spm 0.223 flicc-Dspr 0.126 | B/Bmsy true 0.60 spm 0.76 | F/Fmsy true 0.78 spm 0.03 | conv fail
+SUMMARY sprAR rebuild seed 12 | time 45s rho 0.70/0.00 |rebuild seed 12 | terminal dep true 0.282 spm 0.190 flicc-Dspr 0.116 | B/Bmsy true 1.02 spm 0.65 | F/Fmsy true 0.77 spm 1.35 | conv ok
+SUMMARY sprAR decline seed 11 | time 46s rho 0.70/0.00 |decline seed 11 | terminal dep true 0.105 spm 0.126 flicc-Dspr 0.239 | B/Bmsy true 0.38 spm 0.44 | F/Fmsy true 2.78 spm 2.08 | conv ok
+SUMMARY sprAR decline seed 12 | time 35s rho 0.70/0.00 |decline seed 12 | terminal dep true 0.185 spm 0.173 flicc-Dspr 0.185 | B/Bmsy true 0.67 spm 0.60 | F/Fmsy true 2.74 spm 2.56 | conv ok
+SUMMARY sprAR flat seed 12 | time 41s rho 0.70/0.00 |flat seed 12 | terminal dep true 0.226 spm 0.168 flicc-Dspr 0.121 | B/Bmsy true 0.82 spm 0.58 | F/Fmsy true 1.65 spm 2.49 | conv ok
+SUMMARY FAR fudc seed 2001 | time 86s rho 0.00/0.70 |fudc seed 2001 | terminal dep true 0.130 spm 0.157 flicc-Dspr 0.130 | B/Bmsy true 0.47 spm 0.53 | F/Fmsy true 1.33 spm 1.51 | conv ok
+SUMMARY sprAR flat seed 11 | time 192s rho 0.70/0.00 |flat seed 11 | terminal dep true 0.131 spm 0.088 flicc-Dspr 0.111 | B/Bmsy true 0.47 spm 0.30 | F/Fmsy true 1.67 spm 2.81 | conv fail

@@ -1,0 +1,14 @@
+RES spr     fudc    2001   35s ok   Hmsy 0.1074 K   3.36 r 0.071 sdb 0.131 | dep 0.130/0.133 | B/Bmsy 0.47/0.45 | F/Fmsy 1.33/1.63
+RES spr     rebuild   11   37s ok   Hmsy 0.0843 K   3.89 r 0.056 sdb 0.099 | dep 0.164/0.121 | B/Bmsy 0.60/0.41 | F/Fmsy 0.78/1.19
+RES spr     rebuild   12   33s ok   Hmsy 0.0985 K   3.61 r 0.065 sdb 0.090 | dep 0.282/0.181 | B/Bmsy 1.02/0.62 | F/Fmsy 0.77/1.39
+RES spr     decline   11   32s ok   Hmsy 0.1381 K   3.60 r 0.088 sdb 0.060 | dep 0.105/0.132 | B/Bmsy 0.38/0.46 | F/Fmsy 2.78/2.11
+RES spr     decline   12   29s ok   Hmsy 0.1325 K   3.67 r 0.084 sdb 0.068 | dep 0.185/0.182 | B/Bmsy 0.67/0.63 | F/Fmsy 2.74/2.51
+RES spr     flat      11   32s ok   Hmsy 0.1306 K   2.75 r 0.084 sdb 0.115 | dep 0.131/0.098 | B/Bmsy 0.47/0.34 | F/Fmsy 1.67/2.66
+RES spr     flat      12   30s ok   Hmsy 0.1384 K   2.79 r 0.088 sdb 0.060 | dep 0.226/0.165 | B/Bmsy 0.82/0.57 | F/Fmsy 1.65/2.51
+RES both    fudc    2001   44s ok   Hmsy 0.1038 K   3.46 r 0.069 sdb 0.129 | dep 0.130/0.140 | B/Bmsy 0.47/0.47 | F/Fmsy 1.33/1.57
+RES both    rebuild   11   47s fail Hmsy 0.1021 K   3.17 r 0.066 sdb 0.145 | dep 0.164/0.244 | B/Bmsy 0.60/0.84 | F/Fmsy 0.78/0.76
+RES both    rebuild   12   40s ok   Hmsy 0.1198 K   2.93 r 0.079 sdb 0.099 | dep 0.282/0.183 | B/Bmsy 1.02/0.62 | F/Fmsy 0.77/1.38
+RES both    decline   11   36s ok   Hmsy 0.1010 K   5.13 r 0.064 sdb 0.077 | dep 0.105/0.161 | B/Bmsy 0.38/0.56 | F/Fmsy 2.78/1.71
+RES both    decline   12   35s ok   Hmsy 0.1038 K   5.97 r 0.066 sdb 0.088 | dep 0.185/0.225 | B/Bmsy 0.67/0.78 | F/Fmsy 2.74/1.74
+RES both    flat      11   43s ok   Hmsy 0.1004 K   3.57 r 0.064 sdb 0.110 | dep 0.131/0.120 | B/Bmsy 0.47/0.41 | F/Fmsy 1.67/2.21
+RES both    flat      12   45s ok   Hmsy 0.1109 K   3.59 r 0.071 sdb 0.063 | dep 0.226/0.200 | B/Bmsy 0.82/0.69 | F/Fmsy 1.65/2.17

@@ -23,7 +23,8 @@ fiticc_core(
   FLRreport = FALSE,
   se = TRUE,
   newton = 3,
-  stklen_m = NULL
+  stklen_m = NULL,
+  alk = NULL
 )
 }
 \arguments{

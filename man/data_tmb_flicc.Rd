@@ -11,7 +11,8 @@ data_tmb_flicc(
   catch_by_gear,
   settings = list(CVL = 0.1, GL = 50, catch.sd = 0.05),
   years = NULL,
-  stklen_m = NULL
+  stklen_m = NULL,
+  alk = NULL
 )
 }
 \arguments{
@@ -23,7 +24,7 @@ data_tmb_flicc(
 
 \item{catch_by_gear}{numeric vector of relative catch by gear (in weight unless settings$catch_units = "numbers")}
 
-\item{settings}{list with CVL, GL, catch.sd, optional linf.sd, Mk.sd, CVL.sd}
+\item{settings}{list with CVL, GL, catch.sd, optional linf.sd, linf.prior, t0.prior, Mk.sd, CVL.sd}
 
 \item{years}{optional vector of years to include}
 }
