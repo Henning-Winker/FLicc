@@ -439,7 +439,11 @@ Type objective_function<Type>::operator() ()
   DATA_VECTOR(spm_xgrid);      // F grid for the EB/SB curves: multiples of M at Linf, first 0
   DATA_INTEGER(spm_newton_it); // taped Newton iterations for Fmsy / Fspr and m
   DATA_VECTOR(spm_Pbound);     // soft bounds on SB/SB0 (JABBA: 0.02, 1.3)
-  DATA_INTEGER(spm_timing);    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
+  DATA_INTEGER(spm_timing);
+  DATA_INTEGER(spm_catch_err); // 1: catch observed with error, log C_obs ~ N(log C_t, spm_sdc) (catch deviations)
+  DATA_SCALAR(spm_sdc);        // SD of the catch error (log scale)
+  DATA_IVECTOR(spm_frw_t);     // years t (0-based, >= 1) with a random-walk increment log H_t - log H_(t-1) (SPiCT-like F)
+  DATA_VECTOR(spm_sdf_pr);     // prior on the SD of the F random walk: c(median, log sd, on)    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
   DATA_VECTOR(spm_selw);       // ngear: fixed weights of the gear selectivities for the per-recruit
                                // block; all <= 0: F-weighted joint selectivity of the terminal years
   // conditional age at length (ALK): growth (Linf, k) from age-length keys
@@ -475,6 +479,8 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(spm_logsdi);
   PARAMETER_VECTOR(spm_logP);  // log SB_t/SB0 (random effects)
   PARAMETER(spm_trho);         // AR1 correlation of the SPR-link errors (fixed), rho = 2/(1+exp(-x))-1
+  PARAMETER_VECTOR(spm_cdev);  // spm_nyear: log catch deviations (catch error; random effects with re = TRUE)
+  PARAMETER(spm_logsdf);       // log SD of the F random walk
   PARAMETER(log_k);        // von Bertalanffy k (estimated with an ALK; otherwise fixed)
   PARAMETER(t0g);          // von Bertalanffy t0 (estimated with an ALK unless fixed; enters the ALK only)
 
@@ -1279,12 +1285,15 @@ Type objective_function<Type>::operator() ()
 
     int NT = spm_nyear;
     vector<Type> P = exp(spm_logP);
-    vector<Type> rem(NT), Pmean(NT), H(NT);
+    vector<Type> rem(NT), Pmean(NT), H(NT), estC(NT);
     for(int t = 0; t < NT; t++) rem(t) = rho_at(P(t), 0);
+    // catch: observed, or estimated with error (log C_t = log C_obs - cdev_t, cdev ~ N(0, sdc))
+    for(int t = 0; t < NT; t++) estC(t) = spm_catch(t) * ((spm_catch_err == 1) ? exp(spm_cdev(t)) : Type(1));
+    if(spm_catch_err == 1) nll -= dnorm(spm_cdev, Type(0), spm_sdc, true).sum();
     Pmean(0) = spm_lbk;
     for(int t = 1; t < NT; t++) {
       Type Pl = P(spm_lagidx(t - 1));
-      Type pm = P(t - 1) + r / (m - Type(1)) * Pl * (Type(1) - pow(Pl, m - Type(1))) - spm_catch(t - 1) / (K * rem(t - 1));
+      Type pm = P(t - 1) + r / (m - Type(1)) * Pl * (Type(1) - pow(Pl, m - Type(1))) - estC(t - 1) / (K * rem(t - 1));
       Pmean(t) = log(smax_(pm, Type(0.001), Type(1e-7)));
     }
     for(int t = 0; t < NT; t++) {
@@ -1292,7 +1301,16 @@ Type objective_function<Type>::operator() ()
       Type pb = smin_(spm_logP(t) - log(spm_Pbound(0)), Type(0), Type(1e-4)) +
                 smax_(spm_logP(t) - log(spm_Pbound(1)), Type(0), Type(1e-4));
       nll += Type(500) * pb * pb;
-      H(t) = spm_catch(t) / (K * P(t) * rem(t));
+      H(t) = estC(t) / (K * P(t) * rem(t));
+    }
+    // optional random walk on the log harvest rate (SPiCT-like F process, as JABBA3 frw)
+    Type sdf = exp(spm_logsdf);
+    if(spm_frw_t.size() > 0) {
+      for(int k = 0; k < spm_frw_t.size(); k++) {
+        int t = spm_frw_t(k);
+        nll -= dnorm(log(H(t)), log(H(t - 1)), sdf, true);
+      }
+      if(spm_sdf_pr(2) > Type(0)) nll -= dnorm(spm_logsdf, log(spm_sdf_pr(0)), spm_sdf_pr(1), true);
     }
     vector<Type> procdev = spm_logP - Pmean;
 
@@ -1343,7 +1361,7 @@ Type objective_function<Type>::operator() ()
     vector<Type> spm_sdi = sdi;
     REPORT(spm_r); REPORT(spm_m); REPORT(spm_K); REPORT(spm_sdb); REPORT(spm_sdi); REPORT(spm_q);
     REPORT(BmsyK_spm); REPORT(Hmsy_spm); REPORT(MSY_spm);
-    REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
+    REPORT(estC); REPORT(sdf); REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
     REPORT(spm_Imean); REPORT(D_spr); REPORT(e_spr); REPORT(rho_link);
     vector<Type> spm_sA = sA;
     REPORT(Pg); REPORT(Yg); REPORT(rhog); REPORT(sprg); REPORT(spm_sA);

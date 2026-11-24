@@ -28,7 +28,11 @@ spm_settings_flicc(
   sel.weights = "catch",
   timing = c("start", "mean"),
   re = TRUE,
-  sdi = NULL
+  sdi = NULL,
+  frw = c("none", "index", "all"),
+  catch.error = FALSE,
+  sdc = 0.1,
+  sdf = c(0.3, 1, 1)
 )
 }
 \arguments{
@@ -109,6 +113,20 @@ exactly and the SD would collapse}
 \code{NULL} (default): estimated (total SD sqrt(se^2 + sdi^2)), except with
 \code{re = FALSE} and no \code{index.se}, where it is fixed at 0.2. A value
 fixes it}
+
+\item{frw}{random walk on the log harvest rate H_t = C_t / EB_t (SPiCT-like F
+process, as JABBA3 \code{frw}): \code{"none"} (default; catch-conditioned,
+as JABBA), \code{"index"} (increments from the first index year on) or
+\code{"all"} (all years). Its SD is estimated with the prior \code{sdf}
+(fixed at \code{sdf[1]} with \code{re = FALSE}). Use with
+\code{catch.error = TRUE}}
+
+\item{catch.error}{logical: catch observed with lognormal error (catch
+deviations; random effects with \code{re = TRUE}), log SD \code{sdc}}
+
+\item{sdc}{log SD of the catch error}
+
+\item{sdf}{prior on the SD of the F random walk: c(median, log sd, on)}
 }
 \value{
 list of settings

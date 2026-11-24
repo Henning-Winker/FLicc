@@ -70,6 +70,16 @@
 #' @param timing biomass per recruit for the SPM (EB/SB curves, Hmsy):
 #'   \code{"start"} of the year (default, as the discrete SPM's harvest rate
 #'   C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)
+#' @param frw random walk on the log harvest rate H_t = C_t / EB_t (SPiCT-like F
+#'   process, as JABBA3 \code{frw}): \code{"none"} (default; catch-conditioned,
+#'   as JABBA), \code{"index"} (increments from the first index year on) or
+#'   \code{"all"} (all years). Its SD is estimated with the prior \code{sdf}
+#'   (fixed at \code{sdf[1]} with \code{re = FALSE}). Use with
+#'   \code{catch.error = TRUE}
+#' @param catch.error logical: catch observed with lognormal error (catch
+#'   deviations; random effects with \code{re = TRUE}), log SD \code{sdc}
+#' @param sdc log SD of the catch error
+#' @param sdf prior on the SD of the F random walk: c(median, log sd, on)
 #' @return list of settings
 #' @export
 spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, index.gear = "fishery",
@@ -78,12 +88,14 @@ spm_settings_flicc <- function(catch = NULL, index = NULL, index.se = NULL, inde
                                lag = 0, bkinit = c(0.9, 0.25, 1), sdb = c(0.15, 0.5, 1), K = "half8",
                                xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
                                newton.it = 12, P.bound = c(0.02, 1.3), sel.weights = "catch",
-                               timing = c("start", "mean"), re = TRUE, sdi = NULL) {
+                               timing = c("start", "mean"), re = TRUE, sdi = NULL,
+                               frw = c("none", "index", "all"), catch.error = FALSE, sdc = 0.1, sdf = c(0.3, 1, 1)) {
   list(catch = catch, index = index, index.se = index.se, index.gear = index.gear, index.units = index.units,
        h = h, shape = match.arg(shape), spr.tgt = spr.tgt, r.sd = r.sd, m.sd = m.sd, link = link,
        sigma.link = sigma.link, link.rho = link.rho, lag = lag, bkinit = bkinit, sdb = sdb, K = K,
        xgrid = xgrid, newton.it = newton.it, P.bound = P.bound, sel.weights = sel.weights,
-       timing = match.arg(timing), re = isTRUE(re), sdi = sdi)
+       timing = match.arg(timing), re = isTRUE(re), sdi = sdi,
+       frw = match.arg(frw), catch.error = isTRUE(catch.error), sdc = as.numeric(sdc), sdf = as.numeric(sdf))
 }
 
 # gear weights of the per-recruit selectivity: "F" (0: F-weighted joint
@@ -135,7 +147,8 @@ spm_defaults_tmb_flicc <- function(td) {
             spm_spr_tgt = 0.4, spm_r_sd = 0, spm_m_sd = 0, spm_link_spr = 0L, spm_sigma_link = 1,
             spm_lagidx = 0L, spm_bk_pr = c(1, 1, 0),
             spm_sdb_pr = c(1, 1, 0), spm_K_pr = c(1, 1, 0), spm_xgrid = c(0, 1), spm_newton_it = 1L,
-            spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 1L)
+            spm_Pbound = c(0.02, 1.3), spm_selw = 0, spm_timing = 1L,
+            spm_catch_err = 0L, spm_sdc = 0.1, spm_frw_t = integer(0), spm_sdf_pr = c(0.3, 1, 0))
   for (n in names(d)) if (is.null(td[[n]])) td[[n]] <- d[[n]]
   td
 }
@@ -143,14 +156,16 @@ spm_par_defaults_flicc <- function(pl, td) {
   nidx <- if (is.null(td$spm_nidx)) 0L else td$spm_nidx
   d <- list(spm_logK = 0, spm_logr = 0, spm_logm = log(2), spm_lbk = 0, spm_logsdb = log(0.1),
             spm_logq = rep(0, max(nidx, 1L)), spm_logsdi = rep(log(0.2), max(nidx, 1L)),
-            spm_logP = rep(0, if (is.null(td$spm_nyear)) 1L else td$spm_nyear), spm_trho = 0)
+            spm_logP = rep(0, if (is.null(td$spm_nyear)) 1L else td$spm_nyear), spm_trho = 0,
+            spm_cdev = rep(0, if (is.null(td$spm_nyear)) 1L else td$spm_nyear), spm_logsdf = log(0.3))
   for (n in names(d)) if (is.null(pl[[n]])) pl[[n]] <- d[[n]]
   pl
 }
 
 # SPM data, parameters, map and random effects for fiticc_core()
 spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
-  spm_names <- c("spm_logK", "spm_logr", "spm_logm", "spm_lbk", "spm_logsdb", "spm_logq", "spm_logsdi", "spm_logP", "spm_trho")
+  spm_names <- c("spm_logK", "spm_logr", "spm_logm", "spm_lbk", "spm_logsdb", "spm_logq", "spm_logsdi", "spm_logP", "spm_trho",
+                 "spm_cdev", "spm_logsdf")
   if (is.null(spm)) {
     tmb_data <- spm_defaults_tmb_flicc(tmb_data)
     parameters <- spm_par_defaults_flicc(parameters, tmb_data)
@@ -216,11 +231,15 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
     spm_Pbound = as.numeric(sp$P.bound),
     spm_selw = .spm_selw(sp$sel.weights, tmb_data),
     spm_timing = as.integer(sp$timing == "start"),
+    spm_catch_err = as.integer(isTRUE(sp$catch.error)), spm_sdc = as.numeric(sp$sdc %||% 0.1),
+    spm_frw_t = .spm_frw_t(sp$frw %||% "none", NT, if (nidx) min(ok[, 1]) else NA),
+    spm_sdf_pr = as.numeric(sp$sdf %||% c(0.3, 1, 1)),
     spm_info = list(years = yrs, mucatch = mucatch, index.names = if (nidx) colnames(I) else character(0),
                     obs = ok, settings = sp)))
   bk <- min(max(sp$bkinit[1], 0.05), 1.2)
   parameters[spm_names] <- list(log(10), log(0.3), log(2), log(bk), log(sp$sdb[1]),
-                                rep(0, max(nidx, 1)), rep(log(0.2), max(nidx, 1)), rep(log(bk), NT), 0)
+                                rep(0, max(nidx, 1)), rep(log(0.2), max(nidx, 1)), rep(log(bk), NT), 0,
+                                rep(0, NT), log((sp$sdf %||% 0.3)[1]))
   rl <- sp$link.rho
   if (length(rl) > 1) rl <- if ("spr" %in% names(rl)) rl[["spr"]] else rl[[1]]   # old c(spr = , F = )
   rl <- as.numeric(rl)
@@ -235,11 +254,14 @@ spm_setup_flicc <- function(spm, tmb_data, parameters, map, random, stklen) {
   if (nidx > 0 && !is.null(sdi_fix)) {
     parameters$spm_logsdi <- log(rep_len(as.numeric(sdi_fix), nidx)); map$spm_logsdi <- factor(rep(NA, nidx))
   }
-  if (isFALSE(sp$re)) {          # penalised likelihood: states fixed effects, process SD fixed
-    map$spm_logsdb <- factor(NA)
+  if (!isTRUE(sp$catch.error)) map$spm_cdev <- factor(rep(NA, NT))
+  if (!length(tmb_data$spm_frw_t)) map$spm_logsdf <- factor(NA)
+  if (isFALSE(sp$re)) {          # penalised likelihood: states (and catch deviations) fixed effects, SDs fixed
+    map$spm_logsdb <- factor(NA); map$spm_logsdf <- factor(NA)
     return(list(tmb_data = tmb_data, parameters = parameters, map = map, random = random))
   }
-  list(tmb_data = tmb_data, parameters = parameters, map = map, random = c(random, "spm_logP"))
+  list(tmb_data = tmb_data, parameters = parameters, map = map,
+       random = c(random, "spm_logP", if (isTRUE(sp$catch.error)) "spm_cdev"))
 }
 
 # starting values: deterministic trajectories over a K grid with r and m of the
@@ -318,10 +340,17 @@ spm_flicc <- function(fit) {
               data.frame(year = as.numeric(td$year_names), quantity = "SPR", est = rp$spr_y, lci = NA, uci = NA))
   refpts <- c(K = rp$spm_K * mu, r = rp$spm_r, m = rp$spm_m, BmsyK = rp$BmsyK_spm, Hmsy = rp$Hmsy_spm,
               MSY = rp$MSY_spm * mu, r_pr = rp$r_pr, m_pr = rp$m_pr, BmsyK_pr = rp$BmsyK_pr, Hmsy_pr = rp$Hmsy_pr,
-              Fref = rp$Fref, spr_ref = rp$spr_ref, sdb = rp$spm_sdb,
+              Fref = rp$Fref, spr_ref = rp$spr_ref, sdb = rp$spm_sdb, sdf = rp$sdf,
               rho_link = rp$rho_link)
   idx <- if (length(td$spm_logI)) data.frame(year = yrs[td$spm_obs_t + 1],
                                              index = info$index.names[td$spm_obs_i + 1],
                                              obs = exp(td$spm_logI), fit = exp(rp$spm_Imean)) else NULL
   list(ts = ts, refpts = refpts, index = idx, sdi = stats::setNames(rp$spm_sdi, info$index.names))
+}
+
+# years (0-based t >= 1) with a random-walk increment of log H: none, from the first index year (t0, 1-based row), all
+.spm_frw_t <- function(frw, NT, t0) {
+  if (identical(frw, "all")) return(as.integer(seq_len(NT - 1)))
+  if (identical(frw, "index") && is.finite(t0) && t0 < NT) return(as.integer(seq(t0, NT - 1)))
+  integer(0)
 }
