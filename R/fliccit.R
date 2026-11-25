@@ -955,7 +955,7 @@ pr_flicc <- function(fit, nyears = 1, F = NULL, FM = NULL,
   year_chr <- ref$year
   matl <- (FLCore::mat(fit$stklen)[, year_chr])
 
-  Cn <- Nl * zobj$F_l / zobj$Z_l * (1 - exp(-zobj$Z_l))
+  Cn <- Nl * zobj$F_l        # Nl is integrated over the time in each class (deaths / Z): catch = N F, as the TMB path
   Cn[!is.finite(Cn)] <- 0
   units(Cn) <- "1000"
   wl <- yearMeans(fit$report$w_at_len)

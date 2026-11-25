@@ -316,8 +316,9 @@ fbarl <- function(stk, lrange = NULL) {
 #' }
 #'
 #' Numbers-at-length are scaled relative to the smallest length class and
-#' multiplied by \code{R0}. Catch-at-length is then computed using the
-#' Baranov catch equation via \code{compute_catch.n()}.
+#' multiplied by \code{R0}. Catch-at-length is then computed as N x F via
+#' \code{compute_catch.n(integrated = TRUE)}, because FLicc numbers-at-length are
+#' integrated over the time spent in each class.
 #'
 #' Discards are currently set to zero, and landings are assumed equal to catch.
 #'
