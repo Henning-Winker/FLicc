@@ -45,5 +45,6 @@ An \code{FLQuant} of catch-at-length, or a list when
 \description{
 Computes equilibrium catch-at-length from a fitted
 \code{"flicc_tmb_fit"} object under a specified fishing mortality,
-using the Baranov catch equation.
+as catch = N F (FLicc numbers at length are integrated over the time spent
+in each class).
 }

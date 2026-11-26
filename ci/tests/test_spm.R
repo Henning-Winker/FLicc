@@ -42,6 +42,8 @@ stopifnot(
 f0 <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
                           settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3), se = FALSE)
 stopifnot(!any(grepl("^spm_", names(f0$opt$par))), is.null(f0$report$P))
+# common currency: with mean-year exploitable biomass and catch = N F, the per-recruit harvest rate equals F
+stopifnot(abs(rp$Hmsy_pr / rp$Fref - 1) < 1e-6)
 # penalised likelihood (re = FALSE): states as fixed effects, process SD fixed; close to the Laplace fit
 spm_p <- spm; spm_p$re <- FALSE; spm_p$sdb <- c(exp(fit$opt$par[["spm_logsdb"]]), 0.5, 1)
 tp <- system.time(fp <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
@@ -52,6 +54,13 @@ cat(sprintf("penalised: %.1f s, conv %d, SB/SB0 end %.3f (Laplace %.3f, true %.3
 stopifnot(is.null(fp$obj$env$random) || !any(names(fp$obj$env$par)[fp$obj$env$random] == "spm_logP"),
           !any(c("spm_logsdb", "spm_logsdi") %in% names(fp$opt$par)), fp$opt$convergence == 0,
           abs(log(tail(rpp$P, 1) / tail(rp$P, 1))) < 0.15, abs(log(tail(rpp$spr_y, 1) / tail(rp$spr_y, 1))) < 0.1)
+# process-error prior on Hmsy (= Fmsy): sdb = "fishlife" in a penalised fit fixes the SD at sigR min(0.9 Fmsy, 1.15)
+spm_f <- spm; spm_f$re <- FALSE; spm_f$sdb <- "fishlife"; spm_f$sigR <- 0.6
+ff <- FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                          settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm_f), se = FALSE)
+cat(sprintf("fishlife sdb: %.4f (sigR min(0.9 Fmsy, 1.15) = %.4f), conv %d\n", ff$report$spm_sdb,
+            0.6 * min(0.9 * ff$report$Fref, 1.15), ff$opt$convergence))
+stopifnot(abs(ff$report$spm_sdb / (0.6 * min(0.9 * ff$report$Fref, 1.15)) - 1) < 1e-6, ff$opt$convergence == 0)
 # sex structure: identical sexes reproduce the one-sex FLicc-SPM fit
 stk2 <- stocklen_sex(lfd, list(F = lhp, M = lhp), m_model = "constant")
 fs <- fiticc(lfd, stk2, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
@@ -70,4 +79,11 @@ ka <- exp(fa$opt$par[["log_k"]]); ra <- fa$obj$report()
 cat(sprintf("ALK + SPM: conv %s, k est %.3f (true %.3f), r_pr %.3f\n", fa$diagnostics$conv_tier, ka, lh$k, ra$r_pr))
 stopifnot(fa$tmb_data$alk_on == 1, "log_k" %in% names(fa$opt$par), abs(log(ka / lh$k)) < 0.3,
           fa$diagnostics$conv_tier == "ok", is.finite(ra$r_pr), all(is.finite(ra$P)))
+# removed / not estimable options fail with a clear message
+for (bad in list(list(link = c("spr", "F")), list(link.rho = NA))) {
+  e <- tryCatch(FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
+                settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = modifyList(spm, bad)),
+                se = FALSE), error = function(e) conditionMessage(e))
+  stopifnot(is.character(e), grepl("memory/spm-flink|cannot be estimated", e))
+}
 cat("test_spm passed\n")

@@ -11,11 +11,7 @@ spm <- list(catch = sim$catch, index = sim$index, index.gear = "Gillnet", h = lh
             xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 20))), newton.it = 6)
 spm <- modifyList(spm, switch(cfg,
   spr     = list(),
-  sprSdb  = list(sdb = c(0.1, 0.25, 1)),
-  FAR     = list(link = "F", link.rho = c(0, 0.7)),
-  FARsdb  = list(link = "F", link.rho = c(0, 0.7), sdb = c(0.1, 0.25, 1)),
-  both    = list(link = c("spr", "F"), link.rho = c(0.7, 0.7)),
-  bothSdb = list(link = c("spr", "F"), link.rho = c(0.7, 0.7), sdb = c(0.1, 0.25, 1))))
+  sprSdb  = list(sdb = c(0.1, 0.25, 1))))     # F-link configurations: branch memory/spm-flink
 t0 <- Sys.time()
 f <- tryCatch(FLicc:::fiticc_core(lfd, stk, sel_fun = c("dsnormal", "logistic"), catch_by_gear = cbg,
        settings = list(pop_model = "gtg", obs_model = "dm", CVL = 0.1, maxsd = 3, spm = spm)), error = function(e) e)

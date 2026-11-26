@@ -4,7 +4,7 @@
 \alias{compute_catch.n}
 \title{Compute catch numbers from stock numbers and mortalities}
 \usage{
-compute_catch.n(stock.n, harvest, m)
+compute_catch.n(stock.n, harvest, m, integrated = FALSE)
 }
 \arguments{
 \item{stock.n}{An \code{FLQuant} of stock numbers.}
@@ -12,11 +12,15 @@ compute_catch.n(stock.n, harvest, m)
 \item{harvest}{An \code{FLQuant} of fishing mortality.}
 
 \item{m}{An \code{FLQuant} of natural mortality.}
+
+\item{integrated}{logical: \code{stock.n} are numbers integrated over the
+time spent in each class (FLicc numbers at length): catch = N F}
 }
 \value{
 An \code{FLQuant} of catch numbers.
 }
 \description{
 Computes catch-at-length or catch-at-age in numbers using the Baranov
-catch equation.
+catch equation for numbers at the start of the period, or catch = N F for
+numbers integrated over the period (FLicc numbers at length).
 }

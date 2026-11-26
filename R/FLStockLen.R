@@ -236,16 +236,20 @@ recl <- function(stk) {
 #' Compute catch numbers from stock numbers and mortalities
 #'
 #' Computes catch-at-length or catch-at-age in numbers using the Baranov
-#' catch equation.
+#' catch equation for numbers at the start of the period, or catch = N F for
+#' numbers integrated over the period (FLicc numbers at length).
 #'
 #' @param stock.n An \code{FLQuant} of stock numbers.
 #' @param harvest An \code{FLQuant} of fishing mortality.
 #' @param m An \code{FLQuant} of natural mortality.
+#' @param integrated logical: \code{stock.n} are numbers integrated over the
+#'   time spent in each class (FLicc numbers at length): catch = N F
 #'
 #' @return An \code{FLQuant} of catch numbers.
 #' @export
-compute_catch.n <- function(stock.n, harvest, m) {
+compute_catch.n <- function(stock.n, harvest, m, integrated = FALSE) {
 
+  if (isTRUE(integrated)) return(stock.n * harvest)
   z <- harvest + m
   cn <- stock.n * harvest / z * (1 - exp(-z))
   cn[z == 0] <- 0
@@ -312,8 +316,9 @@ fbarl <- function(stk, lrange = NULL) {
 #' }
 #'
 #' Numbers-at-length are scaled relative to the smallest length class and
-#' multiplied by \code{R0}. Catch-at-length is then computed using the
-#' Baranov catch equation via \code{compute_catch.n()}.
+#' multiplied by \code{R0}. Catch-at-length is then computed as N x F via
+#' \code{compute_catch.n(integrated = TRUE)}, because FLicc numbers-at-length are
+#' integrated over the time spent in each class.
 #'
 #' Discards are currently set to zero, and landings are assumed equal to catch.
 #'
@@ -377,10 +382,11 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
   # -----------------------------
   # catch numbers
   # -----------------------------
-  catch.n(stky) <- compute_catch.n(
+  catch.n(stky) <- compute_catch.n(      # FLicc numbers are integrated over the time in each class
     stock.n(stky),
     harvest(stky),
-    m(stky)
+    m(stky),
+    integrated = TRUE
   )
 
   landings.n(stky) <- catch.n(stky)
@@ -394,7 +400,7 @@ flicc_stklen <- function(fit, year = NULL, R0 = 1000){
     sc <- R0 / 1000 / c(NF[1, ] + NM[1, ])
     NF <- NF %*% FLQuant(sc, dimnames = dimnames(NF[1, ])) ; NM <- NM %*% FLQuant(sc, dimnames = dimnames(NM[1, ]))
     dimnames(NF)$unit <- dimnames(NM)$unit <- "unique"
-    CF <- compute_catch.n(NF, rep$F, rep$M); CM <- compute_catch.n(NM, rep$F, rep$M_m)
+    CF <- compute_catch.n(NF, rep$F, rep$M, integrated = TRUE); CM <- compute_catch.n(NM, rep$F, rep$M_m, integrated = TRUE)
     wF <- catch.wt(stklen); wM <- rep$w_at_len_m
     Nt <- NF + NM; Ct <- CF + CM
     w_eff <- (CF * wF + CM * wM) / Ct

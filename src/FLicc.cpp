@@ -427,13 +427,14 @@ Type objective_function<Type>::operator() ()
   DATA_IVECTOR(spm_idx_units); // nidx: 1 biomass, 0 numbers
   DATA_SCALAR(spm_h);          // Beverton-Holt steepness
   DATA_INTEGER(spm_shape);     // source of r and m: 0 Fmsy, 1 Fspr (spm_spr_tgt)
+  DATA_SCALAR(spm_bmsyk);      // > 0: fixed Bmsy/K of the production function (shape m from it); <= 0: per recruit
+  DATA_INTEGER(spm_sdb_fl);    // 1: process SD centred on sigR min(0.9 Hmsy, 1.15) (life-history relation on Hmsy = Fmsy, as JABBA3)
+  DATA_SCALAR(spm_sigR);       // recruitment SD for spm_sdb_fl
   DATA_SCALAR(spm_spr_tgt);
   DATA_SCALAR(spm_r_sd);       // > 0: log r ~ N(log r(theta), spm_r_sd); <= 0: r = r(theta)
   DATA_SCALAR(spm_m_sd);       // > 0: log m ~ N(log m(theta), spm_m_sd); <= 0: m = m(theta)
   DATA_INTEGER(spm_link_spr);  // 1: log D_spr,y ~ N(log SB_t/SB0, spm_sigma_link)
   DATA_SCALAR(spm_sigma_link);
-  DATA_INTEGER(spm_link_F);    // 1: log H_t ~ N(log H_eq(F_y), spm_sigma_Flink)
-  DATA_SCALAR(spm_sigma_Flink);
   DATA_IVECTOR(spm_lagidx);    // spm_nyear: state (0-based) whose depletion drives production in t (lag)
   DATA_VECTOR(spm_bk_pr);      // initial depletion SB_1/SB0: median, log sd, on
   DATA_VECTOR(spm_sdb_pr);     // process error SD: median, log sd, on
@@ -441,7 +442,11 @@ Type objective_function<Type>::operator() ()
   DATA_VECTOR(spm_xgrid);      // F grid for the EB/SB curves: multiples of M at Linf, first 0
   DATA_INTEGER(spm_newton_it); // taped Newton iterations for Fmsy / Fspr and m
   DATA_VECTOR(spm_Pbound);     // soft bounds on SB/SB0 (JABBA: 0.02, 1.3)
-  DATA_INTEGER(spm_timing);    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
+  DATA_INTEGER(spm_timing);
+  DATA_INTEGER(spm_catch_err); // 1: catch observed with error, log C_obs ~ N(log C_t, spm_sdc) (catch deviations)
+  DATA_SCALAR(spm_sdc);        // SD of the catch error (log scale)
+  DATA_IVECTOR(spm_frw_t);     // years t (0-based, >= 1) with a random-walk increment log H_t - log H_(t-1) (SPiCT-like F)
+  DATA_VECTOR(spm_sdf_pr);     // prior on the SD of the F random walk: c(median, log sd, on)    // biomass in the SPM per recruit: 1 start of year (as the discrete SPM), 0 mean of year
   DATA_VECTOR(spm_selw);       // ngear: fixed weights of the gear selectivities for the per-recruit
                                // block; all <= 0: F-weighted joint selectivity of the terminal years
   // conditional age at length (ALK): growth (Linf, k) from age-length keys
@@ -476,7 +481,9 @@ Type objective_function<Type>::operator() ()
   PARAMETER_VECTOR(spm_logq);
   PARAMETER_VECTOR(spm_logsdi);
   PARAMETER_VECTOR(spm_logP);  // log SB_t/SB0 (random effects)
-  PARAMETER_VECTOR(spm_trho);  // 2: AR1 correlation of the SPR- and F-link errors, rho = 2/(1+exp(-x))-1
+  PARAMETER(spm_trho);         // AR1 correlation of the SPR-link errors (fixed), rho = 2/(1+exp(-x))-1
+  PARAMETER_VECTOR(spm_cdev);  // spm_nyear: log catch deviations (catch error; random effects with re = TRUE)
+  PARAMETER(spm_logsdf);       // log SD of the F random walk
   PARAMETER(log_k);        // von Bertalanffy k (estimated with an ALK; otherwise fixed)
   PARAMETER(t0g);          // von Bertalanffy t0 (estimated with an ALK unless fixed; enters the ALK only)
 
@@ -1106,9 +1113,9 @@ Type objective_function<Type>::operator() ()
     // fishery (both sexes, weight) and of each index (biomass or numbers)
     // out: 0 SBPR (FLicc convention, for SPR, Fref, BmsyK), 1 YPR, 2 EBPR of the
     // fishery, 3.. EBPR of each index, last SBPR for the EB/SB ratios. With
-    // spm_timing = 1 the biomasses for the SPM (EB, index, last SB) are at the
-    // start of the year: mean numbers x Z / (1 - exp(-Z)), so that Hmsy =
-    // YPR / EBPR matches the harvest rate C_t / EB_t of the discrete SPM.
+    // spm_timing = 0 (default) the biomasses are means over the year, so that
+    // C / EB = F (Hmsy = Fmsy, the common currency with F). spm_timing = 1
+    // (legacy) converts them to the start of the year (x Z / (1 - exp(-Z))).
     int nq_out = 4 + spm_nidx;
     auto prq = [&](Type x) {
       vector<Type> out(nq_out);
@@ -1120,7 +1127,7 @@ Type objective_function<Type>::operator() ()
       if(nsex == 2) NIm = popM(x, Zlm);
       for(int l = 0; l < nlen; l++) {
         Type n = NI(l) / scale0;
-        Type c = n * x * sA(l) / Zl(l) * (Type(1) - exp(-Zl(l)));
+        Type c = n * x * sA(l);                          // catch = N F (time-integrated numbers)
         out(0) += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
         Type cf = (spm_timing == 1) ? Type(Zl(l) / (Type(1) - exp(-Zl(l)))) : Type(1);
         Type cfm = cf;
@@ -1131,7 +1138,7 @@ Type objective_function<Type>::operator() ()
         Type nm = Type(0), cm = Type(0);
         if(nsex == 2) {
           nm = NIm(l) / scale0;
-          cm = nm * x * sA(l) / Zlm(l) * (Type(1) - exp(-Zlm(l)));
+          cm = nm * x * sA(l);
           out(1) += male_w * cm * wtA_m(l);
           if(spm_timing == 1) cfm = Zlm(l) / (Type(1) - exp(-Zlm(l)));
           out(2) += male_w * nm * cfm * wtA_m(l) * sA(l);
@@ -1236,7 +1243,7 @@ Type objective_function<Type>::operator() ()
     Type Hmsy_pr = qr(1) / qr(2);                      // yield / exploitable biomass at Fref
     Type Yref = recbh(spr_ref) * qr(1);                // equilibrium yield per R0 at Fref
     // Pella-Tomlinson shape from BmsyK = m^(-1/(m-1)): Newton on v = log m
-    Type lbk_ref = log(BmsyK_pr);
+    Type lbk_ref = (spm_bmsyk > Type(0)) ? Type(log(spm_bmsyk)) : Type(log(BmsyK_pr));
     auto fv = [&](Type v) {
       Type ev = exp(v) - Type(1);
       Type av = CppAD::CondExpLt(fabs(v), Type(1e-6), Type(1) - v / Type(2), v / (ev + Type(1e-30)));
@@ -1252,7 +1259,11 @@ Type objective_function<Type>::operator() ()
       vm += step;
     }
     Type m_pr = exp(vm);
-    Type r_pr = m_pr * Hmsy_pr;                        // JABBA3: Hmsy = r / (m - 1) (1 - 1/m)
+    Type r_pr = m_pr * Hmsy_pr;                        // Hmsy = r / m (JABBA3); Hmsy = Fmsy with mean-year EB
+    // process SD at Bmsy from the life-history relation on Hmsy (= Fmsy in the common currency): sigR min(0.9 Hmsy, 1.15)
+    // (496 FishLife species x 2 selectivities, R2 0.96; JABBA3 .sdb_hmsy)
+    Type h09 = Type(0.9) * Hmsy_pr;
+    Type sdb_fl = spm_sigR * CppAD::CondExpLt(h09, Type(1.15), h09, Type(1.15));
 
     // ---- state-space surplus production model (JABBA3 Selex, SB state) ----
     Type K = exp(spm_logK);
@@ -1268,7 +1279,10 @@ Type objective_function<Type>::operator() ()
     }
     if(spm_bk_pr(2) > Type(0)) nll -= dnorm(spm_lbk, log(spm_bk_pr(0)), spm_bk_pr(1), true);
     Type sdb = exp(spm_logsdb);
-    if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);
+    if(spm_sdb_fl == 1) {
+      if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(sdb_fl), spm_sdb_pr(1), true);
+      else sdb = sdb_fl;                               // penalised fit: SD fixed at the FishLife value
+    } else if(spm_sdb_pr(2) > Type(0)) nll -= dnorm(spm_logsdb, log(spm_sdb_pr(0)), spm_sdb_pr(1), true);
     vector<Type> sdi = exp(spm_logsdi);
     for(int i = 0; i < spm_nidx; i++) {
       // JABBA: gamma(0.001, 0.001) on 1/sdi^2 (with Jacobian), soft upper bound 1
@@ -1281,12 +1295,15 @@ Type objective_function<Type>::operator() ()
 
     int NT = spm_nyear;
     vector<Type> P = exp(spm_logP);
-    vector<Type> rem(NT), Pmean(NT), H(NT);
+    vector<Type> rem(NT), Pmean(NT), H(NT), estC(NT);
     for(int t = 0; t < NT; t++) rem(t) = rho_at(P(t), 0);
+    // catch: observed, or estimated with error (log C_t = log C_obs - cdev_t, cdev ~ N(0, sdc))
+    for(int t = 0; t < NT; t++) estC(t) = spm_catch(t) * ((spm_catch_err == 1) ? exp(spm_cdev(t)) : Type(1));
+    if(spm_catch_err == 1) nll -= dnorm(spm_cdev, Type(0), spm_sdc, true).sum();
     Pmean(0) = spm_lbk;
     for(int t = 1; t < NT; t++) {
       Type Pl = P(spm_lagidx(t - 1));
-      Type pm = P(t - 1) + r / (m - Type(1)) * Pl * (Type(1) - pow(Pl, m - Type(1))) - spm_catch(t - 1) / (K * rem(t - 1));
+      Type pm = P(t - 1) + r / (m - Type(1)) * Pl * (Type(1) - pow(Pl, m - Type(1))) - estC(t - 1) / (K * rem(t - 1));
       Pmean(t) = log(smax_(pm, Type(0.001), Type(1e-7)));
     }
     for(int t = 0; t < NT; t++) {
@@ -1294,7 +1311,16 @@ Type objective_function<Type>::operator() ()
       Type pb = smin_(spm_logP(t) - log(spm_Pbound(0)), Type(0), Type(1e-4)) +
                 smax_(spm_logP(t) - log(spm_Pbound(1)), Type(0), Type(1e-4));
       nll += Type(500) * pb * pb;
-      H(t) = spm_catch(t) / (K * P(t) * rem(t));
+      H(t) = estC(t) / (K * P(t) * rem(t));
+    }
+    // optional random walk on the log harvest rate (SPiCT-like F process, as JABBA3 frw)
+    Type sdf = exp(spm_logsdf);
+    if(spm_frw_t.size() > 0) {
+      for(int k = 0; k < spm_frw_t.size(); k++) {
+        int t = spm_frw_t(k);
+        nll -= dnorm(log(H(t)), log(H(t - 1)), sdf, true);
+      }
+      if(spm_sdf_pr(2) > Type(0)) nll -= dnorm(spm_logsdf, log(spm_sdf_pr(0)), spm_sdf_pr(1), true);
     }
     vector<Type> procdev = spm_logP - Pmean;
 
@@ -1321,26 +1347,16 @@ Type objective_function<Type>::operator() ()
       }
       return out;
     };
-    vector<Type> rho_link = Type(2) / (Type(1) + exp(-spm_trho)) - Type(1);
+    Type rho_link = Type(2) / (Type(1) + exp(-spm_trho)) - Type(1);
     // SPR link: depletion implied by the length model's SPR under steepness
-    vector<Type> D_spr(nyear), Heq_y(nyear), e_spr(nyear), e_F(nyear);
-    D_spr.setZero(); Heq_y.setZero(); e_spr.setZero(); e_F.setZero();
+    vector<Type> D_spr(nyear), e_spr(nyear);
+    D_spr.setZero(); e_spr.setZero();
     for(int y = 0; y < nyear; y++) {
       Type D = (Type(4) * spm_h * spr_y(y) - (Type(1) - spm_h)) / (Type(5) * spm_h - Type(1));
       D_spr(y) = smax_(D, Type(1e-3), Type(1e-8));
       e_spr(y) = log(D_spr(y)) - spm_logP(spm_lfd_t(y));
     }
-    if(spm_link_spr == 1) nll += ar1_nll(e_spr, rho_link(0), spm_sigma_link);
-    // F link: harvest rate of the SPM against the equilibrium harvest rate
-    // (yield / exploitable biomass per recruit) at the length model's apical F
-    if(spm_link_F == 1) {
-      for(int y = 0; y < nyear; y++) {
-        vector<Type> q = prq(fapic_y(y) * kspm);
-        Heq_y(y) = q(1) / q(2);
-        e_F(y) = log(Heq_y(y)) - log(H(spm_lfd_t(y)));
-      }
-      nll += ar1_nll(e_F, rho_link(1), spm_sigma_Flink);
-    }
+    if(spm_link_spr == 1) nll += ar1_nll(e_spr, rho_link, spm_sigma_link);
 
     Type MSY_spm = BmsyK_spm * K * Hmsy_spm * rho_at(BmsyK_spm, 0);
     vector<Type> BBmsy = P / BmsyK_spm;
@@ -1351,12 +1367,12 @@ Type objective_function<Type>::operator() ()
     Type spm_logMSY = log(MSY_spm);
     Type spm_r = r, spm_m = m, spm_K = K, spm_sdb = sdb;
     vector<Type> spm_q = exp(spm_logq);
-    REPORT(Fref); REPORT(Yref); REPORT(spr_ref); REPORT(BmsyK_pr); REPORT(Hmsy_pr); REPORT(m_pr); REPORT(r_pr);
+    REPORT(SBPR0); REPORT(Fref); REPORT(Yref); REPORT(spr_ref); REPORT(BmsyK_pr); REPORT(Hmsy_pr); REPORT(m_pr); REPORT(r_pr); REPORT(sdb_fl);
     vector<Type> spm_sdi = sdi;
     REPORT(spm_r); REPORT(spm_m); REPORT(spm_K); REPORT(spm_sdb); REPORT(spm_sdi); REPORT(spm_q);
     REPORT(BmsyK_spm); REPORT(Hmsy_spm); REPORT(MSY_spm);
-    REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
-    REPORT(spm_Imean); REPORT(D_spr); REPORT(Heq_y); REPORT(e_spr); REPORT(e_F); REPORT(rho_link);
+    REPORT(estC); REPORT(sdf); REPORT(P); REPORT(BBmsy); REPORT(H); REPORT(HHmsy); REPORT(rem); REPORT(Pmean); REPORT(procdev);
+    REPORT(spm_Imean); REPORT(D_spr); REPORT(e_spr); REPORT(rho_link);
     vector<Type> spm_sA = sA;
     REPORT(Pg); REPORT(Yg); REPORT(rhog); REPORT(sprg); REPORT(spm_sA);
     ADREPORT(spm_logB); ADREPORT(spm_logBBmsy); ADREPORT(spm_logHHmsy); ADREPORT(spm_logMSY);
@@ -1367,7 +1383,8 @@ Type objective_function<Type>::operator() ()
   // Mirrors the R functions pr_flicc() / spr_flicc(): terminal-year averages
   // of joint selectivity (scaled to apical 1), M, maturity and weight;
   // numbers per recruit scaled to the first bin of the unfished state;
-  // Baranov catch; SBPR = sum(N * mat * exp(-Z * spawn) * w).
+  // catch = N F: the numbers at length are integrated over the time spent in
+  // each class (deaths / Z), so no Baranov factor; SBPR = sum(N * mat * exp(-Z * spawn) * w).
   if(isDouble<Type>::value && (brp_F.size() > 0 || brp_spr.size() > 0)) {
     int ny = brp_nyears < 1 ? 1 : (brp_nyears > nyear ? nyear : brp_nyears);
     int y0 = nyear - ny;
@@ -1460,7 +1477,7 @@ Type objective_function<Type>::operator() ()
       Type sb = Type(0), yp = Type(0);
       for(int l = 0; l < nlen; l++) {
         Type n = NI(l) / scale0;
-        Type c = (Zl(l) > Type(0)) ? n * Fl(l) / Zl(l) * (Type(1) - exp(-Zl(l))) : Type(0);
+        Type c = n * Fl(l);
         brp_N(l, i) = n; brp_C(l, i) = c; brp_Fl(l, i) = Fl(l);
         sb += sex_ratio * n * matA(l) * exp(-Zl(l) * brp_spawn) * wtA(l);
         yp += sex_ratio * c * wtA(l);
@@ -1470,7 +1487,7 @@ Type objective_function<Type>::operator() ()
         vector<Type> NIm = popNm(brp_F(i), Flm, Zlm);
         for(int l = 0; l < nlen; l++) {
           Type n = NIm(l) / scale0;
-          Type c = (Zlm(l) > Type(0)) ? n * Flm(l) / Zlm(l) * (Type(1) - exp(-Zlm(l))) : Type(0);
+          Type c = n * Flm(l);
           brp_N_m(l, i) = n; brp_C_m(l, i) = c;
           yp += male_w * c * wtA_m(l);
         }

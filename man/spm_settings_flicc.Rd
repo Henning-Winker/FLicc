@@ -13,23 +13,28 @@ spm_settings_flicc(
   h = NULL,
   shape = c("fmsy", "spr"),
   spr.tgt = 0.4,
+  BmsyK = "auto",
   r.sd = 0.2,
   m.sd = 0,
   link = "spr",
   sigma.link = 0.2,
-  sigma.Flink = 0.2,
-  link.rho = c(spr = 0, F = 0),
+  link.rho = 0,
   lag = 0,
   bkinit = c(0.9, 0.25, 1),
-  sdb = c(0.15, 0.5, 1),
+  sdb = "fishlife",
+  sigR = 0.5,
   K = "half8",
   xgrid = c(0, exp(seq(log(0.02), log(40), length.out = 45))),
   newton.it = 12,
   P.bound = c(0.02, 1.3),
   sel.weights = "catch",
-  timing = c("start", "mean"),
+  timing = c("mean", "start"),
   re = TRUE,
-  sdi = NULL
+  sdi = NULL,
+  frw = c("none", "index", "all"),
+  catch.error = FALSE,
+  sdc = 0.1,
+  sdf = c(0.3, 1, 1)
 )
 }
 \arguments{
@@ -50,31 +55,45 @@ selectivity of the fishery, default) or \code{"SB"} (spawning biomass)}
 
 \item{h}{Beverton-Holt steepness (default \code{lhpar["s"]}, else 0.7)}
 
-\item{shape}{source of r and m: \code{"fmsy"} (maximum equilibrium yield, default)
-or \code{"spr"} (Fspr at \code{spr.tgt})}
+\item{shape}{source of the reference harvest rate for r: \code{"fmsy"}
+(maximum equilibrium yield, default) or \code{"spr"} (Fspr at \code{spr.tgt}).
+With mean-year exploitable biomass the harvest rate equals F, so r = m Fmsy
+(Schaefer: r = 2 Fmsy)}
 
 \item{spr.tgt}{SPR target for \code{shape = "spr"}}
+
+\item{BmsyK}{Bmsy/K of the production function. \code{"auto"} (default): from
+the per-recruit equilibrium when steepness is given (\code{h}, or \code{s} in
+the life-history parameters), else 0.4; a
+value fixes the shape m; \code{NULL} always takes the per-recruit value}
 
 \item{r.sd}{log-scale SD of the penalty log r ~ N(log r(theta), r.sd); 0 fixes r at r(theta)}
 
 \item{m.sd}{as \code{r.sd} for the shape m (default 0: m = m(theta))}
 
-\item{link}{\code{"spr"} (default), \code{"F"}, \code{c("spr", "F")} or \code{"none"}}
+\item{link}{\code{"spr"} (default): the depletion implied by the length
+model's SPR under steepness, log D_spr ~ N(log SB/SB0, sigma.link), links
+the two models; \code{"none"}: no link}
 
 \item{sigma.link}{SD of log D_spr around log SB/SB0}
 
-\item{sigma.Flink}{SD of log H_t around the equilibrium harvest rate at the length model's F}
-
-\item{link.rho}{AR1 correlation of the link errors over the length-data years
-(absorbs the equilibrium lag), \code{c(spr = , F = )}: a value fixes it,
-\code{NA} estimates it (default \code{c(spr = 0, F = 0)}, independent errors)}
+\item{link.rho}{fixed AR1 correlation of the link errors over the
+length-data years (default 0, independent errors). It cannot be estimated:
+with the link SD fixed, rho runs to 1}
 
 \item{lag}{production lag in years}
 
 \item{bkinit}{prior on SB_1/SB0: c(median, log sd, on)}
 
-\item{sdb}{prior on the process error SD: c(median, log sd, on). With
-\code{re = FALSE} the SD is fixed at the median}
+\item{sdb}{process error SD. \code{"fishlife"} (default): centred on
+sigR min(0.9 Hmsy, 1.15), the life-history relation of the SD at Bmsy on Hmsy
+(= Fmsy in the common currency; log sd 0.3, as JABBA3), following the
+estimated Fmsy, so that resilient (high Fmsy) stocks get a larger process
+error. With \code{re = FALSE} the SD is fixed at that value. Or c(median,
+log sd, on): a lognormal prior (with \code{re = FALSE} the SD is fixed at the
+median)}
+
+\item{sigR}{recruitment SD for \code{sdb = "fishlife"}}
 
 \item{K}{prior on K: \code{"half8"} (default, as JABBA3: flat below 5.7 x max
 catch, i.e. 8 x max catch as expected value with CV 1, half-normal on log K
@@ -92,8 +111,8 @@ multiplied by the female share of recruits (\code{sex_ratio})}
 (catch shares, default), \code{"F"} (F-weighted joint selectivity) or a vector}
 
 \item{timing}{biomass per recruit for the SPM (EB/SB curves, Hmsy):
-\code{"start"} of the year (default, as the discrete SPM's harvest rate
-C_t / EB_t) or \code{"mean"} of the year (FLicc numbers)}
+\code{"mean"} of the year (default; C_t / EB_t = F, the common currency) or
+\code{"start"} of the year (legacy)}
 
 \item{re}{logical. \code{TRUE} (default): the SPM states (log SB_t/SB0) are
 random effects, integrated out by the Laplace approximation, and the process
@@ -110,6 +129,20 @@ exactly and the SD would collapse}
 \code{NULL} (default): estimated (total SD sqrt(se^2 + sdi^2)), except with
 \code{re = FALSE} and no \code{index.se}, where it is fixed at 0.2. A value
 fixes it}
+
+\item{frw}{random walk on the log harvest rate H_t = C_t / EB_t (SPiCT-like F
+process, as JABBA3 \code{frw}): \code{"none"} (default; catch-conditioned,
+as JABBA), \code{"index"} (increments from the first index year on) or
+\code{"all"} (all years). Its SD is estimated with the prior \code{sdf}
+(fixed at \code{sdf[1]} with \code{re = FALSE}). Use with
+\code{catch.error = TRUE}}
+
+\item{catch.error}{logical: catch observed with lognormal error (catch
+deviations; random effects with \code{re = TRUE}), log SD \code{sdc}}
+
+\item{sdc}{log SD of the catch error}
+
+\item{sdf}{prior on the SD of the F random walk: c(median, log sd, on)}
 }
 \value{
 list of settings
